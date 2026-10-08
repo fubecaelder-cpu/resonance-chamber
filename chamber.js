@@ -33,7 +33,7 @@ export function buildChamber(cfg) {
   const inv = root.matrixWorld.clone().invert();
   const K = makeKit(cfg.pal, inv), { mat, neonCore, glowShell, neonTorus, neonTube, metalMat, hex } = K;
   const world = new THREE.Group(); root.add(world);       // mirrored in the glossy floor
-  const FS = cfg.focal === 'vortex' ? 1.7 : (cfg.deluxe ? 1.25 : 1.0), FY = cfg.focal === 'vortex' ? 2.9 : (cfg.deluxe ? 2.25 : TY);   // the crimson vortex is bigger and higher
+  const FS = cfg.focal === 'vortex' ? 1.5 : (cfg.deluxe ? 1.25 : 1.0), FY = cfg.focal === 'vortex' ? 2.55 : (cfg.deluxe ? 2.25 : TY);   // the crimson vortex is bigger and higher (v8: a little smaller so the monitor clears it)
   const fx = new THREE.Group(); root.add(fx);
   const doorAngles = cfg.doors.map((d) => d.ang);
   const haze = [], out = { root, world, fx, haze, kit: K, cfg };
@@ -94,7 +94,8 @@ export function buildChamber(cfg) {
     neonTorus(world, 2.4, 0.045, hex.a, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.1);
     neonTorus(world, 1.2, 0.03, hex.c, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.0);
     const beams = [];
-    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; beams.push(mtx(Math.sin(a) * 4.7, H - 0.16, Math.cos(a) * 4.7, a)); }
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; if (cfg.focal === 'vortex' && Math.abs(a - Math.PI) < 0.5) continue;   // keep the monitor clear (v8)
+      beams.push(mtx(Math.sin(a) * 4.7, H - 0.16, Math.cos(a) * 4.7, a)); }
     if (!cfg.deluxe) instanced(new THREE.BoxGeometry(0.24, 0.3, 4.6), metalMat({ STRIP_Y: '0.149' }), beams, world);
     const nearDoor = (a) => doorAngles.some((d) => Math.abs(Math.atan2(Math.sin(a - d), Math.cos(a - d))) < 0.25);
     const pil = [];
@@ -173,14 +174,14 @@ export function buildChamber(cfg) {
         rays *= exp(-(r - ${f3(TR)}) * 0.5);
         float I = ring * 0.55 + outer * 0.35 + rays * 0.3;
         I *= smoothstep(${f3(TR - 0.05)}, ${f3(TR + 0.08)}, r) * (1.0 - smoothstep(${f3(TR + 2.8)}, ${f3(TR + 3.4)}, r));
-        I *= 1.0 - smoothstep(${f3(TR + 0.9)}, ${f3(TR + 1.5)}, p.y) * ${cfg.screen ? '0.85' : '0.3'};
+        I *= 1.0 - smoothstep(${f3(TR + 0.9)}, ${f3(TR + 1.5)}, p.y) * ${cfg.screen || cfg.focal === 'vortex' ? '0.85' : '0.3'};
         gl_FragColor = vec4(PINK * I * (0.45 + 0.45 * uInt + 1.0 * uBeat + 0.4 * uSurge), 1.0);
       }`, { additive: true }));
     halo.position.set(0, TY, TZ + 0.5); fg.add(halo);
   }
   if (cfg.screen) out.hud = buildScreen(K, world, !!cfg.deluxe);
   if (cfg.gyro) {   // crimson room: hanging gyroscope rings above the floor
-    const c = new THREE.Vector3(0, 5.6, -0.5);
+    const c = new THREE.Vector3(0, 6.2, 0.4);   // v8: higher and nearer the entrance, clear of the monitor sightline
     neonTorus(world, 2.0, 0.035, hex.b, c, Math.PI / 2, 1.0).forEach((m) => { m.rotation.set(Math.PI / 2 + 0.35, 0, 0.2); });
     neonTorus(world, 1.6, 0.03, hex.a, c, 0, 1.0).forEach((m) => { m.rotation.set(0.3, 0.9, 0); });
     neonTorus(world, 1.2, 0.025, hex.c, c, 0, 1.0).forEach((m) => { m.rotation.set(-0.5, -0.6, 0.4); });

@@ -1,7 +1,7 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, env } from './shared.js';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, env } from './shared.js';
 import { VRButton } from './lib/VRButton.js';
 import { buildChamber } from './chamber.js';
 import { pinkRoomCfg } from './pinkroom.js';
@@ -30,27 +30,37 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.position.set(0, 1.6, 0); camera.rotation.order = 'YXZ'; rig.add(camera);
 
 // ---------- world layout ----------
-//  Room 1 (pink)    centre (0,0)    focal at -z, doorway behind the start (+z)
-//  Corridor A       z 6.88 → 13.12
-//  Room 2 (crimson) centre (0,20)   rotated 180°: vortex at +z, doorway back to A at -z, side doorway at +x
-//  Corridor B       x 6.88 → 13.12 (z = 20)
-//  Room 3 (op-art)  centre (20,20)  rotated -90°: tunnel at +x, doorway back to B at -x
 const tunnelU = { uVideo: { value: null }, uHasVideo: { value: 0 }, uVidScale: { value: new THREE.Vector2(1, 1) },
   uVidMix: { value: OPT.video === 'full' ? 1.0 : OPT.video === '0' ? 0.0 : 0.32 }, uProc: { value: OPT.video === 'full' ? 0.0 : 1.0 } };
-const room1 = buildChamber(pinkRoomCfg(tunnelU));
-const room2 = buildChamber({ name: 'room2', center: [0, 20], rotY: Math.PI, pal: 'crimson', focal: 'vortex', gyro: true,
-  podIdx: [0, 1, 4, 5], doors: [{ ang: 0, style: 0 }, { ang: -Math.PI / 2, style: 2 }] });
-const room3 = buildOpRoom({ name: 'room3', center: [20, 20], rotY: -Math.PI / 2, doors: [{ ang: 0, style: 1 }, { ang: -Math.PI / 4, style: 0 }] });
-// third side of the triangle: Room 3 → Room 1 along the diagonal (doorways at 45° on both rooms)
-const DG = 6.88 * Math.SQRT1_2, LC = (20 - 2 * DG) * Math.SQRT2;
-const corC = buildCorridor({ name: 'corC', start: [20 - DG, 20 - DG], rotY: -3 * Math.PI / 4, L: LC, palA: 'mono', palB: 'pink', styleA: 2, styleB: 0, drain: true, monoAtStart: true });
-const corA = buildCorridor({ name: 'corA', start: [0, 6.88], dir: 'z', L: 6.24, palA: 'pink', palB: 'crimson', styleA: 0, styleB: 1 });
-const corB = buildCorridor({ name: 'corB', start: [6.88, 20], dir: 'x', L: 6.24, palA: 'crimson', palB: 'mono', styleA: 1, styleB: 2, drain: true });
+// ---------- layout (v8): an equilateral triangle, side 20 m. Every room's focal axis points away from the triangle's centre,
+// and its two doorways sit mirrored at ±30° either side of the axis behind you, each looking straight down a corridor.
+const SIDE = 20, DA = Math.PI / 6;
+const RC = [[0, 0], [0, SIDE], [SIDE * Math.sqrt(3) / 2, SIDE / 2]];                 // pink, crimson, op-art centres
+const CEN = [(RC[0][0] + RC[1][0] + RC[2][0]) / 3, (RC[0][1] + RC[1][1] + RC[2][1]) / 3];
+const RY = RC.map(([x, z]) => Math.atan2(CEN[0] - x, CEN[1] - z));                   // local +z (behind the arrival) faces the centre
+// door local angle for the door in room i that leads to room j (+30° or −30°)
+const doorAng = (i, j) => { const w = Math.atan2(RC[j][0] - RC[i][0], RC[j][1] - RC[i][1]); return Math.atan2(Math.sin(w - RY[i]), Math.cos(w - RY[i])) > 0 ? DA : -DA; };
+const doorPos = (i, j) => { const a = RY[i] + doorAng(i, j); return [RC[i][0] + Math.sin(a) * VEIL_R, RC[i][1] + Math.cos(a) * VEIL_R]; };
+const doorsOf = (i) => [0, 1, 2].filter((j) => j !== i).map((j) => ({ ang: doorAng(i, j), style: j })).sort((a, b) => a.ang - b.ang);
+const room1 = buildChamber({ ...pinkRoomCfg(tunnelU), center: RC[0], rotY: RY[0], doors: doorsOf(0) });
+const room2 = buildChamber({ name: 'room2', center: RC[1], rotY: RY[1], pal: 'crimson', focal: 'vortex', gyro: true,
+  podIdx: [0, 1, 4, 5], doors: doorsOf(1) });
+const room3 = buildOpRoom({ name: 'room3', center: RC[2], rotY: RY[2], doors: doorsOf(2) });
+// corridors run straight along the triangle's sides, door to door
+const CDEF = [
+  { k: 'cA', i: 0, j: 1, palA: 'pink', palB: 'crimson', styleA: 0, styleB: 1 },
+  { k: 'cB', i: 1, j: 2, palA: 'crimson', palB: 'mono', styleA: 1, styleB: 2, drain: true },
+  { k: 'cC', i: 2, j: 0, palA: 'mono', palB: 'pink', styleA: 2, styleB: 0, drain: true, monoAtStart: true },
+].map((c) => { const S = doorPos(c.i, c.j), E = doorPos(c.j, c.i), L = Math.hypot(E[0] - S[0], E[1] - S[1]);
+  return { ...c, S, E, L, D: [(E[0] - S[0]) / L, (E[1] - S[1]) / L] }; });
+const [corA, corB, corC] = CDEF.map((c) => buildCorridor({ name: 'cor' + c.k[1], start: c.S, rotY: Math.atan2(c.D[0], c.D[1]), L: c.L,
+  palA: c.palA, palB: c.palB, styleA: c.styleA, styleB: c.styleB, drain: !!c.drain, monoAtStart: !!c.monoAtStart }));
+const toWorld = (i, x, z) => { const c = Math.cos(RY[i]), s = Math.sin(RY[i]); return [RC[i][0] + x * c + z * s, RC[i][1] - x * s + z * c]; };
 const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root, cC: corC.root };
 Object.values(SPACES).forEach((s) => scene.add(s));
 const ROOMS = [room1, room2, room3, corA, corB, corC];
 // ---------- media: one shared video on the main monitor of every room ----------
-const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson');
+const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson', { r: 5.85, y: 7.1, h: 1.5, half: 0.46 });   // v8: hangs forward of the vortex frame
 const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', { y: 7.0, h: 1.6 });
 room1.root.updateMatrixWorld(true);
 const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos];
@@ -58,22 +68,20 @@ let panelsReady = false;
 const media = createMedia({ monitorPos: MON_POS, onChange: () => { if (panelsReady) panelSys.redrawMedia(); updateOverlay(); } });
 media.setRenderer(renderer);
 // control panels: one per room, beside the arrival spot, facing you, clear of the doorway paths (room-local positions)
+// arrival spot: between the two doorways, facing the focal; the panel stands in the same place in every room, ahead-right
+// of you as you come in through either doorway, turned towards the doorways
+const SPAWN = [0, 3.6], PANEL_POS = [1.75, 2.15], PANEL_FACE = [0, 4.8];
 const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, rooms: [
-  { style: 'pink', root: room1.root, pos: [-1.25, 0.35], faceTo: [0, 1.6] },
-  { style: 'crimson', root: room2.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
-  { style: 'mono', root: room3.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
+  { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },
+  { style: 'crimson', root: room2.root, pos: PANEL_POS, faceTo: PANEL_FACE },
+  { style: 'mono', root: room3.root, pos: PANEL_POS, faceTo: PANEL_FACE },
 ] });
 panelsReady = true;
 
 // doorway planes (world): point, normal, lateral axis, fade colour
-const DOORS = [
-  { p: new THREE.Vector3(0, 0, 6.88), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0xb0103c, s: ['r1', 'cA'] },
-  { p: new THREE.Vector3(0, 0, 13.12), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0x900818, s: ['cA', 'r2'] },
-  { p: new THREE.Vector3(6.88, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x70303a, s: ['r2', 'cB'] },
-  { p: new THREE.Vector3(13.12, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x9a9a9a, s: ['cB', 'r3'] },
-  { p: new THREE.Vector3(20 - DG, 0, 20 - DG), n: new THREE.Vector3(1, 0, 1).normalize(), t: new THREE.Vector3(1, 0, -1).normalize(), c: 0x9a9a9a, s: ['r3', 'cC'] },
-  { p: new THREE.Vector3(DG, 0, DG), n: new THREE.Vector3(1, 0, 1).normalize(), t: new THREE.Vector3(1, 0, -1).normalize(), c: 0xff4fa3, s: ['cC', 'r1'] },
-];
+const DCOL = { cA: [0xb0103c, 0x900818], cB: [0x70303a, 0x9a9a9a], cC: [0x9a9a9a, 0xff4fa3] };
+const DOORS = CDEF.flatMap((c) => { const n = new THREE.Vector3(c.D[0], 0, c.D[1]), t = new THREE.Vector3(c.D[1], 0, -c.D[0]), rk = (i) => 'r' + (i + 1);
+  return [{ p: new THREE.Vector3(c.S[0], 0, c.S[1]), n, t, c: DCOL[c.k][0], s: [rk(c.i), c.k] }, { p: new THREE.Vector3(c.E[0], 0, c.E[1]), n, t, c: DCOL[c.k][1], s: [c.k, rk(c.j)] }]; });
 // every doorway veil (both sides, and their mirror copies) shares one "open" uniform per doorway
 DOORS.forEach((d) => { d.open = { value: 0 }; });
 { const wp = new THREE.Vector3(); scene.updateMatrixWorld(true);
@@ -81,20 +89,16 @@ DOORS.forEach((d) => { d.open = { value: 0 }; });
     let best = DOORS[0], bd = Infinity; for (const d of DOORS) { const dd = Math.hypot(wp.x - d.p.x, wp.z - d.p.z); if (dd < bd) { bd = dd; best = d; } }
     o.material.uniforms.uOpen = best.open; }); }
 // corridors as oriented strips: start S, unit direction D, length L (beds = [room bed at start, room bed at end])
-const CORRS = [
-  { k: 'cA', S: [0, 6.88], D: [0, 1], L: 6.24, beds: [0, 1] },
-  { k: 'cB', S: [6.88, 20], D: [1, 0], L: 6.24, beds: [1, 2] },
-  { k: 'cC', S: [20 - DG, 20 - DG], D: [-Math.SQRT1_2, -Math.SQRT1_2], L: LC, beds: [2, 0] },
-];
+const CORRS = CDEF.map((c) => ({ k: c.k, S: c.S, D: c.D, L: c.L, beds: [c.i, c.j] }));
 const corrLocal = (c, x, z) => { const dx = x - c.S[0], dz = z - c.S[1]; return [dx * c.D[0] + dz * c.D[1], dx * c.D[1] - dz * c.D[0]]; };
 function zoneOf(h) {
   for (const c of CORRS) { const [al, la] = corrLocal(c, h.x, h.z); if (al > 0 && al < c.L && Math.abs(la) < 1.35) return c.k; }
-  const d1 = Math.hypot(h.x, h.z), d2 = Math.hypot(h.x, h.z - 20), d3 = Math.hypot(h.x - 20, h.z - 20);
+  const [d1, d2, d3] = RC.map(([x, z]) => Math.hypot(h.x - x, h.z - z));
   return d1 <= d2 && d1 <= d3 ? 'r1' : d2 <= d3 ? 'r2' : 'r3';
 }
 // walkable area: room circles + corridor strips
 const REGIONS = [
-  { c: [0, 0], r: R - 0.9 }, { c: [0, 20], r: R - 0.9 }, { c: [20, 20], r: R - 0.9 },
+  ...RC.map((c) => ({ c, r: R - 0.9 })),
   ...CORRS.map((c) => ({ corr: c })),
 ];
 function nearestIn(rg, x, z) {
@@ -355,7 +359,17 @@ function desktopMove(dt) {
   rig.position.addScaledVector(fwd, f * 2.2 * dt).addScaledVector(right, s * 2.2 * dt); clampToWorld();
 }
 // start room option (?room=2 / ?room=3), handy for previews
-{ const r = Q.get('room'); if (r === '2') { rig.position.set(0, 0, 14.5); yaw = Math.PI; } else if (r === '3') { rig.position.set(14.5, 0, 20); yaw = -Math.PI / 2; } applyLook(); }
+{ const r = +(Q.get('room') || 1) - 1; const i = r >= 0 && r < 3 ? r : 0; const [x, z] = toWorld(i, ...SPAWN); rig.position.set(x, 0, z); yaw = RY[i]; applyLook(); }
+window.__layout = { RC, RY, CDEF, toWorld, SPAWN };
+// debug: top-down plan view (orthographic, cut at 4.2 m so ceilings and upper walls are skipped)
+window.__plan = (cx, cz, half, px = 1024) => {
+  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, 6); cam.position.set(cx, 4.2, cz); cam.up.set(0, 0, -1); cam.lookAt(cx, 0, cz);
+  const vis = Object.values(SPACES).map((o) => o.visible); Object.values(SPACES).forEach((o) => { o.visible = true; });
+  const sz = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+  renderer.setPixelRatio(1); renderer.setSize(px, px, false); renderer.render(scene, cam);
+  const url = renderer.domElement.toDataURL('image/png');
+  renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
+  return url; };
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;

@@ -77,10 +77,16 @@ export function buildMonitor(K, world, root, idx, kind, { r = 6.45, y = 6.75, h 
       gl_FragColor = vec4(col, 1.0);
     }`, { side: THREE.BackSide, uniforms: { ...roomMedia[idx] } });
   const s = new THREE.Mesh(g, m); s.position.y = y; world.add(s);
-  const back = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.08, r + 0.08, h + 0.36, 48, 1, true, Math.PI - half - 0.03, half * 2 + 0.06), metalMat({ DOUBLE: 1 }));
+  const back = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.08, r + 0.08, h + 0.24, 48, 1, true, Math.PI - half - 0.03, half * 2 + 0.06), metalMat({ DOUBLE: 1 }));
   back.position.y = y; world.add(back);
   const arc = (rad, yy, hf, n = 64) => { const pts = []; for (let i = 0; i <= n; i++) { const t = Math.PI - hf + (2 * hf * i) / n; pts.push(new THREE.Vector3(rad * Math.sin(t), yy, rad * Math.cos(t))); } return new THREE.CatmullRomCurve3(pts); };
   for (const yy of [y - h / 2 - 0.06, y + h / 2 + 0.06]) neonTube(world, arc(r - 0.03, yy, half + 0.012), hex.b, kind === 'mono' ? 0.9 : 1.1);
+  // standoff brackets back to the wall when the screen hangs forward of it
+  const gap = 6.95 - (r + 0.08);
+  if (gap > 0.2) for (const t of [Math.PI - half * 0.62, Math.PI + half * 0.62]) for (const yy of [y - h * 0.32, y + h * 0.32]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, gap), metalMat());
+    const rm = r + 0.08 + gap / 2; arm.position.set(rm * Math.sin(t), yy, rm * Math.cos(t)); arm.rotation.y = t; world.add(arm);
+  }
   for (const sg of [-1, 1]) {
     const t = Math.PI + sg * (half + 0.012);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, h + 0.12, 8), neonCore(hex.b, 1.0));

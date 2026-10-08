@@ -13,7 +13,7 @@ const wallGLSL = /* glsl */`
     float u = ang * ${f3(BAYS / (2 * PI))};
     float s = (fract(u) - 0.5) * ${f3(BAYW)};
     float bayA = (floor(u) + 0.5) / ${f3(BAYS / (2 * PI))};
-    float keep = step(0.3, abs(atan(sin(bayA), cos(bayA)))) * step(0.3, abs(atan(sin(bayA - 0.7854), cos(bayA - 0.7854)))) * step(0.72, abs(atan(sin(bayA - 3.14159), cos(bayA - 3.14159))));
+    float keep = step(0.3, abs(atan(sin(bayA - 0.5236), cos(bayA - 0.5236)))) * step(0.3, abs(atan(sin(bayA + 0.5236), cos(bayA + 0.5236)))) * step(0.72, abs(atan(sin(bayA - 3.14159), cos(bayA - 3.14159))));
     float aw = 0.5, ay = 3.25;
     float dA = y < ay ? abs(abs(s) - aw) : abs(length(vec2(s, y - ay)) - aw);
     float inA = (y < ay ? step(abs(s), aw) : step(length(vec2(s, y - ay)), aw)) * step(0.55, y);
@@ -192,7 +192,7 @@ function extra({ K, world, root, fx, out, haze }) {
 
   // ---------- balcony band around the side walls ----------
   {
-    const gaps = [[0, 0.3], [PI / 4, 0.3], [PI, 0.78]];
+    const gaps = [[PI / 6, 0.3], [-PI / 6, 0.3], [PI, 0.78]];   // doorways mirrored at ±30° (v8)
     for (const cv of ringCurves(R - 0.3, 4.74, gaps, 200)) {
       const m = new THREE.Mesh(new THREE.TubeGeometry(cv, 64, 0.11, 8), metalMat({ STRIP_Y: '0.105' })); m.userData.noMirror = true; world.add(m);
     }
@@ -202,7 +202,7 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- pods: upgraded empty glowing capsules ----------
   {
     const PODS = [];
-    for (let i = 0; i < 5; i++) { const z = -5.0 + i * 1.65, x = 2.5 + 0.42 * i; PODS.push([-x, z], [x, z]); }   // 10 pods; the 45° doorway needs the back-right spot
+    for (let i = 0; i < 5; i++) { const z = -5.0 + i * 1.65, x = 2.5 + 0.42 * i; PODS.push([-x, z], [x, z]); }   // 10 pods, mirrored left/right
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       dummy.lookAt(0, 0, z - 1.2); dummy.updateMatrix(); return dummy.matrix.clone(); });
     const parts = (local) => podM.map((pm) => pm.clone().multiply(local));
@@ -320,5 +320,5 @@ function extra({ K, world, root, fx, out, haze }) {
 
 export function pinkRoomCfg(tunnelU) {
   return { name: 'room1', center: [0, 0], rotY: 0, pal: 'pink', focal: 'tunnel', screen: true, tunnelU, deluxe: true,
-    podIdx: [], doors: [{ ang: 0, style: 1 }, { ang: PI / 4, style: 2 }], wallGLSL, ceilGLSL, floorGLSL, extra };
+    podIdx: [], doors: [{ ang: -PI / 6, style: 1 }, { ang: PI / 6, style: 2 }], wallGLSL, ceilGLSL, floorGLSL, extra };
 }
