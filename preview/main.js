@@ -358,7 +358,7 @@ function desktopMove(dt) {
 { const r = Q.get('room'); if (r === '2') { rig.position.set(0, 0, 14.5); yaw = Math.PI; } else if (r === '3') { rig.position.set(14.5, 0, 20); yaw = -Math.PI / 2; } applyLook(); }
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
-window.__zone = () => zone; window.__scene = scene; window.__media = media;
+window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
 window.__act = (id) => panelSys.act(id);
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
