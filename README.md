@@ -1,19 +1,21 @@
-# Resonance Chamber v3 (WebXR, three.js r169, static files, no build step)
+# Resonance Chamber v4 (WebXR, three.js r169, static files, no build step)
 Serve this folder over HTTPS, open it in the Meta Quest browser and tap ENTER VR.
 
-Three connected spaces, walked through seamlessly with the left stick:
-1. **Pink chamber** (start): the v2 room, with the spiral tunnel, the curved screen and the pods. A glowing doorway is behind the start position.
-2. **Crimson vortex room**: reached through a short corridor whose colour shifts from pink to red. Darker blood-red to rose palette and deeper blacks. The focal point is a large funnel vortex with a lub-dub heartbeat pulse. It also has hanging gyroscope rings, four empty pods, and a doorway on the right side.
-3. **Monochrome op-art room**: reached through a second corridor (red to white). Purely abstract black and white: a moiré ring wall, chevrons, a warped spiral-checker floor, a ray/ring ceiling, a checkered spiral tunnel, a slowly turning spiral disc, and striped monoliths, rings and spheres. All motion is slow (0.03 to 0.3 Hz). Nothing flashes or strobes, and the brightness changes only with the 4-second beat and a 0.25 Hz breath.
+Three rooms joined in a triangle. Each room has a doorway to each of the other two, so you can walk the loop in either direction with the left stick:
+1. **Pink chamber** (start, redesigned in v4): true pink palette (hot pink, bubblegum and rose, with warm pink-black shadows). A grand portal around the spiral tunnel with stepped bezels, neon rings, a slowly turning petal iris and a flower halo. A crown chandelier with ring tiers, hanging crystal strands and a soft light cone. Fan-vault ribs, a balcony ring, an arcade of arches with rose windows, and a mandala floor. Ten upgraded empty glowing pods (metal bases, iridescent glass, light columns, floating halos). The curved screen sits above the portal.
+2. **Crimson vortex room**: blood-red to rose, with a funnel vortex and a lub-dub heartbeat pulse, gyroscope rings and four empty pods.
+3. **Monochrome op-art room**: purely abstract black and white (moiré walls, chevrons, a warped checker floor, a spiral tunnel, striped monoliths, rings and spheres). Slow motion only, with no flashing.
 
-- Only the room you are in is drawn and animated. Each doorway is an opaque animated "veil" previewing the next room's look. A short colour fade hides the moment you step through.
-- One beat clock (4 s beat, surge every 4th beat, ~2-minute build) drives all rooms, so the rhythm continues across doorways.
-- Audio (starts on ENTER VR / "Start sound"): each room has its own bed, crossfaded by position along the corridors.
-  - Room 1: ambient_loop.mp3, a warm drone, a kick and riser, chimes, and a positional tunnel hum.
-  - Room 2: a deep 41 Hz drone that opens with the build, slow breath noise, a heavy lub-dub heartbeat, and a positional vortex rumble.
-  - Room 3: a clean fifth pad with a slow tremolo, a crisp short pulse on the beat, and soft 1 Hz ticks.
-- All shaders for all rooms are compiled at load, so entering a room doesn't stutter.
-- Sharpness, glossy floor reflections, and the adaptive quality from v2 are kept. In VR, below ~60 fps it turns off haze and shafts first, then reflections, then particles.
+Corridors:
+- Pink to crimson: layered neon arches, light flowing along the walls, a glossy reflective floor and drifting particles.
+- Crimson to monochrome: the colour drains out into black and white stripes and checkers.
+- Monochrome to pink (new, diagonal): the reverse, with colour blooming back into pink.
+
+- Doorways: each one is an animated veil that previews the next space. As you get close it opens like an iris and the next space is drawn behind it, so a quick walk-through stays continuous with no fade. A brief fade is kept only as a safety net for a snap-teleport straight through a closed veil.
+- Only the current space (plus any neighbour whose doorway is open) is drawn.
+- One beat clock (4 s beat, surge every 4th beat, ~2-minute build) drives every room and corridor.
+- Audio (starts on ENTER VR / "Start sound"): each room has its own bed, crossfaded by your position along each of the three corridors.
+- All shaders are compiled at load. Adaptive quality in VR: below ~60 fps it drops haze and shafts first, then reflections, then particles.
 - Controls: left stick moves, right stick snap-turns 30°. On desktop: drag to look, WASD to walk.
 
 URL options: ?quality=low · ?scale=1.2 · ?mirror=0 · ?video=0|blend|full · ?fov=0..1 · ?particles=500 · ?spatial=0 · ?room=2|3 (start in room 2 or 3)

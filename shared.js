@@ -29,9 +29,11 @@ export const U = {
 };
 
 export const PAL = {
-  pink: { PINK: [1.0, 0.14, 0.56], HOT: [1.0, 0.40, 0.78], DEEP: [0.36, 0.0, 0.17], WHITE: [1.0, 0.88, 0.96], VIOL: [0.55, 0.08, 0.85],
-    BASE: [0.05, 0.004, 0.034], BASE2: [0.012, 0.0, 0.01], FLOORC: [0.01, 0.0, 0.008], FOGC: [0.13, 0.0, 0.075], DIM: 1.0,
-    hex: { a: 0xff3c9e, b: 0xff6fc0, c: 0xff8fd0, d: 0xffb0e0, e: 0xff5fb5, spr: 0xff3c9e, scr: 0xff2f95 } },
+  // true pink (hue ~330-345, sampled against the reference's rose/pink range): hot pink #FF4FA3, bubblegum #FF6EB4,
+  // light #FF8FC8, highlight #FFC0DB, warm pink-black shadows #1A0610. VIOL is a warm rose accent here (no purple/magenta).
+  pink: { PINK: [1.0, 0.31, 0.62], HOT: [1.0, 0.43, 0.69], DEEP: [0.42, 0.06, 0.19], WHITE: [1.0, 0.80, 0.86], VIOL: [1.0, 0.42, 0.52],
+    BASE: [0.07, 0.016, 0.04], BASE2: [0.026, 0.006, 0.015], FLOORC: [0.022, 0.005, 0.012], FOGC: [0.13, 0.03, 0.066], DIM: 1.0,
+    hex: { a: 0xff4fa3, b: 0xff6eb4, c: 0xff8fc8, d: 0xffc0db, e: 0xff5c9c, spr: 0xff5aa6, scr: 0xff4f9e } },
   crimson: { PINK: [0.86, 0.02, 0.09], HOT: [1.0, 0.28, 0.36], DEEP: [0.2, 0.0, 0.02], WHITE: [1.0, 0.72, 0.74], VIOL: [0.42, 0.0, 0.07],
     BASE: [0.032, 0.0, 0.006], BASE2: [0.006, 0.0, 0.002], FLOORC: [0.006, 0.0, 0.002], FOGC: [0.06, 0.0, 0.008], DIM: 0.8,
     hex: { a: 0xd8081c, b: 0xff3048, c: 0xff5a66, d: 0xff9aa0, e: 0xe0182c, spr: 0xc80818, scr: 0xb00010 } },
@@ -79,7 +81,7 @@ export function archCurve(z = 0, hw = DW, h = DH, n = 48) {
 // horizontal ring around the room (angle 0 = local +z) with gaps at doorways
 export function ringCurves(radius, y, gaps = [], n = 160) {
   const segs = []; let cur = [];
-  const inGap = (t) => gaps.some((g) => Math.abs(Math.atan2(Math.sin(t - g), Math.cos(t - g))) < 0.2);
+  const inGap = (t) => gaps.some((g) => { const [a, w] = Array.isArray(g) ? g : [g, 0.2]; return Math.abs(Math.atan2(Math.sin(t - a), Math.cos(t - a))) < w; });
   for (let i = 0; i <= n; i++) {
     const t = (i / n) * Math.PI * 2;
     if (inGap(t)) { if (cur.length > 1) segs.push(cur); cur = []; continue; }
@@ -106,8 +108,9 @@ export function makeKit(pal, inv) {
     // anti-aliased square-wave stripe in [0,1]; fades to grey where too dense to resolve
     float stripe(float x, float w){ float f = fract(x); float d = min(f, 1.0 - f); float s = smoothstep(0.25 - w, 0.25 + w, d); return mix(0.5, s, clamp(1.0 - w * 2.5, 0.0, 1.0)); }
   `;
-  const VS = /* glsl */`
-    uniform mat4 uRoomInv;
+  const VSf = (mod = '', head = '') => /* glsl */`
+    uniform mat4 uRoomInv; uniform float uTime;
+    ${head}
     varying vec3 vW; varying vec2 vUv; varying vec3 vN; varying vec3 vL; varying vec3 vLN; varying vec3 vI; varying float vH; varying vec3 vC;
     void main(){
       vUv = uv; vL = position; vLN = normal; vI = vec3(0.0);
@@ -116,11 +119,13 @@ export function makeKit(pal, inv) {
         lp = instanceMatrix * lp; n = mat3(instanceMatrix) * n; vI = instanceMatrix[3].xyz;
       #endif
       vH = fract(sin(dot(vI.xz + vI.y * 3.1, vec2(12.9898, 78.233))) * 43758.5453);
+      ${mod}
       vec4 w = modelMatrix * lp; vW = (uRoomInv * w).xyz;
       vN = normalize(mat3(uRoomInv) * (mat3(modelMatrix) * n));
       vC = (uRoomInv * vec4(cameraPosition, 1.0)).xyz;
       gl_Position = projectionMatrix * viewMatrix * w;
     }`;
+  const VS = VSf();
   const LIT = /* glsl */`
     vec3 fogit(vec3 col, vec3 wp){ float d = length(wp - CAM); float f = 1.0 - exp(-d * 0.055);
       return mix(col, FOGC * (0.7 + 0.5 * uInt + 0.6 * uBeat), f * 0.5); }
@@ -179,7 +184,7 @@ export function makeKit(pal, inv) {
       #endif
       gl_FragColor = vec4(fogit(col, vW), 1.0);
     }`, { defines, side: defines.DOUBLE ? THREE.DoubleSide : THREE.FrontSide });
-  return { P, pal, uniforms, COMMON, VS, mat, neonCore, glowShell, neonTorus, neonTube, metalMat, hex: P.hex };
+  return { P, pal, uniforms, COMMON, VS, VSf, mat, neonCore, glowShell, neonTorus, neonTube, metalMat, hex: P.hex };
 }
 
 // GLSL: discard wall fragments inside doorway arches (angles in room-local frame, 0 = +z)
@@ -188,16 +193,21 @@ export function doorDiscardGLSL(angles, radius = R) {
       if (abs(s) < ${f3(DW)} && y < ${f3(DH)} + sqrt(max(${f3(DW * DW)} - s * s, 0.0))) discard; }`).join('\n');
 }
 
+// GLSL: discard room-floor fragments past a doorway plane (needs vec2 p = local xz)
+export function floorDoorDiscardGLSL(angles) {
+  return angles.map((a) => `{ vec2 dd = vec2(${f3(Math.sin(a))}, ${f3(Math.cos(a))}); if (dot(p, dd) > ${f3(VEIL_R)} && abs(dot(p, vec2(dd.y, -dd.x))) < 1.45) discard; }`).join('\n');
+}
+
 // ---------- doorway veil: shimmering membrane that previews the space behind it ----------
 // style: 0 = pink rings, 1 = crimson vortex, 2 = monochrome op-art spiral. end=1 draws a solid end wall around the arch.
 export function makeVeil(style, end = 0) {
   const W = end ? 2.6 : 2 * DW + 0.04, Hh = end ? 3.6 : DH + DW + 0.04;
   const m = new THREE.ShaderMaterial({
-    uniforms: { ...U, uStyle: { value: style }, uEnd: { value: end } },
+    uniforms: { ...U, uStyle: { value: style }, uEnd: { value: end }, uOpen: { value: 0 } },
     side: THREE.FrontSide,
     vertexShader: `varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */`
-      uniform float uTime; uniform float uBeat; uniform float uBeatT; uniform float uInt; uniform float uStyle; uniform float uEnd;
+      uniform float uTime; uniform float uBeat; uniform float uBeatT; uniform float uInt; uniform float uStyle; uniform float uEnd; uniform float uOpen;
       varying vec2 vP;
       float st(float x, float w){ float f = fract(x); float d = min(f, 1.0 - f); return mix(0.5, smoothstep(0.25 - w, 0.25 + w, d), clamp(1.0 - w * 2.5, 0.0, 1.0)); }
       void main(){
@@ -210,21 +220,25 @@ export function makeVeil(style, end = 0) {
           if (uEnd < 0.5) discard;
           // end wall around the arch
           float dd = max(ax - ${f3(DW)}, p.y - top);
-          vec3 wc = uStyle > 1.5 ? vec3(0.03) : (uStyle > 0.5 ? vec3(0.03, 0.0, 0.006) : vec3(0.05, 0.004, 0.034));
-          vec3 ac = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.2, 0.3) : vec3(1.0, 0.3, 0.7));
+          vec3 wc = uStyle > 1.5 ? vec3(0.03) : (uStyle > 0.5 ? vec3(0.03, 0.0, 0.006) : vec3(0.085, 0.02, 0.048));
+          vec3 ac = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.2, 0.3) : vec3(1.0, 0.36, 0.64));
           wc += ac * exp(-max(dd, 0.0) * 18.0) * (0.8 + 0.6 * uBeat);
           gl_FragColor = vec4(wc, 1.0); return;
         }
         vec2 c = p - vec2(0.0, 1.7);
         float r = length(c) + 1e-3; float a = atan(c.y, c.x); float a2 = atan(-c.y, -c.x);
+        // iris: the membrane dilates open as you approach, revealing the real space behind it
+        float ir = uOpen * 2.3 + 0.035 * sin(a * 7.0 + uTime * 1.1) * step(0.001, uOpen) - 0.04;
+        if (r < ir) discard;
+        float irisEdge = step(0.001, uOpen) * exp(-(r - ir) * 16.0);
         float lr = log(r);
         vec3 col;
         if (uStyle < 0.5) {
           float v = lr * 4.0 - uTime * 0.5 + a * 3.0 / 6.2831; float vb = lr * 4.0 + a2 * 3.0 / 6.2831;
           float w = min(fwidth(v), fwidth(vb));
           float b = 1.0 - smoothstep(0.4 - w, 0.4 + w, abs(fract(v) - 0.5) * 2.0);
-          col = mix(vec3(0.05, 0.0, 0.04), mix(vec3(1.0, 0.25, 0.65), vec3(0.4, 0.0, 0.2), fract(v)), b);
-          col += vec3(1.0, 0.4, 0.8) * exp(-r * 2.5) * (0.6 + 0.8 * uBeat);
+          col = mix(vec3(0.06, 0.012, 0.03), mix(vec3(1.0, 0.33, 0.62), vec3(0.42, 0.06, 0.19), fract(v)), b);
+          col += vec3(1.0, 0.5, 0.72) * exp(-r * 2.5) * (0.6 + 0.8 * uBeat);
         } else if (uStyle < 1.5) {
           float hb = exp(-uBeatT * 6.0) + 0.7 * exp(-max(uBeatT - 0.28, 0.0) * 6.0) * step(0.28, uBeatT);
           float v = lr * 3.0 - (a + uTime * 0.4) * 5.0 / 6.2831 + 0.6 / (r + 0.3) - uTime * 0.2;
@@ -241,11 +255,12 @@ export function makeVeil(style, end = 0) {
         }
         // membrane shimmer + glowing rim
         col *= 0.92 + 0.08 * sin(r * 22.0 - uTime * 1.5);
-        vec3 rim = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.25, 0.32) : vec3(1.0, 0.45, 0.8));
+        vec3 rim = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.25, 0.32) : vec3(1.0, 0.5, 0.74));
         col += rim * exp(-edgeD * 14.0) * (0.9 + 0.6 * uBeat);
+        col += rim * irisEdge * 1.4;
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
   const g = new THREE.PlaneGeometry(W, Hh); g.translate(0, Hh / 2, 0);
-  return new THREE.Mesh(g, m);
+  const mesh = new THREE.Mesh(g, m); mesh.userData.veil = true; return mesh;
 }

@@ -1,7 +1,7 @@
 // Neon pod chamber builder (Room 1 pink, Room 2 crimson). Everything is built in room-local space:
 // focal point at local -z, entry doorway at local +z (angle 0).
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
-  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, makeVeil } from './shared.js';
+  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
 
 export function buildChamber(cfg) {
   const root = new THREE.Group(); root.name = cfg.name;
@@ -9,7 +9,7 @@ export function buildChamber(cfg) {
   const inv = root.matrixWorld.clone().invert();
   const K = makeKit(cfg.pal, inv), { mat, neonCore, glowShell, neonTorus, neonTube, metalMat, hex } = K;
   const world = new THREE.Group(); root.add(world);       // mirrored in the glossy floor
-  const FS = cfg.focal === 'vortex' ? 1.7 : 1.0, FY = cfg.focal === 'vortex' ? 2.9 : TY;   // the crimson vortex is bigger and higher
+  const FS = cfg.focal === 'vortex' ? 1.7 : (cfg.deluxe ? 1.25 : 1.0), FY = cfg.focal === 'vortex' ? 2.9 : (cfg.deluxe ? 2.25 : TY);   // the crimson vortex is bigger and higher
   const fx = new THREE.Group(); root.add(fx);
   const doorAngles = cfg.doors.map((d) => d.ang);
   const haze = [], out = { root, world, fx, haze, kit: K, cfg };
@@ -27,16 +27,18 @@ export function buildChamber(cfg) {
         vec2 id = floor(cell), f = fract(cell);
         vec2 pc = vec2(length(fwidth(vW.xz)) / cw, fwidth(y) / 0.92);
         float h = hash12(vec2(mod(id.x, 56.0), id.y) + 7.0);
+        float nd = 0.0;   // 1 above a doorway: no vertical seams/flow lines there (they read as a wire over the arch)
+        ${doorAngles.map((a) => `{ float da = atan(sin(ang - (${f3(a)})), cos(ang - (${f3(a)}))); nd = max(nd, 1.0 - smoothstep(${f3(DW + 0.35)}, ${f3(DW + 0.6)}, abs(da) * ${f3(R)})); }`).join('\n        ')}
         vec3 col = mix(BASE, BASE2, smoothstep(0.0, ${f3(H)}, y)) * (0.7 + 0.6 * h);
         float ex = min(f.x, 1.0 - f.x), ey = min(f.y, 1.0 - f.y);
-        float seam = max(1.0 - smoothstep(0.012, 0.012 + pc.x * 1.5, ex), 1.0 - smoothstep(0.018, 0.018 + pc.y * 1.5, ey));
+        float seam = max((1.0 - smoothstep(0.012, 0.012 + pc.x * 1.5, ex)) * (1.0 - nd), 1.0 - smoothstep(0.018, 0.018 + pc.y * 1.5, ey));
         col *= 1.0 - seam * 0.85;
         float bev = smoothstep(0.018, 0.03, ey) * (1.0 - smoothstep(0.03, 0.045 + pc.y, ey)) * step(0.5, f.y);
         col += DEEP * bev * 0.6;
         float slot = (1.0 - smoothstep(0.05, 0.05 + pc.y * 1.5, abs(f.y - 0.5))) * (1.0 - smoothstep(0.3, 0.3 + pc.x * 1.5, abs(f.x - 0.5)));
         float on = step(${f3(cfg.pal === 'crimson' ? 0.86 : 0.8)}, h) * (0.55 + 0.45 * sin(uTime * (0.7 + h * 2.0) + h * 40.0));
-        col += mix(PINK, HOT, h) * slot * on * (0.4 + 0.8 * uInt) * DIM;
-        float vs = aline(cell.x / 4.0, 0.0035, pc.x / 4.0);
+        col += mix(PINK, HOT, h) * slot * on * (1.0 - nd) * (0.4 + 0.8 * uInt) * DIM;
+        float vs = aline(cell.x / 4.0, 0.0035, pc.x / 4.0) * (1.0 - nd);
         float flow = pow(0.5 + 0.5 * sin(y * 1.1 - uTime * 2.0 + floor(cell.x / 4.0) * 1.7), 6.0);
         col += PINK * vs * (0.3 + 1.4 * flow * uInt) * DIM;
         float bw = exp(-abs(y - uBeatT * 3.0) * 2.0) * uBeat;
@@ -47,6 +49,7 @@ export function buildChamber(cfg) {
         col += PINK * 0.14 * exp(-y * 1.4) * (0.6 + 0.6 * uBeat) * DIM;
         float dm = length(vec3(vW.x, y, vW.z) - vec3(0.0, ${f3(FY)}, ${f3(TZ)}));
         col += PINK * 0.8 * exp(-(dm - ${f3(TR * FS)}) * 0.85) * (0.5 + 0.5 * uInt + 0.7 * uBeat);
+        ${cfg.wallGLSL || ''}
         gl_FragColor = vec4(fogit(col, vW), 1.0);
       }`, { side: THREE.BackSide });
     const wall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 128, 1, true), m); wall.position.y = H / 2; world.add(wall);
@@ -60,6 +63,7 @@ export function buildChamber(cfg) {
         col += DEEP * aline(r / 0.9, 0.012, fwidth(r) / 0.9) * 0.8;
         col += PINK * 0.5 * exp(-abs(r - 2.4) * 2.5) * (0.6 + 0.4 * uInt + 0.8 * uBeat) * DIM;
         col += HOT * 0.35 * exp(-r * 2.5) * (0.6 + 0.8 * uBeat) * DIM;
+        ${cfg.ceilGLSL || ''}
         gl_FragColor = vec4(fogit(col, vW), 1.0);
       }`);
     const c = new THREE.Mesh(new THREE.CircleGeometry(R + 0.05, 96), m); c.rotation.x = Math.PI / 2; c.position.y = H; world.add(c);
@@ -67,7 +71,7 @@ export function buildChamber(cfg) {
     neonTorus(world, 1.2, 0.03, hex.c, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.0);
     const beams = [];
     for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; beams.push(mtx(Math.sin(a) * 4.7, H - 0.16, Math.cos(a) * 4.7, a)); }
-    instanced(new THREE.BoxGeometry(0.24, 0.3, 4.6), metalMat({ STRIP_Y: '0.149' }), beams, world);
+    if (!cfg.deluxe) instanced(new THREE.BoxGeometry(0.24, 0.3, 4.6), metalMat({ STRIP_Y: '0.149' }), beams, world);
     const nearDoor = (a) => doorAngles.some((d) => Math.abs(Math.atan2(Math.sin(a - d), Math.cos(a - d))) < 0.25);
     const pil = [];
     for (let i = 0; i < 28; i++) {
@@ -99,6 +103,7 @@ export function buildChamber(cfg) {
       uniform float uMirror;
       void main(){
         vec2 p = vW.xz; float rr = length(p);
+        ${floorDoorDiscardGLSL(doorAngles)}
         vec2 mm = p - vec2(0.0, ${f3(TZ)}); float d = length(mm);
         vec2 px = fwidth(p);
         vec3 col = FLOORC;
@@ -116,6 +121,7 @@ export function buildChamber(cfg) {
         col += PINK * 0.5 * exp(-d * 0.5) * (0.5 + 0.5 * uInt + 0.6 * uBeat);
         col += PINK * aline(rr / 2.0, 0.006, fwidth(rr) / 2.0) * 0.35 * step(rr, 5.5) * DIM;
         ${doorPools}
+        ${cfg.floorGLSL || ''}
         col *= 1.0 - smoothstep(5.5, ${f3(R)}, rr) * 0.4;
         col = fogit(col, vW);
         vec3 V = normalize(CAM - vW);
@@ -133,7 +139,7 @@ export function buildChamber(cfg) {
   const fg = new THREE.Group(); fg.scale.setScalar(FS); fg.position.set(0, FY - pc.y * FS, pc.z - pc.z * FS); world.add(fg);
   if (cfg.focal === 'tunnel') buildTunnel(K, fg, cfg.tunnelU);
   else buildVortex(K, fg);
-  {
+  if (!cfg.deluxe) {
     const bez = new THREE.Mesh(new THREE.TorusGeometry(TR + 0.42, 0.34, 12, 96), metalMat()); bez.position.copy(pc); fg.add(bez);
     neonTorus(fg, TR + 0.1, 0.05, hex.d, pc, 0, 1.3, 5);
     neonTorus(fg, TR + 0.62, 0.04, hex.a, pc.clone().setZ(TZ + 0.2), 0, 1.1, 5);
@@ -159,7 +165,7 @@ export function buildChamber(cfg) {
       }`, { additive: true }));
     halo.position.set(0, TY, TZ + 0.5); fg.add(halo);
   }
-  if (cfg.screen) out.hud = buildScreen(K, world);
+  if (cfg.screen) out.hud = buildScreen(K, world, !!cfg.deluxe);
   if (cfg.gyro) {   // crimson room: hanging gyroscope rings above the floor
     const c = new THREE.Vector3(0, 5.6, -0.5);
     neonTorus(world, 2.0, 0.035, hex.b, c, Math.PI / 2, 1.0).forEach((m) => { m.rotation.set(Math.PI / 2 + 0.35, 0, 0.2); });
@@ -169,7 +175,7 @@ export function buildChamber(cfg) {
   }
 
   // ---------- pods ----------
-  {
+  if (!cfg.deluxe) {
     const all = [];
     for (let i = 0; i < 6; i++) { const z = -5.0 + i * 1.65, x = 2.5 + 0.42 * i; all.push([i, -x, z], [i, x, z]); }
     const PODS = all.filter(([i]) => cfg.podIdx.includes(i)).map(([, x, z]) => [x, z]);
@@ -247,16 +253,19 @@ export function buildChamber(cfg) {
       void main(){ vec2 p = vUv - 0.5; float e = (1.0 - smoothstep(0.15, 0.5, abs(p.x))) * (1.0 - smoothstep(0.0, 0.5, abs(p.y + 0.1)));
         float n = 0.6 + 0.4 * sin(vUv.y * 5.0 + uTime * 0.3 + vUv.x * 3.0) * sin(vUv.x * 4.0 - uTime * 0.2);
         gl_FragColor = vec4(PINK * e * n * 0.07 * (0.6 + 0.6 * uInt + 0.8 * uBeat), 1.0); }`, { additive: true, side: THREE.DoubleSide });
-    for (const [x, z, ry, w, h] of [[-3.3, -5.0, 0.45, 2.6, 6.5], [3.3, -5.0, -0.45, 2.6, 6.5]]) {
+    for (const [x, z, ry, w, h] of (cfg.deluxe ? [] : [[-3.3, -5.0, 0.45, 2.6, 6.5], [3.3, -5.0, -0.45, 2.6, 6.5]])) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), hz); p.position.set(x, h / 2, z); p.rotation.y = ry; p.renderOrder = 31; fx.add(p); haze.push(p);
     }
     out.points = makeParticles(fx, PAL[cfg.pal]);
   }
 
+  if (cfg.extra) cfg.extra({ K, world, root, fx, out, haze, FS, FY, pc });
+
   // ---------- mirror copy for floor reflections ----------
   world.traverse((o) => { if (o.material && o.material.transparent) o.renderOrder = 20 + (o.userData.ro || 0); });
   if (OPT.mirror) {
     const mirror = world.clone(true); mirror.scale.y = -1;
+    const drop = []; mirror.traverse((o) => { if (o.userData.noMirror) drop.push(o); }); drop.forEach((o) => o.removeFromParent());
     mirror.traverse((o) => { if (o.material && o.material.transparent) o.renderOrder = (o.userData.ro || 0); });
     root.add(mirror); out.mirror = mirror;
   }
@@ -322,7 +331,11 @@ function buildTunnel(K, world, tunnelU) {
     varying vec3 vP;
     float bandM(float v, float w){ float tri = abs(fract(v) - 0.5) * 2.0; return 1.0 - smoothstep(0.42 - w, 0.42 + w, tri); }
     vec3 vid(float d, float a){ float r = 0.5 * ${f3(D0)} / (${f3(D0)} + d);
-      return texture2D(uVideo, 0.5 + vec2(cos(a), sin(a)) * r * uVidScale).rgb; }
+      vec3 c = texture2D(uVideo, 0.5 + vec2(cos(a), sin(a)) * r * uVidScale).rgb;
+      // the clip is magenta (hue ~315); remap by luminance onto the room's pink ramp, keep a little of its own colour
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      vec3 pk = mix(DEEP * 0.6, PINK, smoothstep(0.02, 0.45, l)); pk = mix(pk, WHITE, smoothstep(0.55, 1.0, l));
+      return mix(pk * 1.15, c, 0.15); }
     void main(){
       float d = -vP.z; float a = atan(vP.y, vP.x); float a2 = atan(-vP.y, -vP.x);
       float ld = log(${f3(D0)} + d);
@@ -334,15 +347,15 @@ function buildTunnel(K, world, tunnelU) {
       float ww = w * 1.1 + 0.003;
       float mR = bandM(v + 0.04, ww), mG = bandM(v, ww), mB = bandM(v - 0.04, ww);
       float fv = fract(v);
-      vec3 bc = mix(vec3(1.0, 0.24, 0.62), vec3(0.34, 0.0, 0.14), smoothstep(0.29, 0.71, fv));
-      vec3 col = vec3(0.004, 0.0, 0.004) + bc * vec3(mR, mG, 0.85 * mB + 0.15 * mG);
+      vec3 bc = mix(HOT, DEEP * 0.8, smoothstep(0.29, 0.71, fv));
+      vec3 col = vec3(0.006, 0.001, 0.003) + bc * vec3(mR, mG, 0.7 * mG + 0.3 * mR);
       float tri = abs(fv - 0.5) * 2.0;
       col += WHITE * (1.0 - smoothstep(0.0, ww * 2.0 + 0.01, abs(tri - 0.42))) * 0.6 * step(fv, 0.5);
       float v2 = ld * 6.0 - (a - spin * 0.6) * 3.0 / 6.2831 + uTime * 0.18;
       float v2b = ld * 6.0 - (a2 - spin * 0.6) * 3.0 / 6.2831;
       float w2 = min(fwidth(v2), fwidth(v2b));
       col += VIOL * (1.0 - smoothstep(0.03, 0.03 + w2 * 1.5, abs(fract(v2) - 0.5))) * 0.22 * clamp(1.2 - w2 * 3.0, 0.0, 1.0);
-      col = mix(vec3(0.11, 0.0, 0.065) * (0.6 + 0.4 * uInt), col, k);
+      col = mix(DEEP * 0.3 * (0.6 + 0.4 * uInt), col, k);
       float rc = (d - uTime * 3.2) / 3.2; float pr = fwidth(rc);
       col += mix(HOT, WHITE, 0.4) * aline(rc, 0.01, pr) * 0.5 * (0.5 + 0.5 * sin(a * 6.0 + uTime * 1.3)) * clamp(1.4 - pr * 5.0, 0.0, 1.0);
       float wv = exp(-abs(d - uBeatT * 16.0) * 0.22) * uBeat;
@@ -358,7 +371,7 @@ function buildTunnel(K, world, tunnelU) {
   const capGeo = new THREE.CircleGeometry(TR, 48); capGeo.translate(0, 0, -TL);
   const cap = new THREE.Mesh(capGeo, new THREE.ShaderMaterial({ uniforms: { ...U, ...tunnelU }, vertexShader: VSX,
     fragmentShader: K.COMMON + `varying vec3 vP; void main(){ float r = length(vP.xy) / ${f3(TR)};
-      gl_FragColor = vec4(mix(HOT * (0.5 + 0.8 * uBeat), vec3(0.05, 0.0, 0.03), smoothstep(0.0, 0.8, r)) * 0.6, 1.0); }` }));
+      gl_FragColor = vec4(mix(HOT * (0.5 + 0.8 * uBeat), DEEP * 0.12, smoothstep(0.0, 0.8, r)) * 0.6, 1.0); }` }));
   cap.position.set(0, TY, TZ); cap.frustumCulled = false; world.add(cap);
 }
 
@@ -407,7 +420,7 @@ function buildVortex(K, world) {
 }
 
 // ---------- Room 1 curved screen + status display ----------
-function buildScreen(K, world) {
+function buildScreen(K, world, deluxe = false) {
   const { mat, neonCore, glowShell, neonTube, metalMat, hex } = K;
   const arcGeometry = (radius, height, half, segs = 48) => {
     const g = new THREE.CylinderGeometry(radius, radius, height, segs, 1, true, Math.PI - half, half * 2);
@@ -416,9 +429,9 @@ function buildScreen(K, world) {
   const arcCurve = (radius, y, half, n = 64) => { const pts = [];
     for (let i = 0; i <= n; i++) { const t = Math.PI - half + (2 * half * i) / n; pts.push(new THREE.Vector3(radius * Math.sin(t), y, radius * Math.cos(t))); }
     return new THREE.CatmullRomCurve3(pts); };
-  const SCR = { r: 6.45, y: 6.1, h: 2.3, half: 0.43 };
-  const hud = canvasTex(2048, 840), stat = canvasTex(2048, 256);
+  const SCR = deluxe ? { r: 6.45, y: 6.88, h: 1.82, half: 0.4 } : { r: 6.45, y: 6.1, h: 2.3, half: 0.43 };
   const asp = (SCR.r * SCR.half * 2) / SCR.h;
+  const hud = canvasTex(2048, Math.round(2048 / asp)), stat = canvasTex(2048, 256);
   const m = mat(/* glsl */`
     uniform sampler2D uHud;
     float sband(float s, float sb, float duty){ float w = min(fwidth(s), fwidth(sb)); float tri = abs(fract(s) - 0.5) * 2.0; return 1.0 - smoothstep(duty - w, duty + w, tri); }
@@ -426,7 +439,7 @@ function buildScreen(K, world) {
       vec2 p = (vUv - 0.5) * vec2(${f3(asp)}, 1.0);
       vec2 px2 = fwidth(p); float pw = max(px2.x, px2.y);
       float r = length(p) + 1e-4; float a = atan(p.y, p.x); float a2 = atan(-p.y, -p.x);
-      vec3 col = mix(vec3(0.07, 0.0, 0.05), vec3(0.015, 0.0, 0.015), smoothstep(0.0, 1.1, r));
+      vec3 col = mix(BASE * 0.9, BASE2 * 0.5, smoothstep(0.0, 1.1, r));
       float lr = log(r);
       float s1 = lr * 2.4 + a * 6.0 / 6.2831 + uTime * 0.55, s1b = lr * 2.4 + a2 * 6.0 / 6.2831;
       float s2 = lr * 2.4 - a * 6.0 / 6.2831 + uTime * 0.32, s2b = lr * 2.4 - a2 * 6.0 / 6.2831;
@@ -474,37 +487,37 @@ function buildScreen(K, world) {
   }
   const sg = glowSprite(hex.scr, 9.5, 4.6, 0.32); sg.position.set(0, SCR.y, -SCR.r - 0.15); world.add(sg);
   stat.t.colorSpace = THREE.SRGBColorSpace;
-  { const half = 0.4, r = 6.5, h = 0.6, y = 4.47;
+  if (!deluxe) { const half = 0.4, r = 6.5, h = 0.6, y = 4.47;
     const sm = new THREE.Mesh(arcGeometry(r, h, half), new THREE.MeshBasicMaterial({ map: stat.t, side: THREE.BackSide })); sm.position.y = y; world.add(sm);
     for (const yy of [y - h / 2 - 0.035, y + h / 2 + 0.035]) neonTube(world, arcCurve(r - 0.03, yy, half), hex.a, 0.9, 0.018); }
   function draw(t, I) {
     { const { g, c } = hud, W = c.width, Hh = c.height;
       g.clearRect(0, 0, W, Hh);
-      g.strokeStyle = 'rgba(255,120,200,0.95)'; g.lineWidth = 6; g.shadowColor = '#ff3c9e'; g.shadowBlur = 16;
+      g.strokeStyle = 'rgba(255,140,190,0.95)'; g.lineWidth = 6; g.shadowColor = '#ff4fa3'; g.shadowBlur = 16;
       const br = (x, y, sx, sy) => { g.beginPath(); g.moveTo(x, y + sy * 70); g.lineTo(x, y); g.lineTo(x + sx * 70, y); g.stroke(); };
       br(40, 40, 1, 1); br(W - 40, 40, -1, 1); br(40, Hh - 40, 1, -1); br(W - 40, Hh - 40, -1, -1);
       g.font = 'bold 46px "Courier New", monospace'; g.textBaseline = 'middle';
-      g.fillStyle = '#ffd6ee'; g.textAlign = 'left'; g.fillText('◈ FIELD MONITOR', 80, 92);
+      g.fillStyle = '#ffe2ec'; g.textAlign = 'left'; g.fillText('◈ FIELD MONITOR', 80, 92);
       const el = Math.floor(t); g.textAlign = 'right'; g.fillText(`T+${String(Math.floor(el / 60)).padStart(2, '0')}:${String(el % 60).padStart(2, '0')}`, W - 80, 92);
-      g.font = 'bold 34px "Courier New", monospace'; g.fillStyle = '#ff9ad2'; g.textAlign = 'left';
+      g.font = 'bold 34px "Courier New", monospace'; g.fillStyle = '#ffa3c9'; g.textAlign = 'left';
       [`PHASE    ${(0.5 + 0.5 * Math.sin(t * 0.7)).toFixed(2)}`, `DEPTH    ${(38 + 6 * Math.sin(t * 0.13)).toFixed(1)}`, 'SYNC     LOCKED', `FIELD    ${(I * 100).toFixed(0)}%`]
         .forEach((s, i) => g.fillText(s, 80, 170 + i * 48));
       g.textAlign = 'right';
       [`HARMONIC  ${3 + (Math.floor(t / 8) % 3)}`, `FLUX  ${(0.6 + 0.35 * Math.abs(Math.sin(t * 0.4))).toFixed(2)}`, 'CORE  STABLE', `PULSE  ${BEAT.toFixed(1)}s`]
         .forEach((s, i) => g.fillText(s, W - 80, 170 + i * 48));
-      g.textAlign = 'center'; g.font = 'bold 30px "Courier New", monospace'; g.fillStyle = 'rgba(255,170,220,0.9)'; g.fillText('— SIGNAL —', W / 2, Hh - 70);
+      g.textAlign = 'center'; g.font = 'bold 30px "Courier New", monospace'; g.fillStyle = 'rgba(255,180,210,0.9)'; g.fillText('— SIGNAL —', W / 2, Hh - 70);
       hud.t.needsUpdate = true; }
-    { const { g, c } = stat, W = c.width, Hh = c.height;
+    if (!deluxe) { const { g, c } = stat, W = c.width, Hh = c.height;
       g.shadowBlur = 0; g.fillStyle = '#0a0007'; g.fillRect(0, 0, W, Hh);
       g.strokeStyle = 'rgba(255,60,160,0.22)'; g.lineWidth = 2;
       for (let x = 0; x < W; x += 48) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, Hh); g.stroke(); }
-      g.shadowColor = '#ff3c9e'; g.shadowBlur = 22; g.textBaseline = 'middle'; g.font = 'bold 64px "Courier New", monospace';
+      g.shadowColor = '#ff4fa3'; g.shadowBlur = 22; g.textBaseline = 'middle'; g.font = 'bold 64px "Courier New", monospace';
       g.fillStyle = Math.floor(t * 1.5) % 2 ? '#ff5fb5' : '#6a1442'; g.beginPath(); g.arc(78, 70, 18, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#ffe0f2'; g.textAlign = 'left'; g.fillText('SYSTEM ONLINE', 118, 72);
       const res = Math.min(99, Math.floor(73 + 26 * I));
       g.textAlign = 'right'; g.fillStyle = '#ffa6d8'; g.fillText(`RESONANCE ${res}% AND RISING`, W - 64, 72);
       const segs = 64, sw = (W - 128) / segs;
-      for (let i = 0; i < segs; i++) { g.fillStyle = i / segs < res / 100 ? '#ff3c9e' : '#2a0018'; g.fillRect(64 + i * sw, 128, sw - 6, 20); }
+      for (let i = 0; i < segs; i++) { g.fillStyle = i / segs < res / 100 ? '#ff4fa3' : '#2a0018'; g.fillRect(64 + i * sw, 128, sw - 6, 20); }
       g.font = 'bold 60px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#ffc8e8'; g.fillText('BREATHE  •  FOCUS  •  DRIFT', W / 2, 205);
       stat.t.needsUpdate = true; }
   }

@@ -3,6 +3,7 @@
 import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, env } from './shared.js';
 import { VRButton } from './lib/VRButton.js';
 import { buildChamber } from './chamber.js';
+import { pinkRoomCfg } from './pinkroom.js';
 import { buildOpRoom } from './oproom.js';
 import { buildCorridor } from './corridor.js';
 
@@ -33,38 +34,56 @@ camera.position.set(0, 1.6, 0); camera.rotation.order = 'YXZ'; rig.add(camera);
 //  Room 3 (op-art)  centre (20,20)  rotated -90°: tunnel at +x, doorway back to B at -x
 const tunnelU = { uVideo: { value: null }, uHasVideo: { value: 0 }, uVidScale: { value: new THREE.Vector2(1, 1) },
   uVidMix: { value: OPT.video === 'full' ? 1.0 : OPT.video === '0' ? 0.0 : 0.32 }, uProc: { value: OPT.video === 'full' ? 0.0 : 1.0 } };
-const room1 = buildChamber({ name: 'room1', center: [0, 0], rotY: 0, pal: 'pink', focal: 'tunnel', screen: true, tunnelU,
-  podIdx: [0, 1, 2, 3, 4, 5], doors: [{ ang: 0, style: 1 }] });
+const room1 = buildChamber(pinkRoomCfg(tunnelU));
 const room2 = buildChamber({ name: 'room2', center: [0, 20], rotY: Math.PI, pal: 'crimson', focal: 'vortex', gyro: true,
   podIdx: [0, 1, 4, 5], doors: [{ ang: 0, style: 0 }, { ang: -Math.PI / 2, style: 2 }] });
-const room3 = buildOpRoom({ name: 'room3', center: [20, 20], rotY: -Math.PI / 2, doors: [{ ang: 0, style: 1 }] });
+const room3 = buildOpRoom({ name: 'room3', center: [20, 20], rotY: -Math.PI / 2, doors: [{ ang: 0, style: 1 }, { ang: -Math.PI / 4, style: 0 }] });
+// third side of the triangle: Room 3 → Room 1 along the diagonal (doorways at 45° on both rooms)
+const DG = 6.88 * Math.SQRT1_2, LC = (20 - 2 * DG) * Math.SQRT2;
+const corC = buildCorridor({ name: 'corC', start: [20 - DG, 20 - DG], rotY: -3 * Math.PI / 4, L: LC, palA: 'mono', palB: 'pink', styleA: 2, styleB: 0, drain: true, monoAtStart: true });
 const corA = buildCorridor({ name: 'corA', start: [0, 6.88], dir: 'z', L: 6.24, palA: 'pink', palB: 'crimson', styleA: 0, styleB: 1 });
-const corB = buildCorridor({ name: 'corB', start: [6.88, 20], dir: 'x', L: 6.24, palA: 'crimson', palB: 'mono', styleA: 1, styleB: 2 });
-const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root };
+const corB = buildCorridor({ name: 'corB', start: [6.88, 20], dir: 'x', L: 6.24, palA: 'crimson', palB: 'mono', styleA: 1, styleB: 2, drain: true });
+const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root, cC: corC.root };
 Object.values(SPACES).forEach((s) => scene.add(s));
-const ROOMS = [room1, room2, room3];
+const ROOMS = [room1, room2, room3, corA, corB, corC];
 
 // doorway planes (world): point, normal, lateral axis, fade colour
 const DOORS = [
-  { p: new THREE.Vector3(0, 0, 6.88), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0xb0103c },
-  { p: new THREE.Vector3(0, 0, 13.12), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0x900818 },
-  { p: new THREE.Vector3(6.88, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x70303a },
-  { p: new THREE.Vector3(13.12, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x9a9a9a },
+  { p: new THREE.Vector3(0, 0, 6.88), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0xb0103c, s: ['r1', 'cA'] },
+  { p: new THREE.Vector3(0, 0, 13.12), n: new THREE.Vector3(0, 0, 1), t: new THREE.Vector3(1, 0, 0), c: 0x900818, s: ['cA', 'r2'] },
+  { p: new THREE.Vector3(6.88, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x70303a, s: ['r2', 'cB'] },
+  { p: new THREE.Vector3(13.12, 0, 20), n: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(0, 0, 1), c: 0x9a9a9a, s: ['cB', 'r3'] },
+  { p: new THREE.Vector3(20 - DG, 0, 20 - DG), n: new THREE.Vector3(1, 0, 1).normalize(), t: new THREE.Vector3(1, 0, -1).normalize(), c: 0x9a9a9a, s: ['r3', 'cC'] },
+  { p: new THREE.Vector3(DG, 0, DG), n: new THREE.Vector3(1, 0, 1).normalize(), t: new THREE.Vector3(1, 0, -1).normalize(), c: 0xff4fa3, s: ['cC', 'r1'] },
 ];
+// every doorway veil (both sides, and their mirror copies) shares one "open" uniform per doorway
+DOORS.forEach((d) => { d.open = { value: 0 }; });
+{ const wp = new THREE.Vector3(); scene.updateMatrixWorld(true);
+  scene.traverse((o) => { if (!o.userData.veil) return; o.getWorldPosition(wp);
+    let best = DOORS[0], bd = Infinity; for (const d of DOORS) { const dd = Math.hypot(wp.x - d.p.x, wp.z - d.p.z); if (dd < bd) { bd = dd; best = d; } }
+    o.material.uniforms.uOpen = best.open; }); }
+// corridors as oriented strips: start S, unit direction D, length L (beds = [room bed at start, room bed at end])
+const CORRS = [
+  { k: 'cA', S: [0, 6.88], D: [0, 1], L: 6.24, beds: [0, 1] },
+  { k: 'cB', S: [6.88, 20], D: [1, 0], L: 6.24, beds: [1, 2] },
+  { k: 'cC', S: [20 - DG, 20 - DG], D: [-Math.SQRT1_2, -Math.SQRT1_2], L: LC, beds: [2, 0] },
+];
+const corrLocal = (c, x, z) => { const dx = x - c.S[0], dz = z - c.S[1]; return [dx * c.D[0] + dz * c.D[1], dx * c.D[1] - dz * c.D[0]]; };
 function zoneOf(h) {
-  if (Math.abs(h.x) < 1.35 && h.z > 6.88 && h.z < 13.12) return 'cA';
-  if (Math.abs(h.z - 20) < 1.35 && h.x > 6.88 && h.x < 13.12) return 'cB';
+  for (const c of CORRS) { const [al, la] = corrLocal(c, h.x, h.z); if (al > 0 && al < c.L && Math.abs(la) < 1.35) return c.k; }
   const d1 = Math.hypot(h.x, h.z), d2 = Math.hypot(h.x, h.z - 20), d3 = Math.hypot(h.x - 20, h.z - 20);
   return d1 <= d2 && d1 <= d3 ? 'r1' : d2 <= d3 ? 'r2' : 'r3';
 }
 // walkable area: room circles + corridor strips
 const REGIONS = [
   { c: [0, 0], r: R - 0.9 }, { c: [0, 20], r: R - 0.9 }, { c: [20, 20], r: R - 0.9 },
-  { box: [-0.95, 0.95, 5.6, 14.4] }, { box: [5.6, 14.4, 19.05, 20.95] },
+  ...CORRS.map((c) => ({ corr: c })),
 ];
 function nearestIn(rg, x, z) {
   if (rg.c) { const dx = x - rg.c[0], dz = z - rg.c[1], d = Math.hypot(dx, dz); return d <= rg.r ? [x, z] : [rg.c[0] + (dx / d) * rg.r, rg.c[1] + (dz / d) * rg.r]; }
-  const [x0, x1, z0, z1] = rg.box; return [Math.min(x1, Math.max(x0, x)), Math.min(z1, Math.max(z0, z))];
+  const c = rg.corr; let [al, la] = corrLocal(c, x, z);
+  al = Math.min(c.L + 1.3, Math.max(-1.3, al)); la = Math.min(0.95, Math.max(-0.95, la));
+  return [c.S[0] + al * c.D[0] + la * c.D[1], c.S[1] + al * c.D[1] - la * c.D[0]];
 }
 const headP = new THREE.Vector3();
 function clampToWorld() {
@@ -78,7 +97,7 @@ function clampToWorld() {
 const quality = { haze: true, mirror: OPT.mirror, particles: true };
 let zone = null;
 function applyVisibility() {
-  for (const [k, s] of Object.entries(SPACES)) s.visible = k === zone;
+  for (const [k, s] of Object.entries(SPACES)) s.visible = k === zone || DOORS.some((d) => d.open.value > 0.003 && d.s.includes(k) && d.s.includes(zone));
   for (const rm of ROOMS) {
     rm.haze.forEach((o) => { o.visible = quality.haze; });
     if (rm.mirror) rm.mirror.visible = quality.mirror;
@@ -90,12 +109,17 @@ function applyVisibility() {
 const fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.BackSide });
 const fadeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), fadeMat); fadeMesh.renderOrder = 1000; fadeMesh.frustumCulled = false; camera.add(fadeMesh);
 const tmp = new THREE.Vector3();
-function doorFade(h) {
+// Doorways: as you approach, the veil irises open and the next space is drawn behind it, so walking through is a real,
+// continuous view (no fade). The head-fade only remains as a tiny safety net if the iris is somehow still closed at the plane
+// (e.g. a snap-teleport), and then only within ±12 cm of the plane.
+function updateDoors(h, dt) {
   let f = 0, col = 0;
   for (const d of DOORS) {
-    tmp.subVectors(h, d.p); const dist = Math.abs(tmp.dot(d.n)), lat = Math.abs(tmp.dot(d.t));
-    if (lat > 1.5 || h.y > 3.8) continue;
-    const v = 1 - THREE.MathUtils.smoothstep(dist, 0.06, 0.45); if (v > f) { f = v; col = d.c; }
+    tmp.subVectors(h, d.p); const along = tmp.dot(d.n), lat = tmp.dot(d.t), dist = Math.hypot(along, lat);
+    const target = 1 - THREE.MathUtils.smoothstep(dist, 1.5, 2.9);
+    d.open.value += (target - d.open.value) * Math.min(1, dt * 5);
+    if (Math.abs(target - d.open.value) < 0.002) d.open.value = target;
+    if (Math.abs(lat) < 1.5 && h.y < 3.8) { const v = (1 - d.open.value) * (1 - THREE.MathUtils.smoothstep(Math.abs(along), 0.03, 0.12)); if (v > f) { f = v; col = d.c; } }
   }
   fadeMat.opacity = f; if (f > 0) fadeMat.color.setHex(col); fadeMesh.visible = f > 0.002;
 }
@@ -210,8 +234,8 @@ function scheduleBeat(n) {
 soundBtn.addEventListener('click', startAudio);
 function updateBeds(h) {
   let w;
-  if (zone === 'cA') { const t = THREE.MathUtils.clamp((h.z - 6.88) / 6.24, 0, 1); w = [1 - t, t, 0]; }
-  else if (zone === 'cB') { const t = THREE.MathUtils.clamp((h.x - 6.88) / 6.24, 0, 1); w = [0, 1 - t, t]; }
+  const c = CORRS.find((cc) => cc.k === zone);
+  if (c) { const t = THREE.MathUtils.clamp(corrLocal(c, h.x, h.z)[0] / c.L, 0, 1); w = [0, 0, 0]; w[c.beds[0]] += 1 - t; w[c.beds[1]] += t; }
   else w = zone === 'r1' ? [1, 0, 0] : zone === 'r2' ? [0, 1, 0] : [0, 0, 1];
   A.w = w;
   if (A.ctx && A.beds.length) A.beds.forEach((g, i) => g.gain.setTargetAtTime(w[i], A.ctx.currentTime, 0.25));
@@ -302,8 +326,8 @@ renderer.setAnimationLoop(() => {
   camera.updateMatrixWorld(true);
   const xrCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
   xrCam.getWorldPosition(headP);
-  const z = zoneOf(headP); if (z !== zone) { zone = z; applyVisibility(); }
-  doorFade(headP); updateBeds(headP);
+  zone = zoneOf(headP);
+  updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;
   const amp = (0.55 + 0.45 * I) * (surge ? 1.3 : 1);
