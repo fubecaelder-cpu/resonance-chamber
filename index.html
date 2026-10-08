@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="icon" href="data:,">
+<title>Resonance Chamber · WebXR</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050003; font-family: system-ui, sans-serif; }
+  canvas { display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #hud { position: fixed; left: 16px; top: 14px; color: #ff9fd0; font-size: 13px; line-height: 1.5;
+         text-shadow: 0 0 6px #ff3c9e; pointer-events: none; opacity: .85; max-width: 360px; }
+  #hud b { color: #ffd2ea; }
+  #sound { position: fixed; right: 16px; top: 14px; padding: 8px 14px; border: 1px solid #ff4fa8; border-radius: 6px;
+           background: rgba(30,0,18,.7); color: #ffc4e3; font: 13px system-ui, sans-serif; cursor: pointer; }
+  #sound:hover { background: rgba(80,0,45,.8); }
+</style>
+</head>
+<body>
+<div id="hud"><b>RESONANCE CHAMBER</b><br>
+Quest: tap <b>ENTER VR</b>. Left stick moves, right stick snap-turns.<br>
+Three rooms: turn around and walk through the glowing doorway behind you.<br>Desktop: drag to look, WASD / arrows to walk.<br>Slow headset? add <b>?quality=low</b> to the URL.</div>
+<button id="sound">▶ Start sound</button>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
