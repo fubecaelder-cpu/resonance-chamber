@@ -8,7 +8,7 @@ import { pinkRoomCfg } from './pinkroom.js';
 import { buildOpRoom } from './oproom.js';
 import { buildCorridor } from './corridor.js';
 import { createPanels, settings } from './panels.js';
-import { createMedia, buildMonitor, mediaOn } from './media.js';
+import { createMedia, buildMonitor, roomMedia } from './media.js';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -55,7 +55,7 @@ const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', { y: 7.
 room1.root.updateMatrixWorld(true);
 const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos];
 let panelsReady = false;
-const media = createMedia({ onChange: () => { if (panelsReady) panelSys.redrawMedia(); updateOverlay(); } });
+const media = createMedia({ monitorPos: MON_POS, onChange: () => { if (panelsReady) panelSys.redrawMedia(); updateOverlay(); } });
 media.setRenderer(renderer);
 // control panels: one per room, beside the arrival spot, facing you, clear of the doorway paths (room-local positions)
 const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, rooms: [
@@ -358,7 +358,7 @@ function desktopMove(dt) {
 { const r = Q.get('room'); if (r === '2') { rig.position.set(0, 0, 14.5); yaw = Math.PI; } else if (r === '3') { rig.position.set(14.5, 0, 20); yaw = -Math.PI / 2; } applyLook(); }
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
-window.__zone = () => zone; window.__scene = scene; window.__media = media;
+window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
 window.__act = (id) => panelSys.act(id);
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
@@ -381,7 +381,10 @@ let lastRoom = 0;
 const $ = (id) => document.getElementById(id);
 function updateOverlay() {
   const el = $('mStatus'); if (!el) return;
-  el.textContent = media.st.status; el.className = media.st.error ? 'err' : '';
+  el.textContent = media.st.kind === 'none' && !media.st.error ? 'Showing your Google Drive playlists (rooms with empty folders show built-in visuals)' : media.st.status;
+  el.className = media.st.error ? 'err' : '';
+  const ds = $('dStatus');
+  if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
 }
 if ($('mFile')) {
   $('mFile').addEventListener('click', () => { media.picker.click(); });
@@ -390,6 +393,15 @@ if ($('mFile')) {
   $('mUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') goUrl(); });
   $('mDefault').addEventListener('click', () => media.restoreDefault());
   $('mToggle').addEventListener('click', () => $('media').classList.toggle('open'));
+  $('dKey').value = media.drive.key; [0, 1, 2].forEach((i) => { $('dF' + i).value = media.drive.folders[i]; });
+  $('dGo').addEventListener('click', () => {
+    const bad = media.setDrive({ key: $('dKey').value, folders: [0, 1, 2].map((i) => $('dF' + i).value) });
+    if (bad.length) $('dStatus').textContent = `That doesn't look like a Drive folder link: ${bad.join(', ')}`;
+  });
+  $('dLink').addEventListener('click', () => {
+    const u = media.bookmarkURL(); history.replaceState(null, '', u);
+    $('dStatus').textContent = 'The address bar now holds your rooms\' folders: bookmark this page.';
+  });
   updateOverlay();
 }
 renderer.setAnimationLoop(() => {
@@ -419,9 +431,9 @@ renderer.setAnimationLoop(() => {
     else if (L.setOrientation) L.setOrientation(fwdA.x, fwdA.y, fwdA.z, upA.x, upA.y, upA.z);
   }
   const tick = Math.floor(t * 2);
-  if (zone === 'r1' && room1.hud && tick !== lastHud && mediaOn[0].value < 1) { lastHud = tick; room1.hud.draw(t, I); }
+  if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
   const zi = { r1: 0, r2: 1, r3: 2 }[zone]; if (zi !== undefined) lastRoom = zi;
-  media.update(dt, lastRoom); media.setAudioPos(MON_POS[lastRoom]);
+  media.update(dt, lastRoom);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

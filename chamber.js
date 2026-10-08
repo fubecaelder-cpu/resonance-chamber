@@ -2,7 +2,7 @@
 // focal point at local -z, entry doorway at local +z (angle 0).
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
   makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
-import { MEDIA, mediaOn, MEDIA_GLSL } from './media.js';
+import { roomMedia, MEDIA_GLSL } from './media.js';
 
 
 // floor helpers shared by the room floors
@@ -493,7 +493,7 @@ function buildScreen(K, world, deluxe = false) {
       if (uMediaOn > 0.001) { vec3 mv = mediaFrame(vUv, ${f3(asp)}, PINK); vec2 e2 = min(vUv, 1.0 - vUv);
         mv += PINK * exp(-min(e2.x * ${f3(asp)}, e2.y) * 40.0) * 0.5; col = mix(col, mv, uMediaOn); }
       gl_FragColor = vec4(col, 1.0);
-    }`, { side: THREE.BackSide, uniforms: { uHud: { value: hud.t }, ...MEDIA, uMediaOn: mediaOn[0] } });
+    }`, { side: THREE.BackSide, uniforms: { uHud: { value: hud.t }, ...roomMedia[0] } });
   const s = new THREE.Mesh(arcGeometry(SCR.r, SCR.h, SCR.half), m); s.position.y = SCR.y; world.add(s);
   const back = new THREE.Mesh(new THREE.CylinderGeometry(SCR.r + 0.08, SCR.r + 0.08, SCR.h + 0.4, 48, 1, true, Math.PI - SCR.half - 0.03, SCR.half * 2 + 0.06), metalMat({ DOUBLE: 1 }));
   back.position.y = SCR.y; world.add(back);

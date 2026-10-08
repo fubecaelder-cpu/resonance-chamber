@@ -24,6 +24,7 @@
   #media .body { display: none; } #media.open .body { display: block; }
   #media #mToggle { width: 100%; text-align: left; }
   #media small { display: block; margin-top: 6px; color: #e6a0c4; line-height: 1.35; }
+  #drv { margin-top: 8px; } #drv summary { cursor: pointer; color: #ffd6ea; } #dStatus { margin-top: 6px; white-space: pre-line; }
   #mStatus { margin-top: 7px; min-height: 1.3em; color: #ffd6ea; word-break: break-word; } #mStatus.err { color: #ffd27a; }
 </style>
 </head>
@@ -35,11 +36,20 @@ Three rooms in a triangle: the two glowing doorways behind you lead to the other
 <div id="media" class="open">
   <button id="mToggle">▣ Your video on the room screens</button>
   <div class="body">
-    <div class="row"><button id="mFile">Choose video file</button><button id="mDefault">Built-in visuals</button></div>
+    <div class="row"><button id="mFile">Choose video file</button><button id="mDefault">Back to Drive playlists</button></div>
     <div class="row"><input id="mUrl" type="url" placeholder="Paste video URL (direct .mp4 / .webm)"><button id="mUrlGo">Play URL</button></div>
     <div id="mStatus"></div>
+    <details id="drv"><summary>Google Drive folders (already set up; change them here)</summary>
+      <div class="row"><input id="dKey" type="text" autocomplete="off" spellcheck="false" placeholder="Google API key (AIza…)"></div>
+      <div class="row"><input id="dF0" type="url" placeholder="Pink room: Drive folder link"></div>
+      <div class="row"><input id="dF1" type="url" placeholder="Crimson room: Drive folder link"></div>
+      <div class="row"><input id="dF2" type="url" placeholder="Monochrome room: Drive folder link"></div>
+      <div class="row"><button id="dGo">Stream folders</button><button id="dLink">Make bookmark link</button></div>
+      <div id="dStatus"></div>
+      <small>Share each folder as "Anyone with the link". Videos stream from Google; nothing is stored on the headset. MP4 (H.264/AAC) or WebM.</small>
+    </details>
     <small>Files stay on this device and are never uploaded. URLs must be direct links from a server that allows cross-origin use (CORS).
-    Choose your video here before tapping ENTER VR; the in-room MEDIA panel then plays, pauses, loops and sets the volume.</small>
+    By default each room plays its Google Drive folder. A file or URL you choose here takes over the screens until you press Back to Drive playlists (or DEFAULT on the in-room MEDIA panel).</small>
   </div>
 </div>
 <script type="module" src="./main.js"></script>

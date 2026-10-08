@@ -35,9 +35,10 @@ const BTN = [
 const WW = 0.5, WH = 0.56;
 const WBTN = [
   { id: 'm-load', x: -0.15, y: 0.1, glyph: 3, label: 'LOAD' }, { id: 'm-play', x: 0.0, y: 0.1, glyph: 4, label: 'PLAY / PAUSE' },
-  { id: 'm-default', x: 0.15, y: 0.1, glyph: 7, label: 'DEFAULT' },
+  { id: 'm-next', x: 0.15, y: 0.1, glyph: 10, label: 'NEXT' },
   { id: 'm-vol-', x: -0.15, y: -0.04, glyph: 0, label: 'VOL −' }, { id: 'm-vol+', x: 0.15, y: -0.04, glyph: 1, label: 'VOL +' },
-  { id: 'm-loop', x: -0.15, y: -0.18, glyph: 5, label: 'LOOP' }, { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
+  { id: 'm-loop', x: -0.15, y: -0.18, glyph: 5, label: 'LOOP' }, { id: 'm-default', x: 0.0, y: -0.18, glyph: 7, label: 'DEFAULT' },
+  { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
 ];
 
 const PVS = /* glsl */`
@@ -65,6 +66,7 @@ function buttonMat(st, glyph) {
         else if (uGlyph < 1.5) d = min(box(b, vec2(0.5, 0.1)), box(b, vec2(0.1, 0.5)));
         else if (uGlyph > 2.5 && uGlyph < 3.5) d = min(triU(b - vec2(0.0, 0.12), 0.44), box(b - vec2(0.0, -0.36), vec2(0.4, 0.075)));     // eject = load
         else if (uGlyph > 3.5 && uGlyph < 4.5) d = triR(b - vec2(0.08, 0.0), 0.5);                                                      // play
+        else if (uGlyph > 9.5) d = min(triR(b - vec2(-0.08, 0.0), 0.44), box(b - vec2(0.3, 0.0), vec2(0.07, 0.3)));                    // next
         else if (uGlyph > 7.5 && uGlyph < 8.5) d = min(box(b - vec2(-0.19, 0.0), vec2(0.1, 0.36)), box(b - vec2(0.19, 0.0), vec2(0.1, 0.36)));   // pause
         else if (uGlyph > 4.5 && uGlyph < 5.5) { float rr2 = abs(box(b, vec2(0.3, 0.14)) - 0.1) - 0.065;                                // loop
           d = min(rr2, min(triR(b - vec2(0.1, 0.24), 0.26), triR(-(b - vec2(-0.1, -0.24)), 0.26))); }
@@ -163,18 +165,17 @@ function drawWing(ct, st, ms) {
     for (let r = 20; r < W * 1.4; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
   g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('MEDIA', W / 2, Y(0.238));
+  g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(ms.mode === 'drive' ? 'MEDIA · DRIVE' : 'MEDIA', W / 2, Y(0.238));
   // status (file name, hint or error), wrapped to two lines
   g.font = '500 25px system-ui, Segoe UI, Roboto, sans-serif'; g.fillStyle = ms.error ? '#ffd27a' : st.label;
   const words = String(ms.status || '').split(' '); const lines = ['']; for (const w of words) { const t = (lines[lines.length - 1] + ' ' + w).trim();
     if (g.measureText(t).width > W - 70 && lines[lines.length - 1]) { if (lines.length === 2) { lines[1] += '…'; break; } lines.push(w); } else lines[lines.length - 1] = t; }
   lines.forEach((l, i) => g.fillText(l, W / 2, Y(0.2 - i * 0.026)));
   for (const b of WBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR + 0.012) * S, 0, Math.PI * 2); g.fill();
-    g.fillStyle = st.label; g.font = '600 24px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(b.label, X(b.x), Y(b.y - 0.074)); }
+    const lab = b.id === 'm-loop' ? ms.loopLabel : b.id === 'm-screens' ? ms.screensLabel : b.label;
+    g.fillStyle = b.id === 'm-loop' || b.id === 'm-screens' ? st.value : st.label; g.font = '600 24px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(lab, X(b.x), Y(b.y - 0.074)); }
   g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('VOLUME', W / 2, Y(-0.012));
   g.fillStyle = st.value; g.font = '800 52px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(ms.volume <= 0 ? 'MUTE' : `${Math.round(ms.volume * 100)}%`, W / 2, Y(-0.05));
-  g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillStyle = st.value;
-  g.fillText(ms.loop ? 'LOOP ON' : 'LOOP OFF', W / 2, Y(-0.162)); g.fillText(ms.screens === 'all' ? 'ALL ROOMS' : 'THIS ROOM', W / 2, Y(-0.2));
   ct.t.needsUpdate = true;
 }
 
@@ -218,14 +219,14 @@ function buildPanel(style, parent, pos, faceTo) {
 export function createPanels({ renderer, rig, camera, rooms, onChange, media }) {
   const panels = rooms.map((r) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space; return p; });
   const redraw = () => panels.forEach((p) => drawBoard(p.ct, p.st));
-  const redrawMedia = () => panels.forEach((p) => {
-    drawWing(p.wct, p.st, media.st);
+  const redrawMedia = () => { const ms = media.view(); panels.forEach((p) => {
+    drawWing(p.wct, p.st, ms);
     const by = (id) => p.wbuttons[WBTN.findIndex((b) => b.id === id)].material.uniforms;
-    by('m-play').uGlyph.value = media.st.ready && !media.video.paused ? 8 : 4; by('m-play').uOn.value = media.st.ready ? 1 : 0;
-    by('m-loop').uOn.value = media.st.loop ? 1 : 0;
+    by('m-play').uGlyph.value = ms.playing ? 8 : 4; by('m-play').uOn.value = ms.ready ? 1 : 0;
+    by('m-loop').uOn.value = ms.loopOn ? 1 : 0;
     by('m-screens').uGlyph.value = media.st.screens === 'all' ? 6 : 9;
-    by('m-default').uOn.value = media.st.ready ? 0 : 1;
-  });
+    by('m-default').uOn.value = ms.defaultOn ? 1 : 0;
+  }); };
   redrawMedia();
   redraw();
   const allButtons = panels.flatMap((p) => p.buttons);
