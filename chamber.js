@@ -2,6 +2,7 @@
 // focal point at local -z, entry doorway at local +z (angle 0).
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
   makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
+import { MEDIA, mediaOn, MEDIA_GLSL } from './media.js';
 
 
 // floor helpers shared by the room floors
@@ -446,12 +447,15 @@ function buildScreen(K, world, deluxe = false) {
   const hud = canvasTex(2048, Math.round(2048 / asp)), stat = canvasTex(2048, 256);
   const m = mat(/* glsl */`
     uniform sampler2D uHud;
+    ${MEDIA_GLSL}
     float sband(float s, float sb, float duty){ float w = min(fwidth(s), fwidth(sb)); float tri = abs(fract(s) - 0.5) * 2.0; return 1.0 - smoothstep(duty - w, duty + w, tri); }
     void main(){
       vec2 p = (vUv - 0.5) * vec2(${f3(asp)}, 1.0);
       vec2 px2 = fwidth(p); float pw = max(px2.x, px2.y);
+      vec3 col = vec3(0.0);
+      if (uMediaOn < 0.999) {
       float r = length(p) + 1e-4; float a = atan(p.y, p.x); float a2 = atan(-p.y, -p.x);
-      vec3 col = mix(BASE * 0.9, BASE2 * 0.5, smoothstep(0.0, 1.1, r));
+      col = mix(BASE * 0.9, BASE2 * 0.5, smoothstep(0.0, 1.1, r));
       float lr = log(r);
       float s1 = lr * 2.4 + a * 6.0 / 6.2831 + uTime * 0.55, s1b = lr * 2.4 + a2 * 6.0 / 6.2831;
       float s2 = lr * 2.4 - a * 6.0 / 6.2831 + uTime * 0.32, s2b = lr * 2.4 - a2 * 6.0 / 6.2831;
@@ -485,8 +489,11 @@ function buildScreen(K, world, deluxe = false) {
       vec2 e = min(vUv, 1.0 - vUv);
       col += PINK * exp(-min(e.x * ${f3(asp)}, e.y) * 30.0) * 0.8;
       col *= 1.08 + 0.25 * uBeat + 0.15 * uInt;
+      }
+      if (uMediaOn > 0.001) { vec3 mv = mediaFrame(vUv, ${f3(asp)}, PINK); vec2 e2 = min(vUv, 1.0 - vUv);
+        mv += PINK * exp(-min(e2.x * ${f3(asp)}, e2.y) * 40.0) * 0.5; col = mix(col, mv, uMediaOn); }
       gl_FragColor = vec4(col, 1.0);
-    }`, { side: THREE.BackSide, uniforms: { uHud: { value: hud.t } } });
+    }`, { side: THREE.BackSide, uniforms: { uHud: { value: hud.t }, ...MEDIA, uMediaOn: mediaOn[0] } });
   const s = new THREE.Mesh(arcGeometry(SCR.r, SCR.h, SCR.half), m); s.position.y = SCR.y; world.add(s);
   const back = new THREE.Mesh(new THREE.CylinderGeometry(SCR.r + 0.08, SCR.r + 0.08, SCR.h + 0.4, 48, 1, true, Math.PI - SCR.half - 0.03, SCR.half * 2 + 0.06), metalMat({ DOUBLE: 1 }));
   back.position.y = SCR.y; world.add(back);
@@ -533,5 +540,5 @@ function buildScreen(K, world, deluxe = false) {
       g.font = 'bold 60px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#ffc8e8'; g.fillText('BREATHE  •  FOCUS  •  DRIFT', W / 2, 205);
       stat.t.needsUpdate = true; }
   }
-  return { draw };
+  return { draw, mesh: s, SCR };
 }

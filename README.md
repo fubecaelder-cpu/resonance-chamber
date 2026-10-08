@@ -1,4 +1,4 @@
-# Resonance Chamber v5 (WebXR, three.js r169, static files, no build step)
+# Resonance Chamber v6 (WebXR, three.js r169, static files, no build step)
 Serve this folder over HTTPS, open it in the Meta Quest browser and tap ENTER VR.
 
 Three rooms joined in a triangle. Each room has a doorway to each of the other two, so you can walk the loop in either direction with the left stick:
@@ -17,6 +17,7 @@ Corridors (every corridor floor has glowing arrows flowing toward the far doorwa
 - Audio (starts on ENTER VR / "Start sound"): each room has its own bed, crossfaded by your position along each of the three corridors.
 - All shaders are compiled at load. Adaptive quality in VR: below ~60 fps it drops haze and shafts first, then reflections, then particles.
 - **Control panels (new in v5):** a lectern-height panel stands beside the arrival spot in every room, styled to match it. It has big buttons for Animation Speed (0.25x to 2x, default 1x), Brightness (30% to 150%, default 100%) and Reset.
+- **Your own video on the monitors (new in v6):** every room has a main curved monitor (pink: the field monitor; crimson: a heartbeat/vortex screen; monochrome: a moiré screen above the spiral disc). Use the box at the bottom left of the page (before ENTER VR) to **Choose video file** or **Paste video URL**, or the **MEDIA** wing on each room's control panel: Load, Play/Pause, Default (back to built-in visuals), Volume −/+, Loop, and Screens (all rooms or just this room). One shared video element feeds every monitor; the picture is letterboxed to its own aspect ratio. Files are opened with `URL.createObjectURL` and never leave the device. URLs must be direct .mp4/.webm links from a server that sends CORS headers. The soundtrack comes from the monitor (positional) and the ambient bed dips while it plays. Animation speed does not change the video's speed; brightness does affect it.
   - Quest: point the laser and pull the trigger (with a short haptic pulse), or physically poke a button with the controller tip or your index finger (hand tracking: poke or pinch).
   - Desktop: hover and click.
   - The settings are global, so every panel shows the same values, and they are saved in localStorage.

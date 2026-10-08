@@ -1,5 +1,5 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
-// with in-world control panels (animation speed, brightness) in every room.
+// with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
 import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, env } from './shared.js';
 import { VRButton } from './lib/VRButton.js';
@@ -8,6 +8,7 @@ import { pinkRoomCfg } from './pinkroom.js';
 import { buildOpRoom } from './oproom.js';
 import { buildCorridor } from './corridor.js';
 import { createPanels, settings } from './panels.js';
+import { createMedia, buildMonitor, mediaOn } from './media.js';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -48,12 +49,21 @@ const corB = buildCorridor({ name: 'corB', start: [6.88, 20], dir: 'x', L: 6.24,
 const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root, cC: corC.root };
 Object.values(SPACES).forEach((s) => scene.add(s));
 const ROOMS = [room1, room2, room3, corA, corB, corC];
+// ---------- media: one shared video on the main monitor of every room ----------
+const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson');
+const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', { y: 7.0, h: 1.6 });
+room1.root.updateMatrixWorld(true);
+const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos];
+let panelsReady = false;
+const media = createMedia({ onChange: () => { if (panelsReady) panelSys.redrawMedia(); updateOverlay(); } });
+media.setRenderer(renderer);
 // control panels: one per room, beside the arrival spot, facing you, clear of the doorway paths (room-local positions)
-const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, rooms: [
+const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, rooms: [
   { style: 'pink', root: room1.root, pos: [-1.25, 0.35], faceTo: [0, 1.6] },
   { style: 'crimson', root: room2.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
   { style: 'mono', root: room3.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
 ] });
+panelsReady = true;
 
 // doorway planes (world): point, normal, lateral axis, fade colour
 const DOORS = [
@@ -178,6 +188,7 @@ async function startAudio() {
   const now = ctx.currentTime;
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3; comp.connect(ctx.destination);
   const master = ctx.createGain(); master.gain.setValueAtTime(0.0001, now); master.gain.exponentialRampToValueAtTime(0.9, now + 3); master.connect(comp); A.master = master;
+  media.attachAudio(ctx, comp);   // the video soundtrack bypasses the bed fade-in and is not ducked
   A.beds = [0, 1, 2].map((i) => { const g = ctx.createGain(); g.gain.value = A.w[i]; g.connect(master); return g; });
   const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = nb.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; A.noise = nb;
@@ -248,7 +259,8 @@ function updateBeds(h) {
   if (c) { const t = THREE.MathUtils.clamp(corrLocal(c, h.x, h.z)[0] / c.L, 0, 1); w = [0, 0, 0]; w[c.beds[0]] += 1 - t; w[c.beds[1]] += t; }
   else w = zone === 'r1' ? [1, 0, 0] : zone === 'r2' ? [0, 1, 0] : [0, 0, 1];
   A.w = w;
-  if (A.ctx && A.beds.length) A.beds.forEach((g, i) => g.gain.setTargetAtTime(w[i], A.ctx.currentTime, 0.25));
+  const duck = media.audible() ? 0.5 : 1;   // the ambient beds dip while your video's soundtrack plays
+  if (A.ctx && A.beds.length) A.beds.forEach((g, i) => g.gain.setTargetAtTime(w[i] * duck, A.ctx.currentTime, 0.25));
 }
 
 // ---------- clock ----------
@@ -333,7 +345,7 @@ const el = renderer.domElement;
 el.addEventListener('pointerdown', (e) => { if (panelSys.mouseDown(e)) return; dragging = true; lx = e.clientX; ly = e.clientY; el.setPointerCapture(e.pointerId); });
 el.addEventListener('pointermove', (e) => { if (!dragging) { panelSys.mouseMove(e); return; } yaw += (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch + (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; applyLook(); });
 el.addEventListener('pointerup', () => { dragging = false; });
-window.addEventListener('keydown', (e) => keys.add(e.code)); window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('keydown', (e) => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; keys.add(e.code); }); window.addEventListener('keyup', (e) => keys.delete(e.code));
 function desktopMove(dt) {
   let f = 0, s = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) f++; if (keys.has('KeyS') || keys.has('ArrowDown')) f--;
@@ -346,7 +358,7 @@ function desktopMove(dt) {
 { const r = Q.get('room'); if (r === '2') { rig.position.set(0, 0, 14.5); yaw = Math.PI; } else if (r === '3') { rig.position.set(14.5, 0, 20); yaw = -Math.PI / 2; } applyLook(); }
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
-window.__zone = () => zone; window.__scene = scene;
+window.__zone = () => zone; window.__scene = scene; window.__media = media;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
 window.__act = (id) => panelSys.act(id);
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
@@ -364,6 +376,22 @@ try { renderer.compile(scene, camera); } catch (e) { console.warn('[chamber] pre
 // ---------- loop ----------
 const fwdA = new THREE.Vector3(), upA = new THREE.Vector3(), szV = new THREE.Vector2();
 let lastHud = -1, frames = 0, prev = performance.now();
+// ---------- 2D page overlay for media (works before Enter VR; the Quest browser may not show a file picker inside VR) ----------
+let lastRoom = 0;
+const $ = (id) => document.getElementById(id);
+function updateOverlay() {
+  const el = $('mStatus'); if (!el) return;
+  el.textContent = media.st.status; el.className = media.st.error ? 'err' : '';
+}
+if ($('mFile')) {
+  $('mFile').addEventListener('click', () => { media.picker.click(); });
+  const goUrl = () => { media.loadURL($('mUrl').value); };
+  $('mUrlGo').addEventListener('click', goUrl);
+  $('mUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') goUrl(); });
+  $('mDefault').addEventListener('click', () => media.restoreDefault());
+  $('mToggle').addEventListener('click', () => $('media').classList.toggle('open'));
+  updateOverlay();
+}
 renderer.setAnimationLoop(() => {
   const nowMs = performance.now(); const dt = Math.min((nowMs - prev) / 1000, 0.1); prev = nowMs;
   if (renderer.xr.isPresenting) { xrLocomotion(dt); perf.sample(dt); } else desktopMove(dt);
@@ -391,7 +419,9 @@ renderer.setAnimationLoop(() => {
     else if (L.setOrientation) L.setOrientation(fwdA.x, fwdA.y, fwdA.z, upA.x, upA.y, upA.z);
   }
   const tick = Math.floor(t * 2);
-  if (zone === 'r1' && room1.hud && tick !== lastHud) { lastHud = tick; room1.hud.draw(t, I); }
+  if (zone === 'r1' && room1.hud && tick !== lastHud && mediaOn[0].value < 1) { lastHud = tick; room1.hud.draw(t, I); }
+  const zi = { r1: 0, r2: 1, r3: 2 }[zone]; if (zi !== undefined) lastRoom = zi;
+  media.update(dt, lastRoom); media.setAudioPos(MON_POS[lastRoom]);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

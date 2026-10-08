@@ -31,6 +31,14 @@ const BTN = [
   { id: 'bright-', x: -0.21, y: -0.085, glyph: 0 }, { id: 'bright+', x: 0.21, y: -0.085, glyph: 1 },
   { id: 'reset', x: 0.0, y: -0.19, glyph: 2, sx: 0.78 },
 ];
+// media wing (v6): hinged to the right of the main board, angled in towards you
+const WW = 0.5, WH = 0.56;
+const WBTN = [
+  { id: 'm-load', x: -0.15, y: 0.1, glyph: 3, label: 'LOAD' }, { id: 'm-play', x: 0.0, y: 0.1, glyph: 4, label: 'PLAY / PAUSE' },
+  { id: 'm-default', x: 0.15, y: 0.1, glyph: 7, label: 'DEFAULT' },
+  { id: 'm-vol-', x: -0.15, y: -0.04, glyph: 0, label: 'VOL −' }, { id: 'm-vol+', x: 0.15, y: -0.04, glyph: 1, label: 'VOL +' },
+  { id: 'm-loop', x: -0.15, y: -0.18, glyph: 5, label: 'LOOP' }, { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
+];
 
 const PVS = /* glsl */`
   varying vec3 vP; varying vec3 vWp; varying vec3 vNw;
@@ -40,12 +48,14 @@ const v3 = (a) => new THREE.Vector3(...a);
 
 function buttonMat(st, glyph) {
   return new THREE.ShaderMaterial({
-    uniforms: { uCap: { value: v3(st.cap) }, uGly: { value: v3(st.glyph) }, uRim: { value: v3(st.rim) }, uHover: { value: 0 }, uPress: { value: 0 }, uGlyph: { value: glyph } },
+    uniforms: { uCap: { value: v3(st.cap) }, uGly: { value: v3(st.glyph) }, uRim: { value: v3(st.rim) }, uHover: { value: 0 }, uPress: { value: 0 }, uGlyph: { value: glyph }, uOn: { value: 0 } },
     vertexShader: PVS,
     fragmentShader: /* glsl */`
-      uniform vec3 uCap; uniform vec3 uGly; uniform vec3 uRim; uniform float uHover; uniform float uPress; uniform float uGlyph;
+      uniform vec3 uCap; uniform vec3 uGly; uniform vec3 uRim; uniform float uHover; uniform float uPress; uniform float uGlyph; uniform float uOn;
       varying vec3 vP; varying vec3 vWp; varying vec3 vNw;
       float box(vec2 p, vec2 h){ vec2 d = abs(p) - h; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+      float triR(vec2 q, float s){ return max(abs(q.y) * 0.866 + q.x * 0.5, -q.x) - s * 0.5; }   // right-pointing
+      float triU(vec2 q, float s){ return max(abs(q.x) * 0.866 + q.y * 0.5, -q.y) - s * 0.5; }   // up-pointing
       void main(){
         vec2 b = vec2(vP.x, -vP.z) / ${BR.toFixed(3)};
         float rr = length(b);
@@ -53,6 +63,14 @@ function buttonMat(st, glyph) {
         float d;
         if (uGlyph < 0.5) d = box(b, vec2(0.5, 0.1));
         else if (uGlyph < 1.5) d = min(box(b, vec2(0.5, 0.1)), box(b, vec2(0.1, 0.5)));
+        else if (uGlyph > 2.5 && uGlyph < 3.5) d = min(triU(b - vec2(0.0, 0.12), 0.44), box(b - vec2(0.0, -0.36), vec2(0.4, 0.075)));     // eject = load
+        else if (uGlyph > 3.5 && uGlyph < 4.5) d = triR(b - vec2(0.08, 0.0), 0.5);                                                      // play
+        else if (uGlyph > 7.5 && uGlyph < 8.5) d = min(box(b - vec2(-0.19, 0.0), vec2(0.1, 0.36)), box(b - vec2(0.19, 0.0), vec2(0.1, 0.36)));   // pause
+        else if (uGlyph > 4.5 && uGlyph < 5.5) { float rr2 = abs(box(b, vec2(0.3, 0.14)) - 0.1) - 0.065;                                // loop
+          d = min(rr2, min(triR(b - vec2(0.1, 0.24), 0.26), triR(-(b - vec2(-0.1, -0.24)), 0.26))); }
+        else if (uGlyph > 5.5 && uGlyph < 6.5) d = min(min(box(b - vec2(-0.36, 0.0), vec2(0.12, 0.17)), box(b, vec2(0.12, 0.17))), box(b - vec2(0.36, 0.0), vec2(0.12, 0.17)));  // all screens
+        else if (uGlyph > 8.5 && uGlyph < 9.5) d = abs(box(b, vec2(0.3, 0.2))) - 0.06;                                                  // this screen
+        else if (uGlyph > 6.5 && uGlyph < 7.5) d = min(abs(b.x) / 0.14 + abs(b.y) / 0.52, abs(b.x) / 0.52 + abs(b.y) / 0.14) - 1.0;      // sparkle = default
         else { float a = atan(b.y, b.x); float ring = abs(rr - 0.46) - 0.09;
           float gap = step(abs(a - 1.2), 0.55); ring = mix(ring, 1.0, gap);
           vec2 tip = vec2(cos(0.65), sin(0.65)) * 0.46; vec2 q = b - tip;            // arrowhead
@@ -65,14 +83,14 @@ function buttonMat(st, glyph) {
         top *= 0.85 + 0.25 * smoothstep(1.0, 0.0, rr);                              // soft dome highlight
         float edge = smoothstep(0.82, 0.98, rr);
         top = mix(top, uCap * (1.3 + 0.8 * uHover), edge * 0.6);
-        top = mix(top, uGly, g);
+        top = mix(top, uGly, max(g, smoothstep(0.8, 0.84, rr) * (1.0 - smoothstep(0.93, 0.97, rr)) * uOn));
         vec3 side = uRim * (0.6 + 0.9 * uHover) + uCap * 0.25 * uPress;
         gl_FragColor = vec4(mix(side, top, cap), 1.0);
       }`,
   });
 }
 
-function frameMat(st) {
+function frameMat(st, hw = BW / 2, hh = BH / 2) {
   return new THREE.ShaderMaterial({
     uniforms: { uF: { value: v3(st.frame) }, uN: { value: v3(st.neon) }, uTime: { value: 0 }, uStripes: { value: st.stripes ? 1 : 0 } },
     vertexShader: PVS,
@@ -81,7 +99,7 @@ function frameMat(st) {
       void main(){
         vec3 V = normalize(cameraPosition - vWp); float fr = pow(1.0 - abs(dot(normalize(vNw), V)), 3.0);
         vec3 c = uF * (0.8 + 0.4 * fr) + uN * fr * 0.25;
-        float e = max(abs(vP.x) / ${(BW / 2 + 0.035).toFixed(3)}, abs(vP.y) / ${(BH / 2 + 0.035).toFixed(3)});
+        float e = max(abs(vP.x) / ${(hw + 0.035).toFixed(3)}, abs(vP.y) / ${(hh + 0.035).toFixed(3)});
         c += uN * smoothstep(0.955, 0.985, e) * (0.7 + 0.3 * sin(uTime * 1.3 + vP.x * 9.0 + vP.y * 9.0));
         if (uStripes > 0.5) { float s = step(0.5, fract((vP.x + vP.y) * 28.0)); c = mix(c, vec3(s * 0.9), step(0.93, e) * (1.0 - smoothstep(0.955, 0.985, e))); }
         gl_FragColor = vec4(c, 1.0);
@@ -136,6 +154,30 @@ function drawBoard(ct, st) {
   ct.t.needsUpdate = true;
 }
 
+function drawWing(ct, st, ms) {
+  const { c, g } = ct, W = c.width, H = c.height;
+  const X = (x) => (x / WW + 0.5) * W, Y = (y) => (0.5 - y / WH) * H, S = W / WW;
+  const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6;
+    for (let r = 20; r < W * 1.4; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
+  g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('MEDIA', W / 2, Y(0.238));
+  // status (file name, hint or error), wrapped to two lines
+  g.font = '500 25px system-ui, Segoe UI, Roboto, sans-serif'; g.fillStyle = ms.error ? '#ffd27a' : st.label;
+  const words = String(ms.status || '').split(' '); const lines = ['']; for (const w of words) { const t = (lines[lines.length - 1] + ' ' + w).trim();
+    if (g.measureText(t).width > W - 70 && lines[lines.length - 1]) { if (lines.length === 2) { lines[1] += '…'; break; } lines.push(w); } else lines[lines.length - 1] = t; }
+  lines.forEach((l, i) => g.fillText(l, W / 2, Y(0.2 - i * 0.026)));
+  for (const b of WBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR + 0.012) * S, 0, Math.PI * 2); g.fill();
+    g.fillStyle = st.label; g.font = '600 24px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(b.label, X(b.x), Y(b.y - 0.074)); }
+  g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('VOLUME', W / 2, Y(-0.012));
+  g.fillStyle = st.value; g.font = '800 52px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(ms.volume <= 0 ? 'MUTE' : `${Math.round(ms.volume * 100)}%`, W / 2, Y(-0.05));
+  g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillStyle = st.value;
+  g.fillText(ms.loop ? 'LOOP ON' : 'LOOP OFF', W / 2, Y(-0.162)); g.fillText(ms.screens === 'all' ? 'ALL ROOMS' : 'THIS ROOM', W / 2, Y(-0.2));
+  ct.t.needsUpdate = true;
+}
+
 function buildPanel(style, parent, pos, faceTo) {
   const st = STYLES[style];
   const g = new THREE.Group(); g.name = 'panel-' + style;
@@ -156,18 +198,41 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     head.add(m); return m;
   });
-  return { group: g, head, board, frame, ct, st, buttons, frameMat: fm };
+  // media wing on a hinge at the right edge, swung 24° towards the user
+  const hinge = new THREE.Group(); hinge.position.set(BW / 2 + 0.05, 0, -0.005); hinge.rotation.y = -0.42; head.add(hinge);
+  const wing = new THREE.Group(); wing.position.set(WW / 2 + 0.04, 0, 0); hinge.add(wing);
+  const wfm = frameMat(st, WW / 2, WH / 2);
+  const wframe = new THREE.Mesh(new THREE.BoxGeometry(WW + 0.07, WH + 0.07, 0.035), wfm); wframe.position.z = -0.02; wing.add(wframe);
+  const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); hinge.add(knuckle);
+  const wct = canvasTex(1024, Math.round(1024 * WH / WW));
+  const wboard = new THREE.Mesh(new THREE.PlaneGeometry(WW, WH), boardMat(wct.t)); wing.add(wboard);
+  const wbuttons = WBTN.map((b) => {
+    const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
+    m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
+    wing.add(m); return m;
+  });
+  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons], frameMat: fm, wfm, wboard, wframe, wct, wbuttons };
 }
 
 // ---------- system ----------
-export function createPanels({ renderer, rig, camera, rooms, onChange }) {
+export function createPanels({ renderer, rig, camera, rooms, onChange, media }) {
   const panels = rooms.map((r) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space; return p; });
   const redraw = () => panels.forEach((p) => drawBoard(p.ct, p.st));
+  const redrawMedia = () => panels.forEach((p) => {
+    drawWing(p.wct, p.st, media.st);
+    const by = (id) => p.wbuttons[WBTN.findIndex((b) => b.id === id)].material.uniforms;
+    by('m-play').uGlyph.value = media.st.ready && !media.video.paused ? 8 : 4; by('m-play').uOn.value = media.st.ready ? 1 : 0;
+    by('m-loop').uOn.value = media.st.loop ? 1 : 0;
+    by('m-screens').uGlyph.value = media.st.screens === 'all' ? 6 : 9;
+    by('m-default').uOn.value = media.st.ready ? 0 : 1;
+  });
+  redrawMedia();
   redraw();
   const allButtons = panels.flatMap((p) => p.buttons);
-  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame]);
+  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe]);
 
   function act(id) {
+    if (id.startsWith('m-')) { media.act(id); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);
     else if (id === 'bright-') settings.brightI = Math.max(0, settings.brightI - 1);
@@ -225,7 +290,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange }) {
     }
   }
   function update(dt, time) {
-    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; });
+    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; });
     const xr = renderer.xr.isPresenting;
     if (xr && !cursorParentSet) { ctrls.forEach((s) => rig.parent.add(s.cursor)); cursorParentSet = true; }
     const targets = visibleTargets();
@@ -255,5 +320,5 @@ export function createPanels({ renderer, rig, camera, rooms, onChange }) {
       b.position.z = B.rest - 0.009 * B.press + 0.004 * B.hover;
     }
   }
-  return { update, mouseDown, mouseMove, panels, redraw, press, act, allButtons };
+  return { update, mouseDown, mouseMove, panels, redraw, redrawMedia, press, act, allButtons };
 }

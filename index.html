@@ -15,6 +15,16 @@
   #sound { position: fixed; right: 16px; top: 14px; padding: 8px 14px; border: 1px solid #ff4fa8; border-radius: 6px;
            background: rgba(30,0,18,.7); color: #ffc4e3; font: 13px system-ui, sans-serif; cursor: pointer; }
   #sound:hover { background: rgba(80,0,45,.8); }
+  #media { position: fixed; left: 16px; bottom: 16px; width: 330px; padding: 10px 12px; border: 1px solid #ff4fa8; border-radius: 8px;
+           background: rgba(24,0,14,.82); color: #ffc4e3; font: 13px system-ui, sans-serif; }
+  #media .row { display: flex; gap: 6px; margin-top: 7px; }
+  #media button { padding: 6px 10px; border: 1px solid #ff4fa8; border-radius: 6px; background: rgba(70,0,40,.8); color: #ffe0f0; font: 13px system-ui, sans-serif; cursor: pointer; }
+  #media button:hover { background: rgba(120,0,65,.9); }
+  #media input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #a03070; border-radius: 6px; background: #12000a; color: #ffe0f0; font: 13px system-ui, sans-serif; }
+  #media .body { display: none; } #media.open .body { display: block; }
+  #media #mToggle { width: 100%; text-align: left; }
+  #media small { display: block; margin-top: 6px; color: #e6a0c4; line-height: 1.35; }
+  #mStatus { margin-top: 7px; min-height: 1.3em; color: #ffd6ea; word-break: break-word; } #mStatus.err { color: #ffd27a; }
 </style>
 </head>
 <body>
@@ -22,6 +32,16 @@
 Quest: tap <b>ENTER VR</b>. Left stick moves, right stick snap-turns.<br>
 Three rooms in a triangle: the two glowing doorways behind you lead to the other rooms.<br>Desktop: drag to look, WASD / arrows to walk.<br>Slow headset? add <b>?quality=low</b> to the URL.</div>
 <button id="sound">▶ Start sound</button>
+<div id="media" class="open">
+  <button id="mToggle">▣ Your video on the room screens</button>
+  <div class="body">
+    <div class="row"><button id="mFile">Choose video file</button><button id="mDefault">Built-in visuals</button></div>
+    <div class="row"><input id="mUrl" type="url" placeholder="Paste video URL (direct .mp4 / .webm)"><button id="mUrlGo">Play URL</button></div>
+    <div id="mStatus"></div>
+    <small>Files stay on this device and are never uploaded. URLs must be direct links from a server that allows cross-origin use (CORS).
+    Choose your video here before tapping ENTER VR; the in-room MEDIA panel then plays, pauses, loops and sets the volume.</small>
+  </div>
+</div>
 <script type="module" src="./main.js"></script>
 </body>
 </html>

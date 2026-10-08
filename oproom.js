@@ -116,8 +116,8 @@ export function buildOpRoom(cfg) {
         float v = r * 6.0 + (a - uTime * 0.12) * 4.0 / 6.2831, vb = r * 6.0 + (a2 - uTime * 0.12) * 4.0 / 6.2831;
         float s = stripe(v, min(fwidth(v), fwidth(vb)));
         gl_FragColor = vec4(vec3(mix(0.03, 0.95, s) * (0.9 + 0.1 * breath()) * smoothstep(1.0, 0.985, r) + (1.0 - smoothstep(0.0, 0.02, abs(r - 0.99)))), 1.0); }`));
-    disc.position.set(0, 5.4, -R + 0.25); world.add(disc);
-    neonTorus(world, 1.56, 0.03, 0xffffff, new THREE.Vector3(0, 5.4, -R + 0.27), 0, 1.0, 4);
+    disc.position.set(0, 5.05, -R + 0.25); world.add(disc);
+    neonTorus(world, 1.56, 0.03, 0xffffff, new THREE.Vector3(0, 5.05, -R + 0.27), 0, 1.0, 4);   // lowered in v6 to make room for the monitor
   }
   // sculptures: striped monoliths + floating op-art rings and spheres
   {
@@ -132,7 +132,7 @@ export function buildOpRoom(cfg) {
     const ringMat = mat(/* glsl */`
       void main(){ float a = atan(vL.y, vL.x), a2 = atan(-vL.y, -vL.x); float u = a * 24.0 / 6.2831 + uTime * 0.04, ub = a2 * 24.0 / 6.2831;
         gl_FragColor = vec4(vec3(mix(0.04, 0.95, stripe(u, min(fwidth(u), fwidth(ub))))), 1.0); }`);
-    for (const [r, y, rx, rz] of [[2.2, 5.0, 1.2, 0.2], [1.6, 4.6, 0.6, -0.5], [1.0, 4.3, 1.5, 0.8]]) {
+    for (const [r, y, rx, rz] of [[2.2, 6.2, 1.2, 0.2], [1.6, 5.8, 0.6, -0.5], [1.0, 5.5, 1.5, 0.8]]) {   // raised in v6: keeps the monitor sightline clear
       const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.1, 12, 96), ringMat); t.position.set(0, y, 0.3); t.rotation.set(rx, 0, rz); world.add(t);
     }
     const sphMat = mat(/* glsl */`
