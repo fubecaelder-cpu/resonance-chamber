@@ -48,12 +48,42 @@ const ceilGLSL = /* glsl */`
   }`;
 
 const floorGLSL = /* glsl */`
-  { vec2 q = p - vec2(0.0, -0.9); float qr = length(q); float qa = atan(q.x, q.y); float pr = fwidth(qr);
-    float pet = 1.55 + 0.5 * cos(qa * 6.0);
-    float pet2 = 2.35 + 0.28 * cos(qa * 12.0);
-    col += HOT * (1.0 - smoothstep(0.012, 0.012 + pr * 1.5, abs(qr - pet))) * (0.45 + 0.5 * uBeat);
-    col += PINK * (1.0 - smoothstep(0.008, 0.008 + pr * 1.5, abs(qr - pet2))) * 0.35;
+  { vec2 q = p - vec2(0.0, -0.9); float qr = length(q); float qa = atan(abs(q.x), q.y); float pr = fwidth(qr);
+    float TAU = 6.28318;
+    // marble slabs: concentric bands split radially, each slab with its own sheen
+    float band = qr < 1.0 ? 0.0 : qr < 2.6 ? 1.0 : qr < 4.4 ? 2.0 : 3.0;
+    float nS = band == 1.0 ? 12.0 : band == 2.0 ? 16.0 : 24.0;
+    float sec = qa * nS / TAU; float sid = floor(sec);
+    col += BASE * (0.35 + 0.5 * hash12(vec2(sid, band))) * (0.8 + 0.4 * vn(q * 1.7 + band));
+    float rs = (fract(sec + 0.5) - 0.5) * TAU / nS * qr;
+    col += DEEP * ln(rs, 0.006) * step(1.0, qr) * step(qr, 6.2) * 0.9;
+    // soft glow rings
+    for (int i = 0; i < 4; i++) { float rg = i == 0 ? 1.0 : i == 1 ? 2.6 : i == 2 ? 4.4 : 5.6;
+      col += HOT * ln(qr - rg, 0.011) * (0.5 + 0.35 * uBeat) * DIM + PINK * exp(-abs(qr - rg) * 7.0) * 0.07 * (0.7 + 0.6 * uBeat); }
+    // ring of 16 petal inlays between 2.6 and 4.4
+    { float s16 = qa * 16.0 / TAU; float fs = fract(s16) - 0.5; float tg = fs * TAU / 16.0 * qr;
+      float tw = 0.5 * (1.0 - 0.62 * clamp((qr - 2.75) / 1.6, 0.0, 1.0)); float e = length(vec2(tg / tw, (qr - 3.5) / 0.8));
+      float ins = 1.0 - smoothstep(0.92, 1.0, e);
+      col += mix(PINK, WHITE, 0.25 * (1.0 - e)) * ins * (0.06 + 0.05 * uInt) * (0.7 + 0.6 * uBeat);
+      col += HOT * ln(e - 1.0, 0.025) * 0.55 * DIM;
+      col += PINK * ln(tg, 0.004) * ins * 0.4 * smoothstep(1.0, 0.3, e);
+      // small petals between the big ones, pointing out
+      float fs2 = fract(s16 + 0.5) - 0.5; float e2 = length(vec2(fs2 * TAU / 16.0 * qr / 0.17, (qr - 4.05) / 0.3));
+      col += WHITE * ln(e2 - 1.0, 0.04) * 0.35; }
+    // inner rosette
+    float pet = 1.15 + 0.9 * abs(cos(qa * 3.0));
+    float pet2 = 2.3 + 0.2 * abs(cos(qa * 6.0));
+    col += HOT * ln(qr - pet, 0.012) * (0.45 + 0.5 * uBeat) * step(qr, 2.6);
+    col += PINK * ln(qr - pet2, 0.008) * 0.35;
+    col += WHITE * ln(qr - (0.5 + 0.25 * abs(cos(qa * 4.0))), 0.01) * 0.5;
     col += PINK * exp(-qr * 1.1) * 0.22 * (0.6 + 0.6 * uBeat);
+    // twinkling bead ring
+    { float s48 = qa * 48.0 / TAU; float f48 = fract(s48) - 0.5; float bd = length(vec2(f48 * TAU / 48.0 * qr, qr - 5.0));
+      float tw = 0.5 + 0.5 * sin(uTime * 1.3 + floor(s48) * 2.4);
+      col += mix(HOT, WHITE, 0.4) * (1.0 - smoothstep(0.035, 0.035 + pr * 1.5, bd)) * (0.35 + 0.5 * tw) * DIM; }
+    // beat ripple travelling out from the portal + slow rings around it
+    col += HOT * exp(-abs(d - uBeatT * 5.5) * 1.6) * uBeat * 0.7 * DIM;
+    col += PINK * aline(d * 0.8 - uTime * 0.45, 0.015, fwidth(d) * 0.8) * exp(-d * 0.3) * (0.25 + 0.4 * uInt) * DIM;
   }`;
 
 function extra({ K, world, root, fx, out, haze }) {

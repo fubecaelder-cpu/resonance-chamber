@@ -25,7 +25,7 @@ export const VEIL_R = 6.88;                // distance of door veils from room c
 // global animated uniforms (shared by every material)
 export const U = {
   uTime: { value: 0 }, uBeat: { value: 0 }, uBeatT: { value: 0 }, uSurge: { value: 0 },
-  uInt: { value: 0.5 }, uMirror: { value: OPT.mirror ? 1 : 0 }, uPx: { value: 500 },
+  uInt: { value: 0.5 }, uMirror: { value: OPT.mirror ? 1 : 0 }, uPx: { value: 500 }, uBright: { value: 1 },
 };
 
 export const PAL = {

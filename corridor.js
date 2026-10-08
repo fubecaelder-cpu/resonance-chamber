@@ -114,39 +114,74 @@ export function buildCorridor(cfg) {
       }`));
     c.rotation.x = Math.PI / 2; c.position.set(0, HH, L / 2); c.userData.noMirror = true; world.add(c);
   }
-  // ---------- glossy floor ----------
+  // ---------- glossy floor: patterned inlays that blend between the two rooms' styles, with flowing arrows on top ----------
+  // pink: interlocking-circle petal inlay; crimson: pulsing veins + lub-dub ripples; monochrome: warped op-art checker (DRAIN)
   let floor;
   {
-    const m = M(/* glsl */`
-      uniform float uMirror;
+    const oh = (s) => new THREE.Vector3(s === 0 ? 1 : 0, s === 1 ? 1 : 0, s === 2 ? 1 : 0);
+    const cz = cfg.styleB === 1 ? L + 1.2 : -1.2;   // heartbeat ripples spread out from the crimson end
+    const m = K.mat(HEAD + /* glsl */`
+      uniform float uMirror; uniform vec3 uWA; uniform vec3 uWB;
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float ln(float d, float hw){ return 1.0 - smoothstep(hw, hw + fwidth(d) * 1.5, abs(d)); }
       void main(){
         vec2 p = vW.xz; float z = p.y, ax = abs(p.x); float t = tz(z);
+        vec3 w = mix(uWA, uWB, smoothstep(0.12, 0.88, z / ${f3(L)}));
         vec3 acc = mix(uA, uB, t), acc2 = mix(uA2, uB2, t), base = mix(uBA, uBB, t);
         vec2 px = fwidth(p);
-        vec2 gf = fract(p / 0.65);
-        float seam = max(1.0 - smoothstep(0.008, 0.008 + px.x / 0.65 * 1.5, min(gf.x, 1.0 - gf.x)), 1.0 - smoothstep(0.008, 0.008 + px.y / 0.65 * 1.5, min(gf.y, 1.0 - gf.y)));
-        vec3 surf = base * 0.3 + acc * seam * 0.12;
-        vec3 glow = acc2 * (1.0 - smoothstep(0.018, 0.018 + px.x * 1.5, abs(ax - 0.95))) * (0.8 + 0.6 * uBeat);
-        glow += acc * (1.0 - smoothstep(0.01, 0.01 + px.x * 1.5, abs(ax - 1.22))) * 0.5;
+        // polished slabs, staggered
+        vec2 sc = vec2(p.x / 0.65, z / 1.3); sc.x += 0.5 * step(0.5, fract(sc.y * 0.5));
+        vec2 gf = fract(sc);
+        float seam = max(1.0 - smoothstep(0.006, 0.006 + px.x / 0.65 * 1.5, min(gf.x, 1.0 - gf.x)), 1.0 - smoothstep(0.004, 0.004 + px.y / 1.3 * 1.5, min(gf.y, 1.0 - gf.y)));
+        vec3 surf = base * (0.28 + 0.06 * hash12(floor(sc))) + acc * seam * 0.08;
+        float run = 1.0 - smoothstep(0.76, 0.8, ax);
+        vec3 glow = vec3(0.0);
+        // pink: interlocking circles -> four-petal flowers
+        { vec2 c = vec2(p.x, z) / 0.42; vec2 f1 = fract(c) - 0.5, f2 = fract(c + 0.5) - 0.5;
+          float l1 = length(f1), l2 = length(f2);
+          float d = min(abs(l1 - 0.5), abs(l2 - 0.5)) * 0.42;
+          float petal = (1.0 - smoothstep(0.47, 0.5, l1)) * (1.0 - smoothstep(0.47, 0.5, l2));
+          float dot0 = 1.0 - smoothstep(0.035, 0.035 + fwidth(l1) * 1.5, l1);
+          glow += w.x * run * (acc * ln(d, 0.0035) * 0.5 + acc2 * petal * 0.07 * (0.7 + 0.6 * uBeat) + acc2 * dot0 * 0.5); }
+        // crimson: branching veins that pulse with the beat + lub-dub ripples
+        { float n = vn(p * 2.6 + vec2(0.0, uTime * 0.04)) * 0.65 + vn(p * 6.3 - 3.1) * 0.35;
+          float vein = ln(n - 0.5, 0.011);
+          float dc = length(vec2(p.x * 1.2, z - ${f3(cz)}));
+          float r1 = exp(-abs(dc - 1.0 - uBeatT * 2.6) * 7.0), r2 = exp(-abs(dc - 1.0 - max(uBeatT - 0.28, 0.0) * 2.6) * 7.0);
+          float pulse = exp(-abs(dc - 1.0 - uBeatT * 2.6) * 1.2);
+          glow += w.y * (acc * vein * (0.16 + 0.5 * uBeat * pulse + 0.15 * uInt) + acc2 * (r1 + 0.7 * r2) * uBeat * 0.45); }
+        // border inlays: double rail with diamond beads
+        float rail = ln(ax - 0.95, 0.012) * (0.75 + 0.5 * uBeat) + ln(ax - 1.13, 0.007) * 0.45;
+        float dq = abs(ax - 1.04) + abs((fract(z / 0.5) - 0.5) * 0.5);
+        float bead = 1.0 - smoothstep(0.04, 0.04 + fwidth(dq) * 1.5, dq);
+        glow += acc2 * rail + acc * bead * (0.35 + 0.35 * uInt);
+        glow += acc2 * exp(-abs(z - uBeatT * 3.5) * 1.6) * uBeat * 0.35 * step(ax, 1.0);
+        glow += acc * 0.08 * exp(-ax * 2.0);
+        // flowing arrows toward the far doorway (core + soft halo)
         float cv = (z + ax * 0.8) * 1.4 - uTime * 1.1;
-        float fc = fract(cv); float chev = 1.0 - smoothstep(0.08, 0.08 + fwidth(cv) * 1.5, min(fc, 1.0 - fc));
-        glow += acc * chev * step(ax, 0.6) * (0.4 + 0.3 * uInt);
-        glow += acc2 * exp(-abs(z - uBeatT * 3.5) * 1.6) * uBeat * 0.6 * step(ax, 1.0);
-        glow += acc * 0.1 * exp(-ax * 2.0);
+        float fc = fract(cv), fd = min(fc, 1.0 - fc), inA = 1.0 - smoothstep(0.56, 0.6, ax);
+        float chev = (1.0 - smoothstep(0.075, 0.075 + fwidth(cv) * 1.5, fd)) * inA;
+        float chevO = (1.0 - smoothstep(0.14, 0.14 + fwidth(cv) * 1.5, fd)) * inA;
+        float halo = exp(-fd * 9.0) * inA;
+        vec3 arrows = mix(acc, acc2, 0.6) * chev * (0.75 + 0.35 * uInt + 0.3 * uBeat) + acc * halo * 0.18;
         vec3 col; float refl = 1.0;
         #ifdef DRAIN
           float mk = monoK(z, 0.0);
-          float u = p.x * 1.6 + sin(z * 1.3 + uTime * 0.15) * 0.25, w = z * 1.6;
-          float cu = stripe(u, fwidth(u)), cw = stripe(w, fwidth(w));
+          float r = length(vec2(p.x, z - ${f3(L / 2)})) + 0.5;
+          float u = p.x * 1.6 + sin(z * 1.3 + uTime * 0.15) * 0.25 + 0.12 * sin(r * 2.0 - uTime * 0.1), ww = z * 1.6 + 0.1 * sin(p.x * 3.0 + z);
+          float cu = stripe(u, fwidth(u)), cw = stripe(ww, fwidth(ww));
           vec3 mono = vec3(mix(0.03, 0.78, cu + cw - 2.0 * cu * cw)) * (0.9 + 0.1 * breath());
           col = mix(drainC(surf, z), mono, mk) + drainC(glow, z) * (1.0 - 0.6 * mk);
+          col = mix(col, vec3(0.015), mk * (chevO - chev * 0.0) * 0.85);              // dark keyline so the arrows read on the checker
+          col += mix(drainC(arrows, z), vec3(0.95) * chev + vec3(0.12) * halo, mk);
           refl = 1.0 - 0.85 * mk;
         #else
-          col = surf + glow;
+          col = surf + glow + arrows;
         #endif
         vec3 V = normalize(CAM - vW); float fr = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);
         gl_FragColor = vec4(col, mix(0.3, 0.75, fr) * uMirror * refl);
-      }`);
+      }`, { uniforms: { ...uni, uWA: { value: oh(cfg.styleA) }, uWB: { value: oh(cfg.styleB) } }, defines });
     m.transparent = true; m.depthWrite = true;
     m.blending = THREE.CustomBlending; m.blendSrc = THREE.OneFactor; m.blendDst = THREE.SrcAlphaFactor; m.blendEquation = THREE.AddEquation;
     floor = new THREE.Mesh(new THREE.PlaneGeometry(W, L), m); floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, L / 2); floor.renderOrder = 10; root.add(floor);

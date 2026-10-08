@@ -1,4 +1,5 @@
-// Resonance Chamber v3 — three connected WebXR rooms (pink chamber → crimson vortex room → monochrome op-art room).
+// Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
+// with in-world control panels (animation speed, brightness) in every room.
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
 import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, env } from './shared.js';
 import { VRButton } from './lib/VRButton.js';
@@ -6,6 +7,7 @@ import { buildChamber } from './chamber.js';
 import { pinkRoomCfg } from './pinkroom.js';
 import { buildOpRoom } from './oproom.js';
 import { buildCorridor } from './corridor.js';
+import { createPanels, settings } from './panels.js';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -46,6 +48,12 @@ const corB = buildCorridor({ name: 'corB', start: [6.88, 20], dir: 'x', L: 6.24,
 const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root, cC: corC.root };
 Object.values(SPACES).forEach((s) => scene.add(s));
 const ROOMS = [room1, room2, room3, corA, corB, corC];
+// control panels: one per room, beside the arrival spot, facing you, clear of the doorway paths (room-local positions)
+const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, rooms: [
+  { style: 'pink', root: room1.root, pos: [-1.25, 0.35], faceTo: [0, 1.6] },
+  { style: 'crimson', root: room2.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
+  { style: 'mono', root: room3.root, pos: [1.3, 4.5], faceTo: [0, 5.8] },
+] });
 
 // doorway planes (world): point, normal, lateral axis, fade colour
 const DOORS = [
@@ -107,6 +115,7 @@ function applyVisibility() {
 }
 // fade shell around the head: hides the moment you pass through a veil
 const fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.BackSide });
+fadeMat.userData.bp = true;   // safety fade stays pure black
 const fadeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), fadeMat); fadeMesh.renderOrder = 1000; fadeMesh.frustumCulled = false; camera.add(fadeMesh);
 const tmp = new THREE.Vector3();
 // Doorways: as you approach, the veil irises open and the next space is drawn behind it, so walking through is a real,
@@ -138,7 +147,7 @@ async function tryLoadTunnelVideo() {
     const tex = new THREE.VideoTexture(v); tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
     const A = (v.videoWidth || 1) / (v.videoHeight || 1);
     tunnelU.uVidScale.value.set(Math.min(1, 1 / A), Math.min(1, A));
-    tunnelU.uVideo.value = tex; tunnelU.uHasVideo.value = 1;
+    tunnelU.uVideo.value = tex; tunnelU.uHasVideo.value = 1; v.playbackRate = settings.speed;
     console.log('[chamber] tunnel video active', v.videoWidth + 'x' + v.videoHeight, 'mix', tunnelU.uVidMix.value);
   }, { once: true });
   v.addEventListener('error', () => { console.warn('[chamber] tunnel video not playable yet; retrying later'); videoEl = null; });
@@ -165,7 +174,7 @@ async function startAudio() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)(); A.ctx = ctx;
   try { await ctx.resume(); } catch {}
   soundBtn.textContent = '♪ Sound on'; soundBtn.disabled = true;
-  A.t0 = ctx.currentTime - visualTime(); A.next = Math.floor(visualTime() / BEAT) + 1;
+  A.next = Math.floor(visualTime() / BEAT) + 1;
   const now = ctx.currentTime;
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3; comp.connect(ctx.destination);
   const master = ctx.createGain(); master.gain.setValueAtTime(0.0001, now); master.gain.exponentialRampToValueAtTime(0.9, now + 3); master.connect(comp); A.master = master;
@@ -187,13 +196,13 @@ async function startAudio() {
     A.drone2 = g; A.drone2F = f;
     for (const [fr, ty, gn] of [[41.2, 'sine', 0.55], [41.45, 'sine', 0.45], [61.7, 'triangle', 0.18], [82.4, 'sawtooth', 0.04]]) osc(ctx, ty, fr, gn, f, now);
     const n = ctx.createBufferSource(); n.buffer = nb; n.loop = true; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
-    const ng = ctx.createGain(); ng.gain.value = 0.025; const lfo = ctx.createOscillator(); lfo.frequency.value = 0.125; const lg = ctx.createGain(); lg.gain.value = 0.022;
+    const ng = ctx.createGain(); ng.gain.value = 0.025; const lfo = ctx.createOscillator(); lfo.frequency.value = 0.125 * settings.speed; A.lfo2 = lfo; const lg = ctx.createGain(); lg.gain.value = 0.022;
     lfo.connect(lg); lg.connect(ng.gain); n.connect(lp); lp.connect(ng); ng.connect(b2); n.start(now); lfo.start(now);
     if (OPT.spatial) { const p = panner(ctx, room2.focalWorld, b2, 3); const lp2 = ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 150; lp2.connect(p); osc(ctx, 'sawtooth', 55, 0.09, lp2, now); } }
   // bed 3 (monochrome): crisp, minimal — clean fifth pad with a slow tremolo at the beat rate
   { const g = ctx.createGain(); g.gain.value = 0.5; g.connect(b3);
     const trem = ctx.createGain(); trem.gain.value = 0.6; trem.connect(g);
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 1 / BEAT; const lg = ctx.createGain(); lg.gain.value = 0.3; lfo.connect(lg); lg.connect(trem.gain); lfo.start(now);
+    const lfo = ctx.createOscillator(); lfo.frequency.value = settings.speed / BEAT; A.lfo3 = lfo; const lg = ctx.createGain(); lg.gain.value = 0.3; lfo.connect(lg); lg.connect(trem.gain); lfo.start(now);
     for (const [fr, gn] of [[220, 0.025], [329.6, 0.018], [440.5, 0.006]]) osc(ctx, 'sine', fr, gn, trem, now); }
 }
 function noiseBurst(dest, at, f, q, gain, dur) {
@@ -207,29 +216,30 @@ function thump(dest, at, f0, f1, gain, decay) {
   o.connect(g); g.connect(dest); o.start(at); o.stop(at + decay + 0.05);
 }
 function scheduleBeat(n) {
-  const ctx = A.ctx, at = A.t0 + n * BEAT; if (at < ctx.currentTime + 0.02) return;
+  const ctx = A.ctx, k = 1 / settings.speed, at = ctx.currentTime + (n * BEAT - visualTime()) * k; if (at < ctx.currentTime + 0.02) return;
   const I = intensityAt(n * BEAT), surge = n % 4 === 3, amp = (0.5 + 0.5 * I) * (surge ? 1.3 : 1);
   const [b1, b2, b3] = A.beds;
   // room 1: kick + riser, chime on surges, drone pump
   thump(b1, at, 120, 40, 0.75 * amp, 1.3);
-  { const rs = Math.max(ctx.currentTime, at - 1.6), n1 = ctx.createBufferSource(); n1.buffer = A.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+  { const rs = Math.max(ctx.currentTime, at - 1.6 * k), n1 = ctx.createBufferSource(); n1.buffer = A.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
     bp.frequency.setValueAtTime(220, rs); bp.frequency.exponentialRampToValueAtTime(2200, at);
     const ng = ctx.createGain(); ng.gain.setValueAtTime(0.0001, rs); ng.gain.exponentialRampToValueAtTime(0.05 * amp, at - 0.02); ng.gain.exponentialRampToValueAtTime(0.0001, at + 0.3);
     n1.connect(bp); bp.connect(ng); ng.connect(b1); n1.start(rs); n1.stop(at + 0.35); }
-  A.drone1.gain.setTargetAtTime(0.06, at, 0.02); A.drone1.gain.setTargetAtTime(0.16 + 0.08 * I, at + 0.1, 0.8);
+  A.drone1.gain.setTargetAtTime(0.06, at, 0.02); A.drone1.gain.setTargetAtTime(0.16 + 0.08 * I, at + 0.1 * k, 0.8);
   A.drone1F.frequency.setTargetAtTime(240 + 700 * I, at, 1.5);
-  if (surge) for (const [f, d] of [[659.25, 0], [987.77, 0.08], [1318.5, 0.16]]) {
+  if (surge) for (const [f, d0] of [[659.25, 0], [987.77, 0.08], [1318.5, 0.16]]) {
+    const d = d0 * k;
     const c = ctx.createOscillator(); c.frequency.value = f; const cg = ctx.createGain();
     cg.gain.setValueAtTime(0.0001, at + d); cg.gain.exponentialRampToValueAtTime(0.035 * I, at + d + 0.03); cg.gain.exponentialRampToValueAtTime(0.0001, at + d + 3.0);
     c.connect(cg); cg.connect(b1); c.start(at + d); c.stop(at + d + 3.1);
   }
   // room 2: heavy lub-dub heartbeat, drone pump
-  thump(b2, at, 95, 32, 0.85 * amp, 0.9); thump(b2, at + 0.28, 85, 30, 0.55 * amp, 0.8);
-  A.drone2.gain.setTargetAtTime(0.08, at, 0.02); A.drone2.gain.setTargetAtTime(0.22 + 0.06 * I, at + 0.45, 0.9);
+  thump(b2, at, 95, 32, 0.85 * amp, 0.9); thump(b2, at + 0.28 * k, 85, 30, 0.55 * amp, 0.8);
+  A.drone2.gain.setTargetAtTime(0.08, at, 0.02); A.drone2.gain.setTargetAtTime(0.22 + 0.06 * I, at + 0.45 * k, 0.9);
   A.drone2F.frequency.setTargetAtTime(150 + 300 * I, at, 2.0);
   // room 3: crisp minimal pulse — short clean thump + click on the beat, soft ticks once per second
   thump(b3, at, 70, 50, 0.5 * amp, 0.35); noiseBurst(b3, at, 3200, 6, 0.08, 0.03);
-  for (let k = 1; k < 4; k++) noiseBurst(b3, at + k, 4200, 8, 0.025, 0.02);
+  for (let j = 1; j < 4; j++) noiseBurst(b3, at + j * k, 4200, 8, 0.025, 0.02);
 }
 soundBtn.addEventListener('click', startAudio);
 function updateBeds(h) {
@@ -242,8 +252,35 @@ function updateBeds(h) {
 }
 
 // ---------- clock ----------
-const clock = new THREE.Clock(); let timeOffset = +(Q.get('t') || 0), frozenT = null;
-const visualTime = () => (frozenT !== null ? frozenT : A.ctx ? A.ctx.currentTime - A.t0 : clock.getElapsedTime() + timeOffset);
+// The visual clock advances at (real time x animation speed). Real time comes from the audio clock once sound is on, so
+// the scheduled beats stay locked to the visuals; every shader, rotation, particle and the beat itself runs off this clock.
+let vt = +(Q.get('t') || 0), frozenT = null, lastReal = 0, lastSrc = '';
+function advanceClock() {
+  const useA = !!(A.ctx && A.ctx.state === 'running'), now = useA ? A.ctx.currentTime : performance.now() / 1000, src = useA ? 'a' : 'p';
+  if (src !== lastSrc) { lastSrc = src; lastReal = now; }
+  vt += Math.min(Math.max(now - lastReal, 0), 0.25) * settings.speed; lastReal = now;
+}
+const visualTime = () => (frozenT !== null ? frozenT : vt);
+// brightness: one global multiplier on every shader's output (+ colour of the few built-in materials)
+const BRIGHT_MATS = [];
+function patchBright(m) {
+  if (!m || m.userData.bp) return; m.userData.bp = true;
+  if (m.isShaderMaterial) {
+    if (!/void\s+main\s*\(/.test(m.fragmentShader)) return;
+    m.uniforms.uBright = U.uBright;
+    m.fragmentShader = 'uniform float uBright;\n' + m.fragmentShader.replace(/void\s+main\s*\(\s*(void)?\s*\)/, 'void mainInner()') +
+      '\nvoid main(){ mainInner(); gl_FragColor.rgb *= uBright; }';
+  } else if (m.color) { m.userData.c0 = m.color.clone(); BRIGHT_MATS.push(m); }
+}
+function applySettings() {
+  const b = settings.bright; U.uBright.value = b;
+  for (const m of BRIGHT_MATS) m.color.copy(m.userData.c0).multiplyScalar(b);
+  renderer.setClearColor(new THREE.Color(0x030002).multiplyScalar(b));
+  if (videoEl) videoEl.playbackRate = settings.speed;
+  if (A.ctx) { const now = A.ctx.currentTime;
+    if (A.lfo2) A.lfo2.frequency.setTargetAtTime(0.125 * settings.speed, now, 0.1);
+    if (A.lfo3) A.lfo3.frequency.setTargetAtTime(settings.speed / BEAT, now, 0.1); }
+}
 function intensityAt(t) { const c = t % 210; return 0.4 + 0.6 * THREE.MathUtils.smoothstep(c, 0, 120) * (1 - THREE.MathUtils.smoothstep(c, 190, 210)); }
 
 // ---------- VR + locomotion ----------
@@ -293,8 +330,8 @@ let yaw = 0, pitch = 0.2, dragging = false, lx = 0, ly = 0; const keys = new Set
 function applyLook() { camera.rotation.set(pitch, yaw, 0, 'YXZ'); }
 applyLook();
 const el = renderer.domElement;
-el.addEventListener('pointerdown', (e) => { dragging = true; lx = e.clientX; ly = e.clientY; el.setPointerCapture(e.pointerId); });
-el.addEventListener('pointermove', (e) => { if (!dragging) return; yaw += (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch + (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; applyLook(); });
+el.addEventListener('pointerdown', (e) => { if (panelSys.mouseDown(e)) return; dragging = true; lx = e.clientX; ly = e.clientY; el.setPointerCapture(e.pointerId); });
+el.addEventListener('pointermove', (e) => { if (!dragging) { panelSys.mouseMove(e); return; } yaw += (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch + (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; applyLook(); });
 el.addEventListener('pointerup', () => { dragging = false; });
 window.addEventListener('keydown', (e) => keys.add(e.code)); window.addEventListener('keyup', (e) => keys.delete(e.code));
 function desktopMove(dt) {
@@ -310,10 +347,17 @@ function desktopMove(dt) {
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__zone = () => zone; window.__scene = scene;
+window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
+window.__act = (id) => panelSys.act(id);
+// screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
+window.__btnScreen = (r, b) => { const m = panelSys.panels[r].buttons[b]; scene.updateMatrixWorld(true); const p = m.getWorldPosition(new THREE.Vector3()).project(camera);
+  return [(p.x + 1) / 2 * window.innerWidth, (1 - p.y) / 2 * window.innerHeight]; };
 window.__stats = () => ({ zone, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, progs: renderer.info.programs.length });
 window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
 // ---------- precompile every room's shaders up front (avoids a hitch on first entering a room) ----------
+scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(patchBright); });
+applySettings();
 Object.values(SPACES).forEach((sp) => { sp.visible = true; });
 try { renderer.compile(scene, camera); } catch (e) { console.warn('[chamber] precompile skipped', e); }
 
@@ -328,6 +372,7 @@ renderer.setAnimationLoop(() => {
   xrCam.getWorldPosition(headP);
   zone = zoneOf(headP);
   updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
+  advanceClock(); panelSys.update(dt, visualTime());
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;
   const amp = (0.55 + 0.45 * I) * (surge ? 1.3 : 1);
@@ -338,7 +383,7 @@ renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) { const bl = renderer.xr.getSession().renderState.baseLayer; if (bl) U.uPx.value = bl.framebufferHeight / 2; }
   else { renderer.getDrawingBufferSize(szV); U.uPx.value = szV.y / 2; }
   if (A.ctx) {
-    while (A.next * BEAT < t + 1.8) scheduleBeat(A.next++);
+    while ((A.next * BEAT - t) / settings.speed < 1.8) scheduleBeat(A.next++);
     xrCam.updateMatrixWorld(); const L = A.ctx.listener; const e = xrCam.matrixWorld.elements;
     setParam(L, 'position', e[12], e[13], e[14]);
     fwdA.set(-e[8], -e[9], -e[10]).normalize(); upA.set(e[4], e[5], e[6]).normalize();

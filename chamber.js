@@ -3,6 +3,29 @@
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
   makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
 
+
+// floor helpers shared by the room floors
+export const FLOOR_HELPERS = /* glsl */`
+  float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y); }
+  float ln(float d, float hw){ return 1.0 - smoothstep(hw, hw + fwidth(d) * 1.5, abs(d)); }`;
+// crimson room: dark glossy stone with branching veins that pulse outward from the vortex, and lub-dub heartbeat ripples
+const CRIMSON_FLOOR = /* glsl */`
+  { float n = vn(p * 1.3 + vec2(0.0, uTime * 0.03)) * 0.6 + vn(p * 3.4 + 7.0) * 0.3 + vn(p * 8.0) * 0.1;
+    float vein = ln(n - 0.5, 0.009) + 0.55 * ln(vn(p * 0.8 - 2.0) - 0.5, 0.006);
+    float lub = uBeatT * 4.6, dub = max(uBeatT - 0.28, 0.0) * 4.6;
+    float flow = exp(-abs(d - lub) * 0.9) + 0.6 * exp(-abs(d - dub) * 0.9);
+    col += BASE * 0.7 * vn(p * 0.6) + DEEP * 0.12 * vn(p * 2.1);
+    col += PINK * vein * (0.1 + 0.08 * uInt + 0.95 * uBeat * flow) * DIM;
+    col += HOT * (exp(-abs(d - lub) * 10.0) + 0.75 * exp(-abs(d - dub) * 10.0)) * uBeat * 0.8 * DIM;
+    col += DEEP * aline(d / 0.55, 0.025, fwidth(d) / 0.55) * 1.4 * step(d, 12.0);
+    float rq = length(p), aq = atan(abs(p.x), p.y);
+    col += PINK * (ln(rq - 5.35, 0.012) * 0.55 + ln(rq - 5.62, 0.006) * 0.35) * DIM;
+    float tk = (fract(aq * 36.0 / 3.14159) - 0.5) * 3.14159 / 36.0 * rq;
+    col += HOT * ln(tk, 0.012) * step(abs(rq - 5.485), 0.09) * (0.35 + 0.6 * uBeat) * DIM;
+    col += HOT * 0.25 * exp(-rq * 1.4) * (0.5 + uBeat) * DIM;
+  }`;
+
 export function buildChamber(cfg) {
   const root = new THREE.Group(); root.name = cfg.name;
   root.position.set(cfg.center[0], 0, cfg.center[1]); root.rotation.y = cfg.rotY || 0; root.updateMatrixWorld(true);
@@ -101,27 +124,16 @@ export function buildChamber(cfg) {
     const doorPools = cfg.doors.map((d) => `col += HOT * 0.4 * exp(-length(p - vec2(${f3(Math.sin(d.ang) * 6.4)}, ${f3(Math.cos(d.ang) * 6.4)})) * 0.9) * (0.6 + 0.6 * uBeat);`).join('\n');
     const m = mat(/* glsl */`
       uniform float uMirror;
+      ${FLOOR_HELPERS}
       void main(){
         vec2 p = vW.xz; float rr = length(p);
         ${floorDoorDiscardGLSL(doorAngles)}
         vec2 mm = p - vec2(0.0, ${f3(TZ)}); float d = length(mm);
         vec2 px = fwidth(p);
         vec3 col = FLOORC;
-        vec2 gf = fract(p / 1.1); vec2 gid = floor(p / 1.1);
-        float seam = max(1.0 - smoothstep(0.006, 0.006 + px.x / 1.1 * 1.5, min(gf.x, 1.0 - gf.x)), 1.0 - smoothstep(0.006, 0.006 + px.y / 1.1 * 1.5, min(gf.y, 1.0 - gf.y)));
-        col += DEEP * seam * 0.45 + BASE * 0.25 * hash12(gid);
-        col += PINK * aline(d * 0.8 - uTime * 0.45, 0.018, fwidth(d) * 0.8) * exp(-d * 0.16) * (0.3 + 0.5 * uInt) * DIM;
-        col += HOT * exp(-abs(d - uBeatT * 5.5) * 1.3) * uBeat * 0.9 * DIM;
-        float ax = abs(p.x);
-        float walk = step(p.y, ${f3(R)}) * step(${f3(TZ)}, p.y);
-        col += HOT * (1.0 - smoothstep(0.018, 0.018 + px.x * 1.5, abs(ax - 0.8))) * walk * (0.7 + 0.7 * uBeat) * DIM;
-        float cv = (p.y - ax * 0.75) * 1.3 + uTime * 1.0;
-        float fc = fract(cv); float chev = 1.0 - smoothstep(0.07, 0.07 + fwidth(cv) * 1.5, min(fc, 1.0 - fc));
-        col += PINK * chev * walk * step(ax, 0.6) * (0.35 + 0.4 * uInt) * DIM;
+        ${cfg.floorGLSL || CRIMSON_FLOOR}
         col += PINK * 0.5 * exp(-d * 0.5) * (0.5 + 0.5 * uInt + 0.6 * uBeat);
-        col += PINK * aline(rr / 2.0, 0.006, fwidth(rr) / 2.0) * 0.35 * step(rr, 5.5) * DIM;
         ${doorPools}
-        ${cfg.floorGLSL || ''}
         col *= 1.0 - smoothstep(5.5, ${f3(R)}, rr) * 0.4;
         col = fogit(col, vW);
         vec3 V = normalize(CAM - vW);
