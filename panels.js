@@ -42,7 +42,7 @@ const WBTN = [
 ];
 // screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
 const SW = 0.5, SH = 0.74;
-const SROWS = [{ k: 'height', name: 'HEIGHT', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }];
+const SROWS = [{ k: 'height', name: 'HEIGHT · BOTTOM EDGE', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }];
 const SBTN = [
   { id: 's-down', x: -0.17, y: 0.215, glyph: 12, label: 'DOWN' }, { id: 's-up', x: 0.17, y: 0.215, glyph: 11, label: 'UP' },
   { id: 's-farther', x: -0.17, y: 0.08, glyph: 13, label: 'FARTHER' }, { id: 's-closer', x: 0.17, y: 0.08, glyph: 14, label: 'CLOSER' },
@@ -208,11 +208,11 @@ function drawScreenWing(ct, st, sv) {
   g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('SCREEN', W / 2, Y(0.318));
   for (const b of SBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR * (b.sx || 1) + 0.012) * S, 0, Math.PI * 2); g.fill(); }
   const vals = { height: sv.height, dist: sv.dist, size: sv.size, tilt: sv.tilt };
-  const HINT = { height: 'DOWN  ·  UP', dist: 'FARTHER  ·  CLOSER', size: 'SMALLER  ·  BIGGER', tilt: 'FACE UP  ·  FACE DOWN' };
+  const HINT = { height: sv.hHeight, dist: sv.hDist, size: sv.hSize, tilt: sv.hTilt };   // v10: the available range for each value
   for (const r of SROWS) {
-    g.fillStyle = st.label; g.font = '700 27px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(r.name, W / 2, Y(r.y + 0.042));
-    g.fillStyle = st.value; g.font = '800 56px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(vals[r.k], W / 2, Y(r.y + 0.002));
-    g.fillStyle = st.label; g.globalAlpha = 0.9; g.font = '600 21px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(HINT[r.k], W / 2, Y(r.y - 0.042)); g.globalAlpha = 1;
+    g.fillStyle = st.label; g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(r.name, W / 2, Y(r.y + 0.044));
+    g.fillStyle = st.value; g.font = '800 54px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(vals[r.k], W / 2, Y(r.y + 0.0));
+    g.fillStyle = st.title; g.globalAlpha = 1; g.font = '700 28px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(HINT[r.k], W / 2, Y(r.y - 0.045)); g.globalAlpha = 1;
   }
   g.globalAlpha = 1;
   g.textAlign = 'left'; g.font = '700 28px system-ui, Segoe UI, Roboto, sans-serif';

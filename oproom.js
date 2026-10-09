@@ -124,7 +124,7 @@ export function buildOpRoom(cfg) {
   // sculptures: striped monoliths + floating op-art rings and spheres
   {
     const mono = [];
-    for (const a of [1.0, 1.65, 2.3, -1.0, -1.65, -2.3]) mono.push(mtx(Math.sin(a) * 5.2, 1.7, Math.cos(a) * 5.2, a + Math.PI));
+    for (const a of [0.95, 1.4, 1.85, -0.95, -1.4, -1.85]) mono.push(mtx(Math.sin(a) * 5.2, 1.7, Math.cos(a) * 5.2, a + Math.PI));
     instanced(new THREE.BoxGeometry(0.9, 3.4, 0.28), mat(/* glsl */`
       ${BR}
       void main(){ float x = vL.x * 3.0 + vL.y * 1.2 + sin(vL.y * 2.0 + uTime * 0.15 + vH * 6.0) * 0.35;
@@ -141,7 +141,7 @@ export function buildOpRoom(cfg) {
       void main(){ vec3 n = normalize(vLN); float u = n.y * 5.0 + atan(n.x, n.z) * 2.0 / 6.2831 + uTime * 0.03;
         float ub = n.y * 5.0 + atan(-n.x, -n.z) * 2.0 / 6.2831;
         gl_FragColor = vec4(vec3(mix(0.03, 0.95, stripe(u, min(fwidth(u), fwidth(ub))))), 1.0); }`);
-    for (const [x, y, z, r] of [[-3.0, 2.9, -2.2, 0.5], [3.0, 3.1, -2.2, 0.5], [-3.2, 3.5, 1.2, 0.38], [3.2, 3.3, 1.2, 0.38]]) {   // mirrored pairs (v8)
+    for (const [x, y, z, r] of [[-3.0, 2.9, -1.5, 0.5], [3.0, 3.1, -1.5, 0.5], [-3.2, 3.5, 1.2, 0.38], [3.2, 3.3, 1.2, 0.38]]) {   // mirrored pairs (v8)
       const s = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 24), sphMat); s.position.set(x, y, z); world.add(s);
     }
   }

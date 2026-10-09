@@ -3,6 +3,7 @@
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
   makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
 import { roomMedia, MEDIA_GLSL } from './media.js';
+import { MON_GEO } from './shared.js';
 
 
 // floor helpers shared by the room floors
@@ -94,7 +95,7 @@ export function buildChamber(cfg) {
     neonTorus(world, 2.4, 0.045, hex.a, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.1);
     neonTorus(world, 1.2, 0.03, hex.c, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.0);
     const beams = [];
-    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; if (cfg.focal === 'vortex' && Math.abs(a - Math.PI) < 0.6) continue;   // keep the monitor clear (v8; v9 wider so it can move)
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; if (Math.abs(a - Math.PI) < 1.1) continue;   // v10: no beams over the monitor bay (the same clear space in every room)
       beams.push(mtx(Math.sin(a) * 4.7, H - 0.16, Math.cos(a) * 4.7, a)); }
     if (!cfg.deluxe) instanced(new THREE.BoxGeometry(0.24, 0.3, 4.6), metalMat({ STRIP_Y: '0.149' }), beams, world);
     const nearDoor = (a) => doorAngles.some((d) => Math.abs(Math.atan2(Math.sin(a - d), Math.cos(a - d))) < 0.25);
@@ -105,7 +106,7 @@ export function buildChamber(cfg) {
     }
     instanced(new THREE.BoxGeometry(0.34, H, 0.36), metalMat({ STRIP_Z: '0.179' }), pil, world);
     const pyl = [];
-    for (const s of [-1, 1]) { const x = s * 3.3, z = -Math.sqrt(R * R - x * x) + 0.45; pyl.push(mtx(x, 3.2, z, Math.atan2(-x, -z))); }
+    for (const s of [-1, 1]) { const a = Math.PI + s * 0.5, x = Math.sin(a) * 6.8, z = Math.cos(a) * 6.8; pyl.push(mtx(x, 3.2, z, Math.atan2(-x, -z))); }   // v10: set back against the wall, clear of the monitor bay
     instanced(new THREE.BoxGeometry(0.62, 6.4, 0.6), metalMat({ STRIP_Z: '0.299' }), pyl, world);
     for (const y of [6.95, 7.15]) { const t = new THREE.Mesh(new THREE.TorusGeometry(R - 0.1, 0.07, 6, 112), metalMat()); t.rotation.x = Math.PI / 2; t.position.y = y; world.add(t); }
     neonTorus(world, R - 0.16, 0.03, hex.a, new THREE.Vector3(0, 7.38, 0), Math.PI / 2, 0.9, 4);
@@ -191,7 +192,8 @@ export function buildChamber(cfg) {
   // ---------- pods ----------
   if (!cfg.deluxe) {
     const all = [];
-    for (let i = 0; i < 6; i++) { const z = -5.0 + i * 1.65, x = 2.5 + 0.42 * i; all.push([i, -x, z], [i, x, z]); }
+    for (let i = 0; i < 6; i++) { const z = -4.6 + i * 1.65, x = 2.5 + 0.42 * i;   // v10: rows start 0.4 m further in (clear of the monitor bay)
+      all.push([i, -x, z], [i, x, z]); }
     const PODS = all.filter(([i]) => cfg.podIdx.includes(i)).map(([, x, z]) => [x, z]);
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       dummy.lookAt(0, 0, z - 1.2); dummy.updateMatrix(); return dummy.matrix.clone(); });
@@ -267,7 +269,7 @@ export function buildChamber(cfg) {
       void main(){ vec2 p = vUv - 0.5; float e = (1.0 - smoothstep(0.15, 0.5, abs(p.x))) * (1.0 - smoothstep(0.0, 0.5, abs(p.y + 0.1)));
         float n = 0.6 + 0.4 * sin(vUv.y * 5.0 + uTime * 0.3 + vUv.x * 3.0) * sin(vUv.x * 4.0 - uTime * 0.2);
         gl_FragColor = vec4(PINK * e * n * 0.07 * (0.6 + 0.6 * uInt + 0.8 * uBeat), 1.0); }`, { additive: true, side: THREE.DoubleSide });
-    for (const [x, z, ry, w, h] of (cfg.deluxe ? [] : [[-3.3, -5.0, 0.45, 2.6, 6.5], [3.3, -5.0, -0.45, 2.6, 6.5]])) {
+    for (const [x, z, ry, w, h] of (cfg.deluxe ? [] : [[-4.3, -1.4, 0.45, 2.6, 6.5], [4.3, -1.4, -0.45, 2.6, 6.5]])) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), hz); p.position.set(x, h / 2, z); p.rotation.y = ry; p.renderOrder = 31; fx.add(p); haze.push(p);
     }
     out.points = makeParticles(fx, PAL[cfg.pal]);
@@ -443,7 +445,7 @@ function buildScreen(K, world, deluxe = false) {
   const arcCurve = (radius, y, half, n = 64) => { const pts = [];
     for (let i = 0; i <= n; i++) { const t = Math.PI - half + (2 * half * i) / n; pts.push(new THREE.Vector3(radius * Math.sin(t), y, radius * Math.cos(t))); }
     return new THREE.CatmullRomCurve3(pts); };
-  const SCR = deluxe ? { r: 6.45, y: 6.88, h: 1.82, half: 0.4 } : { r: 6.45, y: 6.1, h: 2.3, half: 0.43 };
+  const SCR = deluxe ? { ...MON_GEO } : { r: 6.45, y: 6.1, h: 2.3, half: 0.43 };
   const asp = (SCR.r * SCR.half * 2) / SCR.h;
   const hud = canvasTex(2048, Math.round(2048 / asp)), stat = canvasTex(2048, 256);
   const m = mat(/* glsl */`
@@ -509,6 +511,12 @@ function buildScreen(K, world, deluxe = false) {
     for (const o of [post, pg]) { o.position.set((SCR.r - 0.03) * Math.sin(t), SCR.y, (SCR.r - 0.03) * Math.cos(t)); inner.add(o); }
   }
   const sg = glowSprite(hex.scr, 9.5, 4.6, 0.32); sg.position.set(0, SCR.y, -SCR.r - 0.15); inner.add(sg);
+  // standoff brackets back to the wall (fixed to the wall: shown only at the default spot)
+  const brackets = [], gap = 6.95 - (SCR.r + 0.08);
+  if (gap > 0.2) for (const t of [Math.PI - SCR.half * 0.62, Math.PI + SCR.half * 0.62]) for (const yy of [SCR.y - SCR.h * 0.32, SCR.y + SCR.h * 0.32]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, gap), metalMat());
+    const rm = SCR.r + 0.08 + gap / 2; arm.position.set(rm * Math.sin(t), yy, rm * Math.cos(t)); arm.rotation.y = t; arm.userData.noMirror = true; world.add(arm); brackets.push(arm);
+  }
   stat.t.colorSpace = THREE.SRGBColorSpace;
   if (!deluxe) { const half = 0.4, r = 6.5, h = 0.6, y = 4.47;
     const sm = new THREE.Mesh(arcGeometry(r, h, half), new THREE.MeshBasicMaterial({ map: stat.t, side: THREE.BackSide })); sm.position.y = y; world.add(sm);
@@ -544,5 +552,5 @@ function buildScreen(K, world, deluxe = false) {
       g.font = 'bold 60px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#ffc8e8'; g.fillText('BREATHE  •  FOCUS  •  DRIFT', W / 2, 205);
       stat.t.needsUpdate = true; }
   }
-  return { draw, mesh: s, SCR, mount, brackets: [], geo: { r: SCR.r, y: SCR.y, h: SCR.h, half: SCR.half } };
+  return { draw, mesh: s, SCR, mount, brackets, geo: { r: SCR.r, y: SCR.y, h: SCR.h, half: SCR.half } };
 }

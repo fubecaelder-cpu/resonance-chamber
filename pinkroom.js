@@ -139,7 +139,7 @@ function extra({ K, world, root, fx, out, haze }) {
 
   // ---------- crown chandelier: three rings with bead strands and crystal drops around a glowing orb ----------
   {
-    const C = new THREE.Vector3(0, 0, -0.9);
+    const C = new THREE.Vector3(0, 0, 0.3);   // v10: moved towards the entrance, clear of the monitor bay
     const RINGS = [[2.3, 6.55, 28, 1.5], [1.6, 6.15, 20, 1.15], [0.95, 5.8, 12, 0.8]];
     const beads = [], drops = [], cables = [];
     for (const [r, y, n, len] of RINGS) {
@@ -184,7 +184,7 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- fan-vault ceiling ribs ----------
   {
     const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 7.97, 1.3), new THREE.Vector3(0, 7.9, 3.4), new THREE.Vector3(0, 7.6, 5.4), new THREE.Vector3(0, 7.05, 6.82)]);
-    const ribs = []; for (let i = 0; i < 16; i++) if (i !== 7 && i !== 8) ribs.push(mtx(0, 0, 0, ((i + 0.5) / 16) * PI * 2));   // v9: the two ribs over the monitor are left out so it can move freely
+    const ribs = []; for (let i = 0; i < 16; i++) if (i < 5 || i > 10) ribs.push(mtx(0, 0, 0, ((i + 0.5) / 16) * PI * 2));   // v10: no ribs over the monitor bay (the same clear space in every room)
     const rc = instanced(new THREE.TubeGeometry(curve, 28, 0.028, 5), neonCore(hex.c, 0.95), ribs, world);
     const rg = instanced(new THREE.TubeGeometry(curve, 28, 0.12, 6), glowShell(hex.a, 0.5), ribs, world);
     rc.userData.noMirror = rg.userData.noMirror = true;
@@ -202,7 +202,7 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- pods: upgraded empty glowing capsules ----------
   {
     const PODS = [];
-    for (let i = 0; i < 5; i++) { const z = -5.0 + i * 1.65, x = 2.5 + 0.42 * i; PODS.push([-x, z], [x, z]); }   // 10 pods, mirrored left/right
+    for (let i = 2; i < 6; i++) { const z = -4.6 + i * 1.65, x = Math.min(4.3, 2.5 + 0.42 * i); PODS.push([-x, z], [x, z]); }   // 8 pods, mirrored left/right (v10: none in the monitor bay)
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       dummy.lookAt(0, 0, z - 1.2); dummy.updateMatrix(); return dummy.matrix.clone(); });
     const parts = (local) => podM.map((pm) => pm.clone().multiply(local));
@@ -301,7 +301,7 @@ function extra({ K, world, root, fx, out, haze }) {
       void main(){ vec2 p = vUv - 0.5; float e = (1.0 - smoothstep(0.1, 0.5, abs(p.x))) * (1.0 - smoothstep(0.0, 0.5, abs(p.y + 0.05)));
         float n = 0.6 + 0.4 * sin(vUv.y * 5.0 + uTime * 0.3 + vUv.x * 3.0) * sin(vUv.x * 4.0 - uTime * 0.2);
         gl_FragColor = vec4(mix(PINK, WHITE, 0.1) * e * n * 0.075 * (0.6 + 0.6 * uInt + 0.8 * uBeat), 1.0); }`, { additive: true, side: THREE.DoubleSide });
-    for (const [x, z, ry, w, h] of [[-3.6, -4.6, 0.5, 2.8, 7.0], [3.6, -4.6, -0.5, 2.8, 7.0], [0, -2.6, 0, 9.0, 3.2]]) {
+    for (const [x, z, ry, w, h] of [[-4.4, -1.4, 0.5, 2.8, 7.0], [4.4, -1.4, -0.5, 2.8, 7.0], [0, -2.6, 0, 9.0, 3.2]]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), hz); p.position.set(x, z === -2.6 ? 6.6 : h / 2, z); p.rotation.y = ry; p.renderOrder = 31; fx.add(p); haze.push(p);
     }
     const N = LOW ? 50 : 110, pos = new Float32Array(N * 3), seed = new Float32Array(N);

@@ -1,7 +1,7 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, env } from './shared.js';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js';
 import { VRButton } from './lib/VRButton.js';
 import { buildChamber } from './chamber.js';
 import { pinkRoomCfg } from './pinkroom.js';
@@ -45,7 +45,7 @@ const doorPos = (i, j) => { const a = RY[i] + doorAng(i, j); return [RC[i][0] + 
 const doorsOf = (i) => [0, 1, 2].filter((j) => j !== i).map((j) => ({ ang: doorAng(i, j), style: j })).sort((a, b) => a.ang - b.ang);
 const room1 = buildChamber({ ...pinkRoomCfg(tunnelU), center: RC[0], rotY: RY[0], doors: doorsOf(0) });
 const room2 = buildChamber({ name: 'room2', center: RC[1], rotY: RY[1], pal: 'crimson', focal: 'vortex', gyro: true,
-  podIdx: [0, 1, 4, 5], doors: doorsOf(1) });
+  podIdx: [2, 4], doors: doorsOf(1) });
 const room3 = buildOpRoom({ name: 'room3', center: RC[2], rotY: RY[2], doors: doorsOf(2) });
 // corridors run straight along the triangle's sides, door to door
 const CDEF = [
@@ -61,8 +61,8 @@ const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r
 Object.values(SPACES).forEach((s) => scene.add(s));
 const ROOMS = [room1, room2, room3, corA, corB, corC];
 // ---------- media: one shared video on the main monitor of every room ----------
-const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson', { r: 5.85, y: 7.1, h: 1.5, half: 0.46 });   // v8: hangs forward of the vortex frame
-const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', { y: 7.0, h: 1.6 });
+const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson', MON_GEO);   // v10: same monitor geometry in every room
+const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', MON_GEO);
 room1.root.updateMatrixWorld(true);
 const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos];
 let panelsReady = false;
@@ -74,9 +74,9 @@ media.setRenderer(renderer);
 const SPAWN = [0, 3.6], PANEL_POS = [1.75, 2.15], PANEL_FACE = [0, 4.8];
 // v9: movable monitors (SCREEN wing on each panel)
 const screens = createScreens({ onChange: (i) => { if (panelsReady) panelSys.redrawScreen(i); }, monitors: [
-  { kind: 'pink', mount: room1.hud.mount, brackets: room1.hud.brackets, geo: room1.hud.geo, root: room1.root, kit: room1.kit, monPos: MON_POS[0] },
-  { kind: 'crimson', mount: mon2.mount, brackets: mon2.brackets, geo: mon2.geo, root: room2.root, kit: room2.kit, monPos: MON_POS[1] },
-  { kind: 'mono', mount: mon3.mount, brackets: mon3.brackets, geo: mon3.geo, root: room3.root, kit: room3.kit, monPos: MON_POS[2] },
+  { mount: room1.hud.mount, brackets: room1.hud.brackets, geo: room1.hud.geo, root: room1.root, kit: room1.kit, monPos: MON_POS[0] },
+  { mount: mon2.mount, brackets: mon2.brackets, geo: mon2.geo, root: room2.root, kit: room2.kit, monPos: MON_POS[1] },
+  { mount: mon3.mount, brackets: mon3.brackets, geo: mon3.geo, root: room3.root, kit: room3.kit, monPos: MON_POS[2] },
 ] });
 const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, rooms: [
   { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },

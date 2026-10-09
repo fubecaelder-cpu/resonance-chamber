@@ -20,6 +20,7 @@ export const v3 = (a) => `vec3(${a.map(f3).join(', ')})`;
 export const R = 7.0, H = 8.0, TY = 1.68, TR = 1.55, TZ = -6.75, TL = 70, START_Z = 1.2;
 export const D0 = START_Z - TZ;
 export const DW = 1.1, DH = 2.3;           // doorway half-width / height of straight part (arched top, radius DW)
+export const MON_GEO = { r: 5.85, y: 7.05, h: 1.6, half: 0.45 };   // v10: the main monitor is the same size and spot in every room
 export const VEIL_R = 6.88;                // distance of door veils from room centre
 
 // global animated uniforms (shared by every material)
