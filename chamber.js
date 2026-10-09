@@ -94,7 +94,7 @@ export function buildChamber(cfg) {
     neonTorus(world, 2.4, 0.045, hex.a, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.1);
     neonTorus(world, 1.2, 0.03, hex.c, new THREE.Vector3(0, H - 0.05, 0), Math.PI / 2, 1.0);
     const beams = [];
-    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; if (cfg.focal === 'vortex' && Math.abs(a - Math.PI) < 0.5) continue;   // keep the monitor clear (v8)
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; if (cfg.focal === 'vortex' && Math.abs(a - Math.PI) < 0.6) continue;   // keep the monitor clear (v8; v9 wider so it can move)
       beams.push(mtx(Math.sin(a) * 4.7, H - 0.16, Math.cos(a) * 4.7, a)); }
     if (!cfg.deluxe) instanced(new THREE.BoxGeometry(0.24, 0.3, 4.6), metalMat({ STRIP_Y: '0.149' }), beams, world);
     const nearDoor = (a) => doorAngles.some((d) => Math.abs(Math.atan2(Math.sin(a - d), Math.cos(a - d))) < 0.25);
@@ -495,17 +495,20 @@ function buildScreen(K, world, deluxe = false) {
         mv += PINK * exp(-min(e2.x * ${f3(asp)}, e2.y) * 40.0) * 0.5; col = mix(col, mv, uMediaOn); }
       gl_FragColor = vec4(col, 1.0);
     }`, { side: THREE.BackSide, uniforms: { uHud: { value: hud.t }, ...roomMedia[0] } });
-  const s = new THREE.Mesh(arcGeometry(SCR.r, SCR.h, SCR.half), m); s.position.y = SCR.y; world.add(s);
+  // v9: the screen and its frame hang in a mount group pivoting at the screen centre, so the panel can move it
+  const mount = new THREE.Group(); mount.name = 'monitor-mount'; mount.position.set(0, SCR.y, -SCR.r); mount.userData.noMirror = true; world.add(mount);
+  const inner = new THREE.Group(); inner.position.set(0, -SCR.y, SCR.r); mount.add(inner);
+  const s = new THREE.Mesh(arcGeometry(SCR.r, SCR.h, SCR.half), m); s.position.y = SCR.y; inner.add(s);
   const back = new THREE.Mesh(new THREE.CylinderGeometry(SCR.r + 0.08, SCR.r + 0.08, SCR.h + 0.4, 48, 1, true, Math.PI - SCR.half - 0.03, SCR.half * 2 + 0.06), metalMat({ DOUBLE: 1 }));
-  back.position.y = SCR.y; world.add(back);
-  for (const yy of [SCR.y - SCR.h / 2 - 0.06, SCR.y + SCR.h / 2 + 0.06]) neonTube(world, arcCurve(SCR.r - 0.03, yy, SCR.half + 0.012), hex.b, 1.1);
+  back.position.y = SCR.y; inner.add(back);
+  for (const yy of [SCR.y - SCR.h / 2 - 0.06, SCR.y + SCR.h / 2 + 0.06]) neonTube(inner, arcCurve(SCR.r - 0.03, yy, SCR.half + 0.012), hex.b, 1.1);
   for (const sg of [-1, 1]) {
     const t = Math.PI + sg * (SCR.half + 0.012);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, SCR.h + 0.12, 8), neonCore(hex.b, 1.1));
     const pg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, SCR.h + 0.12, 10, 1, true), glowShell(hex.b, 0.55));
-    for (const o of [post, pg]) { o.position.set((SCR.r - 0.03) * Math.sin(t), SCR.y, (SCR.r - 0.03) * Math.cos(t)); world.add(o); }
+    for (const o of [post, pg]) { o.position.set((SCR.r - 0.03) * Math.sin(t), SCR.y, (SCR.r - 0.03) * Math.cos(t)); inner.add(o); }
   }
-  const sg = glowSprite(hex.scr, 9.5, 4.6, 0.32); sg.position.set(0, SCR.y, -SCR.r - 0.15); world.add(sg);
+  const sg = glowSprite(hex.scr, 9.5, 4.6, 0.32); sg.position.set(0, SCR.y, -SCR.r - 0.15); inner.add(sg);
   stat.t.colorSpace = THREE.SRGBColorSpace;
   if (!deluxe) { const half = 0.4, r = 6.5, h = 0.6, y = 4.47;
     const sm = new THREE.Mesh(arcGeometry(r, h, half), new THREE.MeshBasicMaterial({ map: stat.t, side: THREE.BackSide })); sm.position.y = y; world.add(sm);
@@ -541,5 +544,5 @@ function buildScreen(K, world, deluxe = false) {
       g.font = 'bold 60px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#ffc8e8'; g.fillText('BREATHE  •  FOCUS  •  DRIFT', W / 2, 205);
       stat.t.needsUpdate = true; }
   }
-  return { draw, mesh: s, SCR };
+  return { draw, mesh: s, SCR, mount, brackets: [], geo: { r: SCR.r, y: SCR.y, h: SCR.h, half: SCR.half } };
 }

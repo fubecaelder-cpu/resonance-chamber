@@ -1,4 +1,4 @@
-# Resonance Chamber v8 (WebXR, three.js r169, static files, no build step)
+# Resonance Chamber v9 (WebXR, three.js r169, static files, no build step)
 Serve this folder over HTTPS, open it in the Meta Quest browser and tap ENTER VR.
 
 Three rooms joined in a triangle. Each room has a doorway to each of the other two, so you can walk the loop in either direction with the left stick:
@@ -28,6 +28,16 @@ Corridors (every corridor floor has glowing arrows flowing toward the far doorwa
 - Controls: left stick moves, right stick snap-turns 30°. On desktop: drag to look, WASD to walk.
 
 URL options: ?quality=low · ?scale=1.2 · ?mirror=0 · ?video=0|blend|full · ?fov=0..1 · ?particles=500 · ?spatial=0 · ?room=2|3 (start in room 2 or 3)
+
+## Moving the main monitor (v9)
+Each control panel now has a **SCREEN** wing on its left (the MEDIA wing stays on the right). It moves the main monitor in that room only:
+- **HEIGHT**: Down / Up (0.25 m steps).
+- **DISTANCE**: Farther / Closer: slides the monitor along the room's centre line, towards or away from where you come in (0.4 m steps, up to about 2.4 to 3.3 m forward depending on the room).
+- **SIZE**: Smaller / Bigger (60% to 180%, 10% steps).
+- **TILT**: Face up / Face down (−10° to +30°, 5° steps). Face down helps when the screen is closer or lower.
+- **RESET** puts it back in its default spot.
+
+The readouts show the screen's centre height, how far forward it is, its size and tilt. Moves ease smoothly into place. Every move is checked against the room first, so the screen never goes into the walls, ceiling ribs or beams, the portal or vortex, the chandelier, gyroscope or op-art rings, the side pylons or the pods, and never drops below 3.6 m, so it stays well clear of your head and the doorways. If a move would go into the portal, the screen first comes forward a little; if it can't fit at all, the wing shows LIMIT REACHED. Away from its default spot the screen hangs from two thin rods to the ceiling. Settings are saved per room on the device (localStorage). Video, Drive playlists and letterboxing work at any size.
 
 ## Google Drive playlists (v7, on by default)
 Each room streams its own Google Drive folder as a looping playlist on its monitor, with nothing to configure. The defaults live in `config.js`: a browser API key restricted to the Drive API and `https://fubecaelder-cpu.github.io/*`, plus the Pink Room, Crimson Room and Op-Art Room subfolders of "Resonance Chamber Videos" (shared as Anyone with the link). Only the room you are in downloads and decodes. A room whose folder is empty shows its built-in visuals, and every folder is checked once a minute, so videos dropped in later start without a reload.

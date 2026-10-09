@@ -40,6 +40,16 @@ const WBTN = [
   { id: 'm-loop', x: -0.15, y: -0.18, glyph: 5, label: 'LOOP' }, { id: 'm-default', x: 0.0, y: -0.18, glyph: 7, label: 'DEFAULT' },
   { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
 ];
+// screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
+const SW = 0.5, SH = 0.74;
+const SROWS = [{ k: 'height', name: 'HEIGHT', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }];
+const SBTN = [
+  { id: 's-down', x: -0.17, y: 0.215, glyph: 12, label: 'DOWN' }, { id: 's-up', x: 0.17, y: 0.215, glyph: 11, label: 'UP' },
+  { id: 's-farther', x: -0.17, y: 0.08, glyph: 13, label: 'FARTHER' }, { id: 's-closer', x: 0.17, y: 0.08, glyph: 14, label: 'CLOSER' },
+  { id: 's-smaller', x: -0.17, y: -0.055, glyph: 0, label: 'SMALLER' }, { id: 's-bigger', x: 0.17, y: -0.055, glyph: 1, label: 'BIGGER' },
+  { id: 's-tilt-', x: -0.17, y: -0.19, glyph: 15, label: 'TILT UP' }, { id: 's-tilt+', x: 0.17, y: -0.19, glyph: 16, label: 'TILT DOWN' },
+  { id: 's-reset', x: -0.17, y: -0.3, glyph: 2, label: 'RESET', sx: 0.78 },
+];
 
 const PVS = /* glsl */`
   varying vec3 vP; varying vec3 vWp; varying vec3 vNw;
@@ -66,7 +76,14 @@ function buttonMat(st, glyph) {
         else if (uGlyph < 1.5) d = min(box(b, vec2(0.5, 0.1)), box(b, vec2(0.1, 0.5)));
         else if (uGlyph > 2.5 && uGlyph < 3.5) d = min(triU(b - vec2(0.0, 0.12), 0.44), box(b - vec2(0.0, -0.36), vec2(0.4, 0.075)));     // eject = load
         else if (uGlyph > 3.5 && uGlyph < 4.5) d = triR(b - vec2(0.08, 0.0), 0.5);                                                      // play
-        else if (uGlyph > 9.5) d = min(triR(b - vec2(-0.08, 0.0), 0.44), box(b - vec2(0.3, 0.0), vec2(0.07, 0.3)));                    // next
+        else if (uGlyph > 10.5 && uGlyph < 11.5) d = triU(b - vec2(0.0, -0.04), 0.56);                                                 // up
+        else if (uGlyph > 11.5 && uGlyph < 12.5) d = triU(vec2(b.x, -b.y) - vec2(0.0, -0.04), 0.56);                                   // down
+        else if (uGlyph > 12.5 && uGlyph < 14.5) { vec2 c = uGlyph < 13.5 ? b : vec2(b.x, -b.y);                                       // double chevron: away / towards you
+          float c1 = max(abs(c.y - 0.24 + abs(c.x) * 0.8) * 0.78 - 0.07, abs(c.x) - 0.4);
+          float c2 = max(abs(c.y + 0.04 + abs(c.x) * 0.8) * 0.78 - 0.07, abs(c.x) - 0.4); d = min(c1, c2); }
+        else if (uGlyph > 14.5 && uGlyph < 16.5) { float an = uGlyph < 15.5 ? 0.5 : -0.5; vec2 c = mat2(cos(an), -sin(an), sin(an), cos(an)) * (b - vec2(0.0, 0.08));   // tilted screen on a base
+          d = min(box(c, vec2(0.09, 0.36)), box(b - vec2(0.0, -0.42), vec2(0.32, 0.055))); }
+        else if (uGlyph > 9.5 && uGlyph < 10.5) d = min(triR(b - vec2(-0.08, 0.0), 0.44), box(b - vec2(0.3, 0.0), vec2(0.07, 0.3)));                    // next
         else if (uGlyph > 7.5 && uGlyph < 8.5) d = min(box(b - vec2(-0.19, 0.0), vec2(0.1, 0.36)), box(b - vec2(0.19, 0.0), vec2(0.1, 0.36)));   // pause
         else if (uGlyph > 4.5 && uGlyph < 5.5) { float rr2 = abs(box(b, vec2(0.3, 0.14)) - 0.1) - 0.065;                                // loop
           d = min(rr2, min(triR(b - vec2(0.1, 0.24), 0.26), triR(-(b - vec2(-0.1, -0.24)), 0.26))); }
@@ -179,6 +196,31 @@ function drawWing(ct, st, ms) {
   ct.t.needsUpdate = true;
 }
 
+function drawScreenWing(ct, st, sv) {
+  const { c, g } = ct, W = c.width, H = c.height;
+  const X = (x) => (x / SW + 0.5) * W, Y = (y) => (0.5 - y / SH) * H, S = W / SW;
+  const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6;
+    for (let r = 20; r < W * 1.6; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
+  g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('SCREEN', W / 2, Y(0.318));
+  for (const b of SBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR * (b.sx || 1) + 0.012) * S, 0, Math.PI * 2); g.fill(); }
+  const vals = { height: sv.height, dist: sv.dist, size: sv.size, tilt: sv.tilt };
+  const HINT = { height: 'DOWN  ·  UP', dist: 'FARTHER  ·  CLOSER', size: 'SMALLER  ·  BIGGER', tilt: 'FACE UP  ·  FACE DOWN' };
+  for (const r of SROWS) {
+    g.fillStyle = st.label; g.font = '700 27px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(r.name, W / 2, Y(r.y + 0.042));
+    g.fillStyle = st.value; g.font = '800 56px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(vals[r.k], W / 2, Y(r.y + 0.002));
+    g.fillStyle = st.label; g.globalAlpha = 0.9; g.font = '600 21px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(HINT[r.k], W / 2, Y(r.y - 0.042)); g.globalAlpha = 1;
+  }
+  g.globalAlpha = 1;
+  g.textAlign = 'left'; g.font = '700 28px system-ui, Segoe UI, Roboto, sans-serif';
+  if (sv.msg) { g.fillStyle = '#ffd27a'; g.fillText(sv.msg, X(-0.11), Y(-0.3)); }
+  else { g.fillStyle = st.label; g.fillText(sv.home ? 'RESET · DEFAULT SPOT' : 'RESET TO DEFAULT', X(-0.11), Y(-0.3)); }
+  ct.t.needsUpdate = true;
+}
+
 function buildPanel(style, parent, pos, faceTo) {
   const st = STYLES[style];
   const g = new THREE.Group(); g.name = 'panel-' + style;
@@ -212,12 +254,29 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     wing.add(m); return m;
   });
-  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons], frameMat: fm, wfm, wboard, wframe, wct, wbuttons };
+  // screen wing on a hinge at the left edge, swung 24° towards the user (mirror of the media wing)
+  const shinge = new THREE.Group(); shinge.position.set(-BW / 2 - 0.05, 0, -0.005); shinge.rotation.y = 0.42; head.add(shinge);
+  const swing = new THREE.Group(); swing.position.set(-SW / 2 - 0.04, -(SH - BH) / 2, 0); shinge.add(swing);
+  const sfm = frameMat(st, SW / 2, SH / 2);
+  const sframe = new THREE.Mesh(new THREE.BoxGeometry(SW + 0.07, SH + 0.07, 0.035), sfm); sframe.position.z = -0.02; swing.add(sframe);
+  const sknuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); shinge.add(sknuckle);
+  const sct = canvasTex(1024, Math.round(1024 * SH / SW));
+  const sboard = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), boardMat(sct.t)); swing.add(sboard);
+  const sbuttons = SBTN.map((b) => {
+    const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
+    if (b.sx) m.scale.set(b.sx, 1, b.sx);
+    m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
+    swing.add(m); return m;
+  });
+  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons, ...sbuttons], frameMat: fm, wfm, wboard, wframe, wct, wbuttons, sfm, sboard, sframe, sct, sbuttons };
 }
 
 // ---------- system ----------
-export function createPanels({ renderer, rig, camera, rooms, onChange, media }) {
-  const panels = rooms.map((r) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space; return p; });
+export function createPanels({ renderer, rig, camera, rooms, onChange, media, screens }) {
+  const panels = rooms.map((r, i) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space;
+    p.buttons.forEach((b) => { b.userData.btn.room = i; }); return p; });
+  const redrawScreen = (i) => { if (screens) drawScreenWing(panels[i].sct, panels[i].st, screens.view(i)); };
+  panels.forEach((_, i) => redrawScreen(i));
   const redraw = () => panels.forEach((p) => drawBoard(p.ct, p.st));
   const redrawMedia = () => { const ms = media.view(); panels.forEach((p) => {
     drawWing(p.wct, p.st, ms);
@@ -230,10 +289,11 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media }) 
   redrawMedia();
   redraw();
   const allButtons = panels.flatMap((p) => p.buttons);
-  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe]);
+  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe, p.sboard, p.sframe]);
 
-  function act(id) {
+  function act(id, room = 0) {
     if (id.startsWith('m-')) { media.act(id); return; }
+    if (id.startsWith('s-')) { if (screens) screens.act(id, room); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);
     else if (id === 'bright-') settings.brightI = Math.max(0, settings.brightI - 1);
@@ -242,7 +302,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media }) 
     saveSettings(); redraw(); onChange(settings);
   }
   function press(btn, src) {
-    btn.userData.btn.press = 1; act(btn.userData.btn.id);
+    btn.userData.btn.press = 1; act(btn.userData.btn.id, btn.userData.btn.room);
     const ha = src && src.gamepad && src.gamepad.hapticActuators && src.gamepad.hapticActuators[0];
     if (ha) { try { (ha.pulse ? ha.pulse(0.55, 35) : ha.playEffect && ha.playEffect('dual-rumble', { duration: 35, strongMagnitude: 0.55, weakMagnitude: 0.55 })); } catch { /* no haptics */ } }
   }
@@ -291,7 +351,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media }) 
     }
   }
   function update(dt, time) {
-    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; });
+    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; p.sfm.uniforms.uTime.value = time; });
     const xr = renderer.xr.isPresenting;
     if (xr && !cursorParentSet) { ctrls.forEach((s) => rig.parent.add(s.cursor)); cursorParentSet = true; }
     const targets = visibleTargets();
@@ -321,5 +381,5 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media }) 
       b.position.z = B.rest - 0.009 * B.press + 0.004 * B.hover;
     }
   }
-  return { update, mouseDown, mouseMove, panels, redraw, redrawMedia, press, act, allButtons };
+  return { update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, press, act, allButtons };
 }

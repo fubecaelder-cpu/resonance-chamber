@@ -184,7 +184,7 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- fan-vault ceiling ribs ----------
   {
     const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 7.97, 1.3), new THREE.Vector3(0, 7.9, 3.4), new THREE.Vector3(0, 7.6, 5.4), new THREE.Vector3(0, 7.05, 6.82)]);
-    const ribs = []; for (let i = 0; i < 16; i++) ribs.push(mtx(0, 0, 0, ((i + 0.5) / 16) * PI * 2));
+    const ribs = []; for (let i = 0; i < 16; i++) if (i !== 7 && i !== 8) ribs.push(mtx(0, 0, 0, ((i + 0.5) / 16) * PI * 2));   // v9: the two ribs over the monitor are left out so it can move freely
     const rc = instanced(new THREE.TubeGeometry(curve, 28, 0.028, 5), neonCore(hex.c, 0.95), ribs, world);
     const rg = instanced(new THREE.TubeGeometry(curve, 28, 0.12, 6), glowShell(hex.a, 0.5), ribs, world);
     rc.userData.noMirror = rg.userData.noMirror = true;

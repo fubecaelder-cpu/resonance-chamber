@@ -9,6 +9,7 @@ import { buildOpRoom } from './oproom.js';
 import { buildCorridor } from './corridor.js';
 import { createPanels, settings } from './panels.js';
 import { createMedia, buildMonitor, roomMedia } from './media.js';
+import { createScreens } from './screens.js';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -71,7 +72,13 @@ media.setRenderer(renderer);
 // arrival spot: between the two doorways, facing the focal; the panel stands in the same place in every room, ahead-right
 // of you as you come in through either doorway, turned towards the doorways
 const SPAWN = [0, 3.6], PANEL_POS = [1.75, 2.15], PANEL_FACE = [0, 4.8];
-const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, rooms: [
+// v9: movable monitors (SCREEN wing on each panel)
+const screens = createScreens({ onChange: (i) => { if (panelsReady) panelSys.redrawScreen(i); }, monitors: [
+  { kind: 'pink', mount: room1.hud.mount, brackets: room1.hud.brackets, geo: room1.hud.geo, root: room1.root, kit: room1.kit, monPos: MON_POS[0] },
+  { kind: 'crimson', mount: mon2.mount, brackets: mon2.brackets, geo: mon2.geo, root: room2.root, kit: room2.kit, monPos: MON_POS[1] },
+  { kind: 'mono', mount: mon3.mount, brackets: mon3.brackets, geo: mon3.geo, root: room3.root, kit: room3.kit, monPos: MON_POS[2] },
+] });
+const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, rooms: [
   { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'crimson', root: room2.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'mono', root: room3.root, pos: PANEL_POS, faceTo: PANEL_FACE },
@@ -374,7 +381,7 @@ window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position
 window.__freeze = (t) => { frozenT = t; };
 window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
-window.__act = (id) => panelSys.act(id);
+window.__act = (id, room = 0) => panelSys.act(id, room); window.__screens = screens;
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
 window.__btnScreen = (r, b) => { const m = panelSys.panels[r].buttons[b]; scene.updateMatrixWorld(true); const p = m.getWorldPosition(new THREE.Vector3()).project(camera);
   return [(p.x + 1) / 2 * window.innerWidth, (1 - p.y) / 2 * window.innerHeight]; };
@@ -426,7 +433,7 @@ renderer.setAnimationLoop(() => {
   xrCam.getWorldPosition(headP);
   zone = zoneOf(headP);
   updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
-  advanceClock(); panelSys.update(dt, visualTime());
+  advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt);
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;
   const amp = (0.55 + 0.45 * I) * (surge ? 1.3 : 1);
