@@ -57,7 +57,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
       mesh.position.set(0, S.y, sp.kind === 'slab' ? S.z : 0); mesh.renderOrder = 26; mesh.visible = false; g.add(mesh); rm.root.add(g);
       return { k, mesh, m, kind: sp.kind, aspect: sp.kind === 'slab' ? S.w / S.h : (S.r * S.arc) / S.h, cur: null, nxt: null, mix: 0, next: 0, loading: false };
     });
-    return { ri, pods, kind: (rm.spots && rm.spots[0] && rm.spots[0].kind) || 'tube', items: [], src: '', status: 'idle', listed: 0, cache: new Map(), bad: new Set(), active: false, msg: '' };
+    return { ri, pods, kind: (rm.spots && rm.spots[0] && rm.spots[0].kind) || 'tube', items: [], src: '', status: 'idle', listed: -1e9, cache: new Map(), bad: new Set(), active: false, msg: '' };
   });
   const D = media.drive, API = media.driveAPI;
   const url = (id) => `${API}/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true&key=${encodeURIComponent(D.key)}`;
