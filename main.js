@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=17';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=18';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=17';
-import { pinkRoomCfg } from './pinkroom.js?v=17';
-import { buildOpRoom } from './oproom.js?v=17';
-import { buildCorridor } from './corridor.js?v=17';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=17';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=17';
-import { createScreens } from './screens.js?v=17';
-import { createPods } from './pods.js?v=17';
+import { buildChamber } from './chamber.js?v=18';
+import { pinkRoomCfg } from './pinkroom.js?v=18';
+import { buildOpRoom } from './oproom.js?v=18';
+import { buildCorridor } from './corridor.js?v=18';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=18';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=18';
+import { createScreens } from './screens.js?v=18';
+import { createPods } from './pods.js?v=18';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -367,11 +367,15 @@ const ARCN = 32, arcGeo = new THREE.BufferGeometry().setAttribute('position', ne
 const tpArc = new THREE.Points(arcGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.025, transparent: true, opacity: 0.8, depthWrite: false })); tpArc.frustumCulled = false; tpArc.visible = false; scene.add(tpArc);
 const tp = [0, 1].map((i) => { const c = renderer.xr.getController(i); const s = { c, i, src: null, aiming: false, held: false, target: null };
   c.addEventListener('connected', (e) => { s.src = e.data; }); c.addEventListener('disconnected', () => { s.src = null; s.aiming = s.held = false; });
-  c.addEventListener('selectstart', () => { s.held = true; s.aiming = canTeleport(s) && !panelSys.hovering(i); });
+  c.addEventListener('selectstart', () => { if (handFisted(s.src)) { s.held = false; s.aiming = false; return; } s.held = true; s.aiming = canTeleport(s) && !panelSys.hovering(i); });
   c.addEventListener('selectend', () => { s.held = false; if (s.aiming && s.target) teleportTo(s.target); s.aiming = false; });
   return s; });
 const canTeleport = (s) => s.src && (!s.src.hand || s.src.handedness === 'right');
-function walkable(x, z) { return REGIONS.some((rg) => { const [nx, nz] = nearestIn(rg, x, z); return Math.hypot(nx - x, nz - z) < 1e-6; }); }
+// v17: panel footprints (stand + wings) are not walkable
+let panelSpots = null;
+const panelFree = (x, z) => { if (!panelSpots) panelSpots = panelSys.panels.map((p) => p.group.getWorldPosition(new THREE.Vector3()));
+  return panelSpots.every((q) => Math.hypot(x - q.x, z - q.z) > 0.95); };
+function walkable(x, z) { return panelFree(x, z) && REGIONS.some((rg) => { const [nx, nz] = nearestIn(rg, x, z); return Math.hypot(nx - x, nz - z) < 1e-6; }); }
 let tpFade = 0, tpPending = null;
 function teleportTo(p) { tpPending = p.clone(); tpFade = 0.0001; }
 const ao = new THREE.Vector3(), ad = new THREE.Vector3(), aq = new THREE.Quaternion(), ap = new THREE.Vector3(), an = new THREE.Vector3();
@@ -379,6 +383,7 @@ function updateTeleport(dt) {
   let shown = null;
   for (const s of tp) {
     s.target = null;
+    if (s.aiming && s.src && s.src.hand && gest[s.i] && gest[s.i].fist) s.aiming = false;   // v17: fist cancels a pinch aim
     if (!s.aiming) continue;
     s.c.getWorldPosition(ao); s.c.getWorldQuaternion(aq); ad.set(0, 0, -1).applyQuaternion(aq);
     const pos = arcGeo.attributes.position.array; ap.copy(ao); an.copy(ad).multiplyScalar(7); let hit = null, k = 0;
@@ -400,9 +405,48 @@ function updateTeleport(dt) {
     fadeMat.opacity = Math.max(fadeMat.opacity, tpFade); fadeMat.color.setHex(0x000000); fadeMesh.visible = fadeMat.opacity > 0.002;
   }
   // left hand pinch-and-hold: glide where you look
-  for (const s of tp) if (s.held && s.src && s.src.hand && s.src.handedness === 'left' && !panelSys.hovering(s.i)) {
+  for (const s of tp) if (s.held && s.src && s.src.hand && s.src.handedness === 'left' && !panelSys.hovering(s.i) && !(gest[s.i] && gest[s.i].fist)) {
     camera.getWorldDirection(fwd); fwd.y = 0; if (fwd.lengthSq() > 1e-6) { fwd.normalize(); rig.position.addScaledVector(fwd, 1.2 * sprintMul() * dt); clampToWorld(); } }
 }
+function turnAround(ang) { camera.getWorldPosition(headP); rig.position.sub(headP).applyAxisAngle(UP, ang).add(headP); rig.position.y = floorBase + settings.height; rig.rotation.y += ang; }
+// v17: thumb-swipe snap turn (Meta-style microgesture). With a hand in a loose fist, slide the thumb tip along the side of
+// the index finger: >= 2 cm within 300 ms turns toward the swipe (snap angle from the TURN row; in SMOOTH mode it turns 30°).
+// While a hand is fisted its pinches are ignored, so the gesture never teleports or glides.
+const G = { src: null };   // joint source override for tests: (handIndex) => { jointName: Vector3 } | null
+const gest = [0, 1].map(() => ({ hist: [], cool: 0, fist: false }));
+const gv = { a: new THREE.Vector3(), b: new THREE.Vector3(), d: new THREE.Vector3(), r: new THREE.Vector3() };
+function jointsOf(i) {
+  if (G.src) return G.src(i);
+  const h = hands[i], J = h && h.joints; if (!J || !J['thumb-tip'] || !J['thumb-tip'].visible) return null;
+  const o = {}; for (const n of ['wrist', 'thumb-tip', 'index-finger-phalanx-proximal', 'index-finger-phalanx-intermediate', 'index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip', 'middle-finger-metacarpal']) {
+    if (!J[n]) return null; o[n] = J[n].getWorldPosition(new THREE.Vector3()); } return o;
+}
+function isFist(j) {
+  const palm = j['middle-finger-metacarpal'];
+  return ['index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'].every((n) => j[n].distanceTo(palm) < 0.075);
+}
+let turnTick = 0;
+function updateGestures(dt, now) {
+  for (let i = 0; i < 2; i++) {
+    const g = gest[i], j = jointsOf(i); g.cool = Math.max(0, g.cool - dt);
+    if (!j) { g.fist = false; g.hist.length = 0; continue; }
+    g.fist = isFist(j); if (!g.fist) { g.hist.length = 0; continue; }
+    const p0 = j['index-finger-phalanx-proximal'], axis = gv.a.subVectors(j['index-finger-phalanx-intermediate'], p0).normalize();
+    const s = gv.b.subVectors(j['thumb-tip'], p0).dot(axis);
+    g.hist.push({ t: now, s }); while (g.hist.length && now - g.hist[0].t > 0.3) g.hist.shift();
+    if (g.cool > 0) continue;
+    const first = g.hist[0], ds = s - first.s;
+    if (Math.abs(ds) >= 0.02) {
+      camera.getWorldDirection(gv.d); gv.r.crossVectors(gv.d, UP).normalize();      // head-right
+      const dir = Math.sign(axis.dot(gv.r) * ds);                                    // swipe toward head-right turns right
+      const deg = settings.turnDeg || 30; turnAround(-dir * deg * Math.PI / 180);
+      turnTick = 0.12; g.cool = 0.45; g.hist.length = 0; gest.last = { hand: i, dir };
+    }
+  }
+  if (turnTick > 0) { turnTick = Math.max(0, turnTick - dt); fadeMat.opacity = Math.max(fadeMat.opacity, 0.5 * turnTick / 0.12); fadeMat.color.setHex(0x000000); fadeMesh.visible = fadeMat.opacity > 0.002; }
+}
+const handFisted = (src) => { if (!src || !src.hand) return false; const i = tp.findIndex((s) => s.src === src); return i >= 0 && gest[i] && gest[i].fist; };
+window.__gest = { G, gest, update: updateGestures, isFist, jointsOf, walkable: (x, z) => walkable(x, z), panels: () => panelSys.panels.map((p) => p.group.getWorldPosition(new THREE.Vector3()).toArray()) };
 function xrLocomotion(dt) {
   const session = renderer.xr.getSession(); if (!session) return;
   for (const src of session.inputSources) {
@@ -415,10 +459,9 @@ function xrLocomotion(dt) {
       camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); right.crossVectors(fwd, UP).normalize();
       rig.position.add(mv.copy(fwd).multiplyScalar(-ay).addScaledVector(right, ax).multiplyScalar(1.5 * sprintMul() * dt)); clampToWorld();
     } else if (src.handedness === 'right') {
-      if (Math.abs(ax) > 0.7 && snapReady) {
-        snapReady = false; const ang = -Math.sign(ax) * Math.PI / 6; camera.getWorldPosition(headP);
-        rig.position.sub(headP).applyAxisAngle(UP, ang).add(headP); rig.rotation.y += ang;
-      } else if (Math.abs(ax) < 0.3) snapReady = true;
+      if (!settings.turnDeg) { if (Math.abs(ax) > 0.15) turnAround(-ax * 1.6 * dt); }   // smooth: up to ~90°/s
+      else if (Math.abs(ax) > 0.7 && snapReady) { snapReady = false; turnAround(-Math.sign(ax) * settings.turnDeg * Math.PI / 180); }
+      else if (Math.abs(ax) < 0.3) snapReady = true;
     }
   }
 }
@@ -527,7 +570,7 @@ renderer.setAnimationLoop(() => {
   // headset's offset inside the play space: rooms/corridors were activated for the wrong spot and stayed dark.)
   camera.getWorldPosition(headP);
   zone = zoneOf(headP);
-  updateDoors(headP, dt); if (renderer.xr.isPresenting) { updateHandJoints(); updateTeleport(dt); } else { tpArc.visible = tpRing.visible = false; } applyVisibility(); updateBeds(headP);
+  updateDoors(headP, dt); if (renderer.xr.isPresenting) { updateHandJoints(); if (!G.manual) updateGestures(dt, nowMs / 1000); updateTeleport(dt); } else { tpArc.visible = tpRing.visible = false; } applyVisibility(); updateBeds(headP);
   advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt); sprintHud.visible = settings.sprint;
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;

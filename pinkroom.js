@@ -1,7 +1,7 @@
 // Room 1 v4: the pink chamber, redesigned. True pink palette, grand layered portal, crown chandelier with bead strands,
 // fan-vault ceiling ribs, arcade + rose-window walls, a balcony band, upgraded empty glowing pods, soft haze and bokeh.
 // Built on top of buildChamber (walls / floor / doorway / tunnel / screen / mirror) through its deluxe hooks.
-import { THREE, U, OPT, f3, R, H, TR, TZ, LOW, dummy, mtx, instanced, glowSprite, ringCurves } from './shared.js?v=17';
+import { THREE, U, OPT, f3, R, H, TR, TZ, LOW, dummy, mtx, instanced, glowSprite, ringCurves } from './shared.js?v=18';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;           // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI, BAYS = 28, BAYW = (2 * PI * R) / BAYS;

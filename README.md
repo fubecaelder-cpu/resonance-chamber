@@ -62,3 +62,9 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 - **Hand tracking:** your hands show up as small joint spheres. With the **right hand**, point at the floor: a dotted arc and a ring show where you'll land. Pinch and release to teleport (short fade). You can only land on walkable floor: the ring turns red elsewhere. With the **left hand**, pinch and hold to glide the way you're looking (sprint doubles it). To use the panels, point a hand at a button and pinch, or poke it with your index fingertip.
 - **Controllers:** they work as before (left stick moves, right stick snap-turns, stick click toggles sprint). New: aim either controller at the floor and press and release the trigger to teleport.
 - **Height:** the site uses the headset's floor-level ("local-floor") tracking, and falls back to plain "local" tracking plus 1.6 m if the headset doesn't offer it. CHAMBER CONTROLS has a **PLAYER HEIGHT** row (down/up in 0.1 m steps from −0.5 to +1.0 m, plus reset), saved on the device.
+
+## v17
+
+- **Thumb-swipe snap turn (hands):** make a loose fist with either hand and slide your thumb tip along the side of your index finger, toward the way you want to turn. Each swipe is one snap turn, with a brief dim as a cue. Pinches from a fisted hand are ignored, so this never teleports or glides you.
+- **TURN row** on CHAMBER CONTROLS: SNAP 15°, 30° or 45°, or SMOOTH. The right stick and the thumb swipe use it (in SMOOTH mode the swipe turns 30°). Saved on the device.
+- Teleport can no longer land inside a control panel.

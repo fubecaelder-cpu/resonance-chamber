@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=17';
+import { THREE, canvasTex } from './shared.js?v=18';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -9,12 +9,13 @@ export const BRIGHTS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150
 const KEY = 'resonanceChamber.settings.v1';
 export const THETA_VOLS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100];
 export const HEIGHT_LIM = [-0.5, 1.0];
-export const settings = { speedI: 3, brightI: 7, sprint: false, theta: true, thetaI: 5, height: 0, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
+export const TURNS = ['15°', '30°', '45°', 'SMOOTH'];
+export const settings = { speedI: 3, brightI: 7, sprint: false, theta: true, thetaI: 5, height: 0, turnI: 1, get turnDeg() { return [15, 30, 45, 0][this.turnI]; }, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
 try {
   const s = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); if (typeof s.sprint === 'boolean') settings.sprint = s.sprint; if (typeof s.theta === 'boolean') settings.theta = s.theta; if (THETA_VOLS.includes(s.thetaVol)) settings.thetaI = THETA_VOLS.indexOf(s.thetaVol); if (typeof s.height === 'number' && isFinite(s.height)) settings.height = Math.min(HEIGHT_LIM[1], Math.max(HEIGHT_LIM[0], Math.round(s.height * 10) / 10)); }
+  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); if (typeof s.sprint === 'boolean') settings.sprint = s.sprint; if (typeof s.theta === 'boolean') settings.theta = s.theta; if (THETA_VOLS.includes(s.thetaVol)) settings.thetaI = THETA_VOLS.indexOf(s.thetaVol); if (TURNS.includes(s.turn)) settings.turnI = TURNS.indexOf(s.turn); if (typeof s.height === 'number' && isFinite(s.height)) settings.height = Math.min(HEIGHT_LIM[1], Math.max(HEIGHT_LIM[0], Math.round(s.height * 10) / 10)); }
 } catch { /* storage unavailable */ }
-function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI], sprint: settings.sprint, theta: settings.theta, thetaVol: THETA_VOLS[settings.thetaI], height: settings.height })); } catch { /* ignore */ } }
+function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI], sprint: settings.sprint, theta: settings.theta, thetaVol: THETA_VOLS[settings.thetaI], height: settings.height, turn: TURNS[settings.turnI] })); } catch { /* ignore */ } }
 
 // ---------- styles ----------
 const STYLES = {
@@ -27,12 +28,13 @@ const STYLES = {
 };
 
 // board layout (metres, board-local: x right, y up)
-const BW = 0.66, BH = 0.8, BR = 0.052, BOY = -0.14;   // v16: PLAYER HEIGHT row added   // v14: taller board (THETA row); content coords unchanged, board offset by BOY
+const BW = 0.66, BH = 0.94, BR = 0.052, BOY = -0.21;   // v17: TURN row added   // v16: PLAYER HEIGHT row added   // v14: taller board (THETA row); content coords unchanged, board offset by BOY
 const BTN = [
   { id: 'speed-', x: -0.21, y: 0.075, glyph: 0 }, { id: 'speed+', x: 0.21, y: 0.075, glyph: 1 },
   { id: 'bright-', x: -0.21, y: -0.085, glyph: 0 }, { id: 'bright+', x: 0.21, y: -0.085, glyph: 1 },
   { id: 'reset', x: 0.0, y: -0.19, glyph: 2, sx: 0.78 },
   { id: 'sprint', x: -0.21, y: -0.19, glyph: 13, sx: 0.78 },
+  { id: 'turn-', x: -0.24, y: -0.595, glyph: 0, sx: 0.78 }, { id: 'turn+', x: 0.24, y: -0.595, glyph: 1, sx: 0.78 },   // v17: snap angle / smooth turn
   { id: 'height-', x: -0.24, y: -0.46, glyph: 12, sx: 0.78 }, { id: 'height+', x: 0.07, y: -0.46, glyph: 11, sx: 0.78 }, { id: 'height0', x: 0.24, y: -0.46, glyph: 2, sx: 0.7 },   // v16: player height
   { id: 'theta', x: -0.24, y: -0.325, glyph: 9, sx: 0.78 }, { id: 'theta-', x: 0.07, y: -0.325, glyph: 0, sx: 0.78 }, { id: 'theta+', x: 0.24, y: -0.325, glyph: 1, sx: 0.78 },   // v14: 6 Hz theta binaural   // v14: sprint toggle (2x smooth locomotion)
 ];
@@ -183,6 +185,9 @@ function drawBoard(ct, st) {
   g.fillStyle = st.edge; g.fillRect(W * 0.12, Y(-0.383), W * 0.76, 3);
   g.textAlign = 'center'; g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('PLAYER HEIGHT · RESET', W / 2, Y(-0.407));
   g.fillStyle = st.value; g.font = '800 36px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(`${settings.height > 0.001 ? '+' : settings.height < -0.001 ? '−' : ''}${Math.abs(settings.height).toFixed(1)} m`, X(-0.085), Y(-0.46));
+  g.fillStyle = st.edge; g.fillRect(W * 0.12, Y(-0.518), W * 0.76, 3);
+  g.textAlign = 'center'; g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('TURN · STICK / THUMB SWIPE', W / 2, Y(-0.542));
+  g.fillStyle = st.value; g.font = '800 40px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(settings.turnDeg ? `SNAP ${TURNS[settings.turnI]}` : 'SMOOTH', W / 2, Y(-0.595));
   ticks(SPEEDS.length, settings.speedI, 0.075); ticks(BRIGHTS.length, settings.brightI, -0.085);
   ct.t.needsUpdate = true;
 }
@@ -323,6 +328,8 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     else if (id === 'height-') settings.height = Math.max(HEIGHT_LIM[0], Math.round((settings.height - 0.1) * 10) / 10);
     else if (id === 'height+') settings.height = Math.min(HEIGHT_LIM[1], Math.round((settings.height + 0.1) * 10) / 10);
     else if (id === 'height0') settings.height = 0;
+    else if (id === 'turn-') settings.turnI = (settings.turnI + TURNS.length - 1) % TURNS.length;
+    else if (id === 'turn+') settings.turnI = (settings.turnI + 1) % TURNS.length;
     else if (id === 'theta-') { settings.thetaI = Math.max(0, settings.thetaI - 1); settings.theta = true; }
     else if (id === 'theta+') { settings.thetaI = Math.min(THETA_VOLS.length - 1, settings.thetaI + 1); settings.theta = true; }
     saveSettings(); redraw(); onChange(settings);
