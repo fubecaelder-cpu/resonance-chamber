@@ -232,14 +232,14 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     if (!r.ok) throw new Error(driveError(r.status, body, what));
     return body;
   }
-  const VQ = (folder) => `'${folder}' in parents and trashed = false and (mimeType contains 'video/' or mimeType = 'application/mp4' or name contains '.mp4' or name contains '.webm' or name contains '.m4v' or name contains '.mov')`;
+  const VQ = (folder) => `'${folder}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and (mimeType contains 'video/' or mimeType = 'application/mp4' or name contains '.mp4' or name contains '.webm' or name contains '.m4v' or name contains '.mov')`;
   async function fetchList(folder) {
     const k = encodeURIComponent(drive.key); let token = '', files = [];
     do {   // Drive labels some uploads application/mp4 or octet-stream, so match by name as well as by type
       const body = await getJSON(`${API}/drive/v3/files?q=${encodeURIComponent(VQ(folder))}&fields=${encodeURIComponent('nextPageToken,files(id,name,mimeType,size)')}&orderBy=name_natural&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${k}${token ? '&pageToken=' + encodeURIComponent(token) : ''}`, 'Folder');
       files = files.concat(body.files || []); token = body.nextPageToken || '';
     } while (token && files.length < 5000);
-    return files.filter((f) => !/\.(mkv|avi|wmv|flv)$/i.test(f.name));
+    return files.filter((f) => f.mimeType !== 'application/vnd.google-apps.folder' && !/\.(mkv|avi|wmv|flv)$/i.test(f.name));
   }
   function setItems(i, items) {
     const d = drv[i], cur = d.items[d.idx];

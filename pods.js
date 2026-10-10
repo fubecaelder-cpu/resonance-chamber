@@ -18,12 +18,12 @@ function holoMat(tint) {
   const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); blank.needsUpdate = true;
   return new THREE.ShaderMaterial({
     uniforms: { uA: { value: blank }, uB: { value: blank }, uCA: { value: new THREE.Vector4(0, 0, 1, 1) }, uCB: { value: new THREE.Vector4(0, 0, 1, 1) },
-      uMix: { value: 0 }, uOn: { value: 0 }, uSeed: { value: Math.random() }, uTint: { value: new THREE.Color(tint) }, uTime: U.uTime, uBright: U.uBright, uBlank: { value: blank } },
+      uMix: { value: 0 }, uOn: { value: 0 }, uSeed: { value: Math.random() }, uTint: { value: new THREE.Color(tint) }, uTime: U.uTime, uBlank: { value: blank } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide,
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: /* glsl */`
       uniform sampler2D uA; uniform sampler2D uB; uniform vec4 uCA; uniform vec4 uCB; uniform float uMix; uniform float uOn; uniform float uSeed;
-      uniform vec3 uTint; uniform float uTime; uniform float uBright; varying vec2 vUv;
+      uniform vec3 uTint; uniform float uTime; varying vec2 vUv;
       void main(){
         vec2 uv = vUv;
         float wob = sin(uv.y * 90.0 + uTime * 6.0 + uSeed * 30.0) * 0.0015;
@@ -37,7 +37,7 @@ function holoMat(tint) {
         float frame = (1.0 - smoothstep(0.0, 0.025, min(min(uv.x, 1.0 - uv.x) * 0.5, min(uv.y, 1.0 - uv.y) * 0.25))) * 0.5;
         float flick = 0.93 + 0.07 * sin(uTime * 13.0 + uSeed * 40.0);
         vec3 col = (c * 1.05 + uTint * 0.05) * scan * edge * flick + uTint * (frame + line * 0.9);
-        gl_FragColor = vec4(col * uOn * (0.6 + 0.4 * uBright), 1.0);
+        gl_FragColor = vec4(col * uOn, 1.0);   // the global brightness multiplier is injected by main.js
       }`,
   });
 }
@@ -135,7 +135,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
     const vOk = videosInUse(r) - (p.cur && p.cur.video ? 1 : 0) < MAXV;
     const ok = r.items.filter((f) => !r.bad.has(f.id) && (vOk || !f.video));
     let pool = ok.filter((f) => !shown.has(f.id));
-    if (!pool.length) pool = ok.filter((f) => !p.cur || f.id !== p.cur.id);
+    if (!pool.length) pool = ok.filter((f) => !f.video && (!p.cur || f.id !== p.cur.id));   // repeat an image rather than a video
     if (!pool.length) return null;
     // favour items that have not been shown for the longest time, with some randomness
     pool.sort((a, b) => (a.seen || 0) - (b.seen || 0)); const top = pool.slice(0, Math.max(1, Math.ceil(pool.length / 2)));
