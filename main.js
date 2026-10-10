@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=15';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=16';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=15';
-import { pinkRoomCfg } from './pinkroom.js?v=15';
-import { buildOpRoom } from './oproom.js?v=15';
-import { buildCorridor } from './corridor.js?v=15';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=15';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=15';
-import { createScreens } from './screens.js?v=15';
-import { createPods } from './pods.js?v=15';
+import { buildChamber } from './chamber.js?v=16';
+import { pinkRoomCfg } from './pinkroom.js?v=16';
+import { buildOpRoom } from './oproom.js?v=16';
+import { buildCorridor } from './corridor.js?v=16';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=16';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=16';
+import { createScreens } from './screens.js?v=16';
+import { createPods } from './pods.js?v=16';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -344,7 +344,6 @@ function toggleSprint(src) {
 }
 function xrLocomotion(dt) {
   const session = renderer.xr.getSession(); if (!session) return;
-  const xrCam = renderer.xr.getCamera();
   for (const src of session.inputSources) {
     const gp = src.gamepad; if (!gp || gp.axes.length < 2) continue;
     const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0], ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
@@ -352,11 +351,11 @@ function xrLocomotion(dt) {
     if (click && !was) toggleSprint(src);   // thumbstick click (left or right) toggles sprint
     if (src.handedness === 'left') {
       if (Math.abs(ax) < 0.15 && Math.abs(ay) < 0.15) continue;
-      xrCam.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); right.crossVectors(fwd, UP).normalize();
+      camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); right.crossVectors(fwd, UP).normalize();
       rig.position.add(mv.copy(fwd).multiplyScalar(-ay).addScaledVector(right, ax).multiplyScalar(1.5 * sprintMul() * dt)); clampToWorld();
     } else if (src.handedness === 'right') {
       if (Math.abs(ax) > 0.7 && snapReady) {
-        snapReady = false; const ang = -Math.sign(ax) * Math.PI / 6; xrCam.getWorldPosition(headP);
+        snapReady = false; const ang = -Math.sign(ax) * Math.PI / 6; camera.getWorldPosition(headP);
         rig.position.sub(headP).applyAxisAngle(UP, ang).add(headP); rig.rotation.y += ang;
       } else if (Math.abs(ax) < 0.3) snapReady = true;
     }
@@ -408,6 +407,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
+window.__isXR = () => renderer.xr.isPresenting; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
@@ -460,8 +460,10 @@ renderer.setAnimationLoop(() => {
   const nowMs = performance.now(); const dt = Math.min((nowMs - prev) / 1000, 0.1); prev = nowMs;
   if (renderer.xr.isPresenting) { xrLocomotion(dt); perf.sample(dt); } else desktopMove(dt);
   camera.updateMatrixWorld(true);
-  const xrCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-  xrCam.getWorldPosition(headP);
+  // v15: the head is the user camera under the rig. In XR three.js copies the headset pose onto it each frame, so its
+  // world position includes rig movement. (renderer.xr.getCamera() has no parent, so its getWorldPosition() was the
+  // headset's offset inside the play space: rooms/corridors were activated for the wrong spot and stayed dark.)
+  camera.getWorldPosition(headP);
   zone = zoneOf(headP);
   updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
   advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt); sprintHud.visible = settings.sprint;
@@ -476,7 +478,7 @@ renderer.setAnimationLoop(() => {
   else { renderer.getDrawingBufferSize(szV); U.uPx.value = szV.y / 2; }
   if (A.ctx) {
     while ((A.next * BEAT - t) / settings.speed < 1.8) scheduleBeat(A.next++);
-    xrCam.updateMatrixWorld(); const L = A.ctx.listener; const e = xrCam.matrixWorld.elements;
+    const L = A.ctx.listener; const e = camera.matrixWorld.elements;
     setParam(L, 'position', e[12], e[13], e[14]);
     fwdA.set(-e[8], -e[9], -e[10]).normalize(); upA.set(e[4], e[5], e[6]).normalize();
     if (L.forwardX) { L.forwardX.value = fwdA.x; L.forwardY.value = fwdA.y; L.forwardZ.value = fwdA.z; L.upX.value = upA.x; L.upY.value = upA.y; L.upZ.value = upA.z; }

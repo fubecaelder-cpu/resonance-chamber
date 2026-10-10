@@ -3,7 +3,7 @@
 // and tilts it. v10: every room has the same monitor and the same clear "monitor bay" in front of its focal wall
 // (decor was moved out of it), so the limits, ranges and steps are identical in all three rooms. The screen can go all the
 // way down until its bottom edge rests on the floor. Settings are per room and saved in localStorage.
-import { THREE } from './shared.js?v=15';
+import { THREE } from './shared.js?v=16';
 
 const KEY = 'resonanceChamber.screens.v1';
 export const DEF = { dy: 0, dz: 0, s: 1, t: 0 };

@@ -3,7 +3,7 @@
 // Each pod shows a different item and crossfades to a new one every 8-12 s. Quest-friendly: images are downscaled to small
 // canvases, GIFs are decoded to a few small frames, and at most two muted video pods play at once (only in the room you are
 // in). If nothing loads the panels stay dark and the pods keep their original empty glow.
-import { THREE, U, LOW } from './shared.js?v=15';
+import { THREE, U, LOW } from './shared.js?v=16';
 
 const KEY = 'resonanceChamber.pods.v1';
 const MAXV = LOW ? 1 : 2;
