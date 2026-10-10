@@ -298,7 +298,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     }, () => {
       d.fails++;
       console.warn('[drive] could not play', it.name);
-      if (d.fails >= d.items.length) { d.state = 'error'; d.msg = 'None of the videos would play: check sharing, the API key, and that they are MP4 (H.264) or WebM'; d.on = false; changed(); return; }
+      if (d.fails >= d.items.length) { d.state = 'error'; d.msg = 'Videos would not load (Drive may be briefly limiting downloads, or files are not MP4 H.264 / WebM): retrying every minute'; d.on = false; changed(); return; }
       drvStart(i, d.idx + 1);
     });
   }

@@ -57,11 +57,24 @@ export function createPods({ rooms, media, onChange = () => {} }) {
       mesh.position.set(0, S.y, sp.kind === 'slab' ? S.z : 0); mesh.renderOrder = 26; mesh.visible = false; g.add(mesh); rm.root.add(g);
       return { k, mesh, m, kind: sp.kind, aspect: sp.kind === 'slab' ? S.w / S.h : (S.r * S.arc) / S.h, cur: null, nxt: null, mix: 0, next: 0, loading: false };
     });
-    return { ri, pods, kind: (rm.spots && rm.spots[0] && rm.spots[0].kind) || 'tube', items: [], src: '', status: 'idle', listed: -1e9, cache: new Map(), bad: new Set(), active: false, msg: '' };
+    return { ri, pods, kind: (rm.spots && rm.spots[0] && rm.spots[0].kind) || 'tube', items: [], src: '', status: 'idle', listed: -1e9, cache: new Map(), bad: new Map(), fails: new Map(), active: false, msg: '' };
   });
   const D = media.drive, API = media.driveAPI;
   const url = (id) => `${API}/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true&key=${encodeURIComponent(D.key)}`;
   async function getJSON(u) { const r = await fetch(u, { credentials: 'omit' }); const b = await r.json().catch(() => null); if (!r.ok) throw new Error((b && b.error && b.error.message) || 'HTTP ' + r.status); return b; }
+  // v12: Google sometimes answers bursts of downloads with a temporary "automated traffic" page (no CORS headers, so the
+  // browser reports a CORS error). Downloads are therefore queued one at a time with a short gap, images are kept in the
+  // browser's Cache Storage so reloads don't download them again, and failures are retried later instead of dropped.
+  let qTail = Promise.resolve();
+  const queued = (fn) => { const p = qTail.then(fn, fn); qTail = p.then(() => new Promise((r) => setTimeout(r, 350)), () => new Promise((r) => setTimeout(r, 350))); return p; };
+  const CACHE = 'resonanceChamber.pods.img.v1';
+  async function getBlob(id) {
+    let c = null; try { c = await caches.open(CACHE); const hit = await c.match('https://pods.cache/' + id); if (hit) return await hit.blob(); } catch { c = null; }
+    const res = await queued(() => fetch(url(id), { credentials: 'omit' })); if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    if (c) { try { await c.put('https://pods.cache/' + id, new Response(blob)); } catch { /* storage full */ } }
+    return blob;
+  }
   const list = async (q) => { let tok = '', files = [];
     do { const b = await getJSON(`${API}/drive/v3/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent('nextPageToken,files(id,name,mimeType)')}&orderBy=name_natural&pageSize=500&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${encodeURIComponent(D.key)}${tok ? '&pageToken=' + encodeURIComponent(tok) : ''}`);
       files = files.concat(b.files || []); tok = b.nextPageToken || ''; } while (tok && files.length < 2000);
@@ -93,8 +106,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
   async function loadImage(r, it) {
     if (r.cache.has(it.id)) { const c = r.cache.get(it.id); c.used = performance.now(); return c; }
     const S = SHAPE[r.kind];
-    const res = await fetch(url(it.id), { credentials: 'omit' }); if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
+    const blob = await getBlob(it.id);
     const cv = document.createElement('canvas'); cv.width = S.tw; cv.height = S.th; const g = cv.getContext('2d');
     const draw = (src, w, h) => { const a = w / h, pa = S.tw / S.th; let sx = 0, sy = 0, sw = w, sh = h;
       if (a > pa) { sw = h * pa; sx = (w - sw) / 2; } else { sh = w / pa; sy = (h - sh) / 2; }
@@ -133,7 +145,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
   function pick(r, p) {
     const shown = new Set(r.pods.flatMap((q) => [q.cur && q.cur.id, q.nxt && q.nxt.id]).filter(Boolean));
     const vOk = videosInUse(r) - (p.cur && p.cur.video ? 1 : 0) < MAXV;
-    const ok = r.items.filter((f) => !r.bad.has(f.id) && (vOk || !f.video));
+    const tnow = performance.now(); const ok = r.items.filter((f) => !(r.bad.get(f.id) > tnow) && (vOk || !f.video));
     let pool = ok.filter((f) => !shown.has(f.id));
     if (!pool.length) pool = ok.filter((f) => !f.video && (!p.cur || f.id !== p.cur.id));   // repeat an image rather than a video
     if (!pool.length) return null;
@@ -146,12 +158,13 @@ export function createPods({ rooms, media, onChange = () => {} }) {
     p.loading = true; it.seen = performance.now();
     try {
       let slot;
-      if (it.video) { const vv = await loadVideo(it, p.aspect); slot = { id: it.id, video: true, tex: vv.tex, v: vv.v, crop: vv.crop }; }
+      if (it.video) { const vv = await queued(() => loadVideo(it, p.aspect)); slot = { id: it.id, video: true, tex: vv.tex, v: vv.v, crop: vv.crop }; }
       else { const e = await loadImage(r, it); slot = { id: it.id, video: false, tex: e.tex, entry: e, crop: new THREE.Vector4(0, 0, 1, 1) }; }
       if (!on || !r.active) { release(p, slot); p.loading = false; return; }
       p.nxt = slot; p.m.uniforms.uB.value = slot.tex; p.m.uniforms.uCB.value.copy(slot.crop); p.mix = 0; p.mesh.visible = true;
       if (!p.cur) { p.m.uniforms.uA.value = p.m.uniforms.uBlank.value; }
-    } catch (e) { r.bad.add(it.id); console.warn('[pods] skipped', it.name, e.message); p.next = performance.now() / 1000 + 1; }
+    } catch (e) { const n = (r.fails.get(it.id) || 0) + 1; r.fails.set(it.id, n); const wait = Math.min(300, 20 * 2 ** (n - 1));
+      r.bad.set(it.id, performance.now() + wait * 1000); console.warn('[pods] will retry', it.name, 'in', wait + 's:', e.message); p.next = performance.now() / 1000 + 2; }
     p.loading = false;
   }
   function setActive(r, act) {
