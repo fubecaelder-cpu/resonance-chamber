@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=13';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=14';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=13';
-import { pinkRoomCfg } from './pinkroom.js?v=13';
-import { buildOpRoom } from './oproom.js?v=13';
-import { buildCorridor } from './corridor.js?v=13';
-import { createPanels, settings } from './panels.js?v=13';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=13';
-import { createScreens } from './screens.js?v=13';
-import { createPods } from './pods.js?v=13';
+import { buildChamber } from './chamber.js?v=14';
+import { pinkRoomCfg } from './pinkroom.js?v=14';
+import { buildOpRoom } from './oproom.js?v=14';
+import { buildCorridor } from './corridor.js?v=14';
+import { createPanels, settings } from './panels.js?v=14';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=14';
+import { createScreens } from './screens.js?v=14';
+import { createPods } from './pods.js?v=14';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -319,16 +319,31 @@ renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0
 renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.6, 0); applyLook(); });
 const fwd = new THREE.Vector3(), right = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0), mv = new THREE.Vector3();
 let snapReady = true;
+// v14: sprint toggle (2x smooth locomotion). VR: click either thumbstick. Desktop: Shift toggles. Also the SPRINT panel button.
+const stickWas = new Map();
+const sprintHud = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(20,0,10,0.75)'; g.beginPath(); g.roundRect(4, 4, 248, 56, 20); g.fill(); g.strokeStyle = '#ff6eb4'; g.lineWidth = 4; g.stroke();
+  g.fillStyle = '#ffffff'; g.font = '800 34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('» SPRINT ON', 128, 33);
+  const t = new THREE.CanvasTexture(c); const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.04), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false }));
+  m.position.set(0, -0.2, -0.6); m.renderOrder = 999; m.visible = false; camera.add(m); return m; })();
+const sprintMul = () => (settings.sprint ? 2 : 1);
+function toggleSprint(src) {
+  panelSys.act('sprint');
+  const ha = src && src.gamepad && src.gamepad.hapticActuators && src.gamepad.hapticActuators[0];
+  if (ha) { try { ha.pulse ? ha.pulse(settings.sprint ? 0.6 : 0.3, settings.sprint ? 60 : 30) : ha.playEffect && ha.playEffect('dual-rumble', { duration: 50, strongMagnitude: 0.5, weakMagnitude: 0.5 }); } catch { /* no haptics */ } }
+}
 function xrLocomotion(dt) {
   const session = renderer.xr.getSession(); if (!session) return;
   const xrCam = renderer.xr.getCamera();
   for (const src of session.inputSources) {
     const gp = src.gamepad; if (!gp || gp.axes.length < 2) continue;
     const ax = gp.axes.length >= 4 ? gp.axes[2] : gp.axes[0], ay = gp.axes.length >= 4 ? gp.axes[3] : gp.axes[1];
+    const click = !!(gp.buttons[3] && gp.buttons[3].pressed), was = stickWas.get(src) || false; stickWas.set(src, click);
+    if (click && !was) toggleSprint(src);   // thumbstick click (left or right) toggles sprint
     if (src.handedness === 'left') {
       if (Math.abs(ax) < 0.15 && Math.abs(ay) < 0.15) continue;
       xrCam.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); right.crossVectors(fwd, UP).normalize();
-      rig.position.add(mv.copy(fwd).multiplyScalar(-ay).addScaledVector(right, ax).multiplyScalar(1.5 * dt)); clampToWorld();
+      rig.position.add(mv.copy(fwd).multiplyScalar(-ay).addScaledVector(right, ax).multiplyScalar(1.5 * sprintMul() * dt)); clampToWorld();
     } else if (src.handedness === 'right') {
       if (Math.abs(ax) > 0.7 && snapReady) {
         snapReady = false; const ang = -Math.sign(ax) * Math.PI / 6; xrCam.getWorldPosition(headP);
@@ -362,14 +377,14 @@ const el = renderer.domElement;
 el.addEventListener('pointerdown', (e) => { if (panelSys.mouseDown(e)) return; dragging = true; lx = e.clientX; ly = e.clientY; el.setPointerCapture(e.pointerId); });
 el.addEventListener('pointermove', (e) => { if (!dragging) { panelSys.mouseMove(e); return; } yaw += (e.clientX - lx) * 0.004; pitch = Math.max(-1.3, Math.min(1.3, pitch + (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; applyLook(); });
 el.addEventListener('pointerup', () => { dragging = false; });
-window.addEventListener('keydown', (e) => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; keys.add(e.code); }); window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('keydown', (e) => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; keys.add(e.code); if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) toggleSprint(null); }); window.addEventListener('keyup', (e) => keys.delete(e.code));
 function desktopMove(dt) {
   let f = 0, s = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) f++; if (keys.has('KeyS') || keys.has('ArrowDown')) f--;
   if (keys.has('KeyD') || keys.has('ArrowRight')) s++; if (keys.has('KeyA') || keys.has('ArrowLeft')) s--;
   if (!f && !s) return;
   fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)); right.set(Math.cos(yaw), 0, -Math.sin(yaw));
-  rig.position.addScaledVector(fwd, f * 2.2 * dt).addScaledVector(right, s * 2.2 * dt); clampToWorld();
+  rig.position.addScaledVector(fwd, f * 2.2 * sprintMul() * dt).addScaledVector(right, s * 2.2 * sprintMul() * dt); clampToWorld();
 }
 // start room option (?room=2 / ?room=3), handy for previews
 { const r = +(Q.get('room') || 1) - 1; const i = r >= 0 && r < 3 ? r : 0; const [x, z] = toWorld(i, ...SPAWN); rig.position.set(x, 0, z); yaw = RY[i]; applyLook(); }
@@ -439,7 +454,7 @@ renderer.setAnimationLoop(() => {
   xrCam.getWorldPosition(headP);
   zone = zoneOf(headP);
   updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
-  advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt);
+  advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt); sprintHud.visible = settings.sprint;
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;
   const amp = (0.55 + 0.45 * I) * (surge ? 1.3 : 1);

@@ -1,18 +1,18 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=13';
+import { THREE, canvasTex } from './shared.js?v=14';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const BRIGHTS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
 const KEY = 'resonanceChamber.settings.v1';
-export const settings = { speedI: 3, brightI: 7, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
+export const settings = { speedI: 3, brightI: 7, sprint: false, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
 try {
   const s = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); }
+  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); if (typeof s.sprint === 'boolean') settings.sprint = s.sprint; }
 } catch { /* storage unavailable */ }
-function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI] })); } catch { /* ignore */ } }
+function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI], sprint: settings.sprint })); } catch { /* ignore */ } }
 
 // ---------- styles ----------
 const STYLES = {
@@ -30,6 +30,7 @@ const BTN = [
   { id: 'speed-', x: -0.21, y: 0.075, glyph: 0 }, { id: 'speed+', x: 0.21, y: 0.075, glyph: 1 },
   { id: 'bright-', x: -0.21, y: -0.085, glyph: 0 }, { id: 'bright+', x: 0.21, y: -0.085, glyph: 1 },
   { id: 'reset', x: 0.0, y: -0.19, glyph: 2, sx: 0.78 },
+  { id: 'sprint', x: -0.21, y: -0.19, glyph: 13, sx: 0.78 },   // v14: sprint toggle (2x smooth locomotion)
 ];
 // media wing (v6): hinged to the right of the main board, angled in towards you
 const WW = 0.5, WH = 0.72, WOY = -0.08;   // v11: taller (PODS row at the bottom); content coords unchanged, board offset by WOY
@@ -168,7 +169,7 @@ function drawBoard(ct, st) {
   }
   g.fillStyle = st.label; g.font = '600 28px system-ui, Segoe UI, Roboto, sans-serif';
   g.textAlign = 'left'; g.fillText('RESET', X(0.105), Y(-0.19));
-  g.textAlign = 'right'; g.fillText('1× · 100%', X(-0.105), Y(-0.19));
+  g.textAlign = 'left'; g.fillStyle = settings.sprint ? st.value : st.label; g.fillText(settings.sprint ? 'SPRINT ON' : 'SPRINT OFF', X(-0.165), Y(-0.19));
   // range ticks under each readout
   const ticks = (n, i, y) => { for (let k = 0; k < n; k++) { const x = X(-0.1 + (0.2 * k) / (n - 1)); g.fillStyle = k <= i ? st.edge : 'rgba(255,255,255,0.18)'; g.fillRect(x - 5, Y(y - 0.05) - 5, 10, 10); } };
   ticks(SPEEDS.length, settings.speedI, 0.075); ticks(BRIGHTS.length, settings.brightI, -0.085);
@@ -282,7 +283,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     p.buttons.forEach((b) => { b.userData.btn.room = i; }); return p; });
   const redrawScreen = (i) => { if (screens) drawScreenWing(panels[i].sct, panels[i].st, screens.view(i)); };
   panels.forEach((_, i) => redrawScreen(i));
-  const redraw = () => panels.forEach((p) => drawBoard(p.ct, p.st));
+  const redraw = () => panels.forEach((p) => { drawBoard(p.ct, p.st); p.buttons[BTN.findIndex((b) => b.id === 'sprint')].material.uniforms.uOn.value = settings.sprint ? 1 : 0; });
   const redrawMedia = () => { const ms = media.view(); panels.forEach((p, i) => {
     const pv = pods ? pods.view(i) : null; drawWing(p.wct, p.st, ms, pv);
     p.wbuttons[WBTN.findIndex((b) => b.id === 'p-toggle')].material.uniforms.uOn.value = pv && pv.on ? 1 : 0;
@@ -306,6 +307,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     else if (id === 'bright-') settings.brightI = Math.max(0, settings.brightI - 1);
     else if (id === 'bright+') settings.brightI = Math.min(BRIGHTS.length - 1, settings.brightI + 1);
     else if (id === 'reset') { settings.speedI = 3; settings.brightI = 7; }
+    else if (id === 'sprint') settings.sprint = !settings.sprint;
     saveSettings(); redraw(); onChange(settings);
   }
   function press(btn, src) {

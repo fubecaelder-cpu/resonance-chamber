@@ -51,3 +51,7 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 - **Floor reflection fix:** the mirrored copy of each room now only draws what is above the floor, so nothing that dips below the floor (portal rings, tunnel base) can flip up and show above the floor line. Applied in every room and corridor.
 - **Pod media:** every pod (pink and crimson glass tubes, op-art monoliths) shows a glowing holographic panel that shuffles images (JPG, PNG, WEBP, animated GIF) and videos from Google Drive. It uses the room folder's `Pods` subfolder if there is one, otherwise the room folder itself. Each pod shows a different item and crossfades every 8–12 s. Images are downscaled to small textures, and at most 2 muted video pods play at once, only in the room you are in. If nothing loads, the pods keep their plain glow. Folders are checked once a minute.
 - **Panel:** MEDIA wing has **PODS ON/OFF** and **SHUFFLE**. SCREEN wing has an **OPACITY** row (100% down to 10% in 10% steps), saved per room and the same in every room. RESET goes back to 100%.
+
+## v14
+
+- **Sprint toggle (2× smooth-locomotion speed):** in VR, click either thumbstick. On desktop, press Shift (it toggles, you don't hold it). There is also a SPRINT button on every CHAMBER CONTROLS panel. You get a short haptic pulse, and a small "» SPRINT ON" tag sits low in your view while sprint is on. The setting is saved on the device.
