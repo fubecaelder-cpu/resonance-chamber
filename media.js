@@ -239,7 +239,8 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       const body = await getJSON(`${API}/drive/v3/files?q=${encodeURIComponent(VQ(folder))}&fields=${encodeURIComponent('nextPageToken,files(id,name,mimeType,size)')}&orderBy=name_natural&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${k}${token ? '&pageToken=' + encodeURIComponent(token) : ''}`, 'Folder');
       files = files.concat(body.files || []); token = body.nextPageToken || '';
     } while (token && files.length < 5000);
-    return files.filter((f) => f.mimeType !== 'application/vnd.google-apps.folder' && !/\.(mkv|avi|wmv|flv)$/i.test(f.name));
+    // v12: Drive's name search is fuzzy (a text file called "Hypnosis review" matched), so keep only real video types / extensions
+    return files.filter((f) => (/^video\//.test(f.mimeType) || f.mimeType === 'application/mp4' || /\.(mp4|m4v|webm|mov)$/i.test(f.name)) && !/\.(mkv|avi|wmv|flv)$/i.test(f.name));
   }
   function setItems(i, items) {
     const d = drv[i], cur = d.items[d.idx];
