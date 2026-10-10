@@ -56,3 +56,9 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 
 - **Sprint toggle (2× smooth-locomotion speed):** in VR, click either thumbstick. On desktop, press Shift (it toggles, you don't hold it). There is also a SPRINT button on every CHAMBER CONTROLS panel. You get a short haptic pulse, and a small "» SPRINT ON" tag sits low in your view while sprint is on. The setting is saved on the device.
 - **Theta binaural beat:** a constant 6 Hz theta beat (200 Hz sine in the left ear, 206 Hz in the right) plays softly under everything, the same in every room and corridor. It starts when sound is turned on, and you need headphones to hear the beat. It runs straight to the stereo output and is never mixed to mono. CHAMBER CONTROLS has a THETA row: on/off plus volume − / + (5–100%, default 30%). The setting is saved on the device.
+
+## v16
+
+- **Hand tracking:** your hands show up as small joint spheres. With the **right hand**, point at the floor: a dotted arc and a ring show where you'll land. Pinch and release to teleport (short fade). You can only land on walkable floor: the ring turns red elsewhere. With the **left hand**, pinch and hold to glide the way you're looking (sprint doubles it). To use the panels, point a hand at a button and pinch, or poke it with your index fingertip.
+- **Controllers:** they work as before (left stick moves, right stick snap-turns, stick click toggles sprint). New: aim either controller at the floor and press and release the trigger to teleport.
+- **Height:** the site uses the headset's floor-level ("local-floor") tracking, and falls back to plain "local" tracking plus 1.6 m if the headset doesn't offer it. CHAMBER CONTROLS has a **PLAYER HEIGHT** row (down/up in 0.1 m steps from −0.5 to +1.0 m, plus reset), saved on the device.

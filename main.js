@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=16';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=17';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=16';
-import { pinkRoomCfg } from './pinkroom.js?v=16';
-import { buildOpRoom } from './oproom.js?v=16';
-import { buildCorridor } from './corridor.js?v=16';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=16';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=16';
-import { createScreens } from './screens.js?v=16';
-import { createPods } from './pods.js?v=16';
+import { buildChamber } from './chamber.js?v=17';
+import { pinkRoomCfg } from './pinkroom.js?v=17';
+import { buildOpRoom } from './oproom.js?v=17';
+import { buildCorridor } from './corridor.js?v=17';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=17';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=17';
+import { createScreens } from './screens.js?v=17';
+import { createPods } from './pods.js?v=17';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -323,7 +323,16 @@ function applySettings() {
 function intensityAt(t) { const c = t % 210; return 0.4 + 0.6 * THREE.MathUtils.smoothstep(c, 0, 120) * (1 - THREE.MathUtils.smoothstep(c, 190, 210)); }
 
 // ---------- VR + locomotion ----------
-const vrButton = VRButton.createButton(renderer); document.body.appendChild(vrButton);
+// v16: local-floor is preferred; if a headset can't give it, fall back to 'local' and lift the rig 1.6 m
+let floorBase = 0;
+if (window.XRSession && XRSession.prototype.requestReferenceSpace) {
+  const orig = XRSession.prototype.requestReferenceSpace;
+  XRSession.prototype.requestReferenceSpace = function (type) {
+    if (type !== 'local-floor') return orig.call(this, type);
+    return orig.call(this, type).then((s) => { floorBase = 0; return s; }, () => { console.warn('[xr] local-floor unavailable: using local + 1.6 m'); floorBase = 1.6; return orig.call(this, 'local'); });
+  };
+}
+const vrButton = VRButton.createButton(renderer, { optionalFeatures: ['hand-tracking'] }); document.body.appendChild(vrButton);
 vrButton.addEventListener('click', startAudio);
 renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); perf.reset(); });
 renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.6, 0); applyLook(); });
@@ -341,6 +350,58 @@ function toggleSprint(src) {
   panelSys.act('sprint');
   const ha = src && src.gamepad && src.gamepad.hapticActuators && src.gamepad.hapticActuators[0];
   if (ha) { try { ha.pulse ? ha.pulse(settings.sprint ? 0.6 : 0.3, settings.sprint ? 60 : 30) : ha.playEffect && ha.playEffect('dual-rumble', { duration: 50, strongMagnitude: 0.5, weakMagnitude: 0.5 }); } catch { /* no haptics */ } }
+}
+// ---------- v16: hands + teleport ----------
+// Hand joints are drawn as small spheres. Right hand (or either controller's trigger): point at the floor, a dotted arc and
+// ring show the spot, pinch/trigger and release to teleport there (short fade). Left hand: pinch and hold to glide in the
+// direction you're looking. Pointing at a panel presses its buttons instead (pinch or trigger), and fingertips poke them.
+const jointGeo = new THREE.SphereGeometry(0.008, 8, 6), jointMat = new THREE.MeshBasicMaterial({ color: 0xffc0db });
+const hands = [0, 1].map((i) => renderer.xr.getHand(i));
+function updateHandJoints() {
+  for (const h of hands) for (const [name, j] of Object.entries(h.joints || {})) if (!j.userData.ball) {
+    const b = new THREE.Mesh(jointGeo, jointMat); if (/tip/.test(name)) b.scale.setScalar(1.3); j.add(b); j.userData.ball = b; }
+}
+const tpRing = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+tpRing.rotation.x = -Math.PI / 2; tpRing.visible = false; tpRing.renderOrder = 998; scene.add(tpRing);
+const ARCN = 32, arcGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARCN * 3), 3));
+const tpArc = new THREE.Points(arcGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.025, transparent: true, opacity: 0.8, depthWrite: false })); tpArc.frustumCulled = false; tpArc.visible = false; scene.add(tpArc);
+const tp = [0, 1].map((i) => { const c = renderer.xr.getController(i); const s = { c, i, src: null, aiming: false, held: false, target: null };
+  c.addEventListener('connected', (e) => { s.src = e.data; }); c.addEventListener('disconnected', () => { s.src = null; s.aiming = s.held = false; });
+  c.addEventListener('selectstart', () => { s.held = true; s.aiming = canTeleport(s) && !panelSys.hovering(i); });
+  c.addEventListener('selectend', () => { s.held = false; if (s.aiming && s.target) teleportTo(s.target); s.aiming = false; });
+  return s; });
+const canTeleport = (s) => s.src && (!s.src.hand || s.src.handedness === 'right');
+function walkable(x, z) { return REGIONS.some((rg) => { const [nx, nz] = nearestIn(rg, x, z); return Math.hypot(nx - x, nz - z) < 1e-6; }); }
+let tpFade = 0, tpPending = null;
+function teleportTo(p) { tpPending = p.clone(); tpFade = 0.0001; }
+const ao = new THREE.Vector3(), ad = new THREE.Vector3(), aq = new THREE.Quaternion(), ap = new THREE.Vector3(), an = new THREE.Vector3();
+function updateTeleport(dt) {
+  let shown = null;
+  for (const s of tp) {
+    s.target = null;
+    if (!s.aiming) continue;
+    s.c.getWorldPosition(ao); s.c.getWorldQuaternion(aq); ad.set(0, 0, -1).applyQuaternion(aq);
+    const pos = arcGeo.attributes.position.array; ap.copy(ao); an.copy(ad).multiplyScalar(7); let hit = null, k = 0;
+    for (; k < ARCN; k++) { pos[k * 3] = ap.x; pos[k * 3 + 1] = ap.y; pos[k * 3 + 2] = ap.z;
+      const nx = ap.x + an.x * 0.06, ny = ap.y + an.y * 0.06, nz = ap.z + an.z * 0.06; an.y -= 9.8 * 0.06;
+      if (ny <= 0) { const f = ap.y / (ap.y - ny); hit = new THREE.Vector3(ap.x + (nx - ap.x) * f, 0, ap.z + (nz - ap.z) * f); k++; break; }
+      ap.set(nx, ny, nz); }
+    for (let j = k; j < ARCN; j++) { pos[j * 3] = ap.x; pos[j * 3 + 1] = ap.y; pos[j * 3 + 2] = ap.z; }
+    arcGeo.attributes.position.needsUpdate = true;
+    const ok = hit && walkable(hit.x, hit.z); s.target = ok ? hit : null;
+    shown = { hit, ok };
+  }
+  tpArc.visible = !!shown; tpRing.visible = !!(shown && shown.hit);
+  if (shown && shown.hit) { tpRing.position.set(shown.hit.x, 0.02, shown.hit.z); tpRing.material.color.setHex(shown.ok ? 0xffffff : 0xff3040); tpArc.material.color.setHex(shown.ok ? 0xffffff : 0xff3040); }
+  // short fade: out 0.12 s, move, in 0.18 s
+  if (tpFade > 0) {
+    if (tpPending) { tpFade = Math.min(1, tpFade + dt / 0.12); if (tpFade >= 1) { camera.getWorldPosition(headP); rig.position.x += tpPending.x - headP.x; rig.position.z += tpPending.z - headP.z; tpPending = null; } }
+    else tpFade = Math.max(0, tpFade - dt / 0.18);
+    fadeMat.opacity = Math.max(fadeMat.opacity, tpFade); fadeMat.color.setHex(0x000000); fadeMesh.visible = fadeMat.opacity > 0.002;
+  }
+  // left hand pinch-and-hold: glide where you look
+  for (const s of tp) if (s.held && s.src && s.src.hand && s.src.handedness === 'left' && !panelSys.hovering(s.i)) {
+    camera.getWorldDirection(fwd); fwd.y = 0; if (fwd.lengthSq() > 1e-6) { fwd.normalize(); rig.position.addScaledVector(fwd, 1.2 * sprintMul() * dt); clampToWorld(); } }
 }
 function xrLocomotion(dt) {
   const session = renderer.xr.getSession(); if (!session) return;
@@ -407,7 +468,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
-window.__isXR = () => renderer.xr.isPresenting; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
+window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
@@ -458,14 +519,15 @@ if ($('mFile')) {
 }
 renderer.setAnimationLoop(() => {
   const nowMs = performance.now(); const dt = Math.min((nowMs - prev) / 1000, 0.1); prev = nowMs;
-  if (renderer.xr.isPresenting) { xrLocomotion(dt); perf.sample(dt); } else desktopMove(dt);
+  if (renderer.xr.isPresenting) { xrLocomotion(dt); perf.sample(dt); rig.position.y = floorBase + settings.height; }
+  else { desktopMove(dt); rig.position.y = 0; camera.position.y = 1.6 + settings.height; }
   camera.updateMatrixWorld(true);
   // v15: the head is the user camera under the rig. In XR three.js copies the headset pose onto it each frame, so its
   // world position includes rig movement. (renderer.xr.getCamera() has no parent, so its getWorldPosition() was the
   // headset's offset inside the play space: rooms/corridors were activated for the wrong spot and stayed dark.)
   camera.getWorldPosition(headP);
   zone = zoneOf(headP);
-  updateDoors(headP, dt); applyVisibility(); updateBeds(headP);
+  updateDoors(headP, dt); if (renderer.xr.isPresenting) { updateHandJoints(); updateTeleport(dt); } else { tpArc.visible = tpRing.visible = false; } applyVisibility(); updateBeds(headP);
   advanceClock(); panelSys.update(dt, visualTime()); screens.update(dt); sprintHud.visible = settings.sprint;
   const t = visualTime(); const I = intensityAt(t);
   const n = Math.floor(t / BEAT), tb = t - n * BEAT, surge = n % 4 === 3;
