@@ -14,12 +14,12 @@ const isGif = (f) => f.mimeType === 'image/gif' || /\.gif$/i.test(f.name);
 // panel shapes (metres): curved band inside the glass tube, or a flat card on the monolith face
 const SHAPE = { tube: { r: 0.4, arc: 2.0, h: 1.25, y: 1.5, tw: 208, th: 320 }, slab: { w: 0.76, h: 3.08, y: 1.7, z: 0.152, tw: 120, th: 480 } };
 
-function holoMat(tint) {
+function holoMat(tint, additive = true) {   // op-art monoliths are white, so their cards blend normally instead of adding light
   const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); blank.needsUpdate = true;
   return new THREE.ShaderMaterial({
     uniforms: { uA: { value: blank }, uB: { value: blank }, uCA: { value: new THREE.Vector4(0, 0, 1, 1) }, uCB: { value: new THREE.Vector4(0, 0, 1, 1) },
       uMix: { value: 0 }, uOn: { value: 0 }, uSeed: { value: Math.random() }, uTint: { value: new THREE.Color(tint) }, uTime: U.uTime, uBlank: { value: blank } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide,
+    transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, side: THREE.FrontSide,
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: /* glsl */`
       uniform sampler2D uA; uniform sampler2D uB; uniform vec4 uCA; uniform vec4 uCB; uniform float uMix; uniform float uOn; uniform float uSeed;
@@ -37,7 +37,7 @@ function holoMat(tint) {
         float frame = (1.0 - smoothstep(0.0, 0.025, min(min(uv.x, 1.0 - uv.x) * 0.5, min(uv.y, 1.0 - uv.y) * 0.25))) * 0.5;
         float flick = 0.93 + 0.07 * sin(uTime * 13.0 + uSeed * 40.0);
         vec3 col = (c * 1.05 + uTint * 0.05) * scan * edge * flick + uTint * (frame + line * 0.9);
-        gl_FragColor = vec4(col * uOn, 1.0);   // the global brightness multiplier is injected by main.js
+        ${additive ? 'gl_FragColor = vec4(col * uOn, 1.0);' : 'gl_FragColor = vec4(c * scan * flick + uTint * line * 0.3, clamp(max(edge, frame * 2.0) * uOn, 0.0, 1.0));'}   // the global brightness multiplier is injected by main.js
       }`,
   });
 }
@@ -53,7 +53,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
       if (sp.kind === 'slab') { geo = new THREE.PlaneGeometry(S.w, S.h); g.position.set(sp.x, 0, sp.z); g.rotation.y = sp.ry; }
       else { geo = new THREE.CylinderGeometry(S.r, S.r, S.h, 28, 1, true, -S.arc / 2, S.arc);
         g.position.set(sp.x, 0, sp.z); g.rotation.y = Math.atan2(0 - sp.x, 3.6 - sp.z); }   // face the arrival area
-      const m = holoMat(rm.tint), mesh = new THREE.Mesh(geo, m);
+      const m = holoMat(rm.tint, sp.kind !== 'slab'), mesh = new THREE.Mesh(geo, m);
       mesh.position.set(0, S.y, sp.kind === 'slab' ? S.z : 0); mesh.renderOrder = 26; mesh.visible = false; g.add(mesh); rm.root.add(g);
       return { k, mesh, m, kind: sp.kind, aspect: sp.kind === 'slab' ? S.w / S.h : (S.r * S.arc) / S.h, cur: null, nxt: null, mix: 0, next: 0, loading: false };
     });
