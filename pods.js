@@ -3,7 +3,7 @@
 // Each pod shows a different item and crossfades to a new one every 8-12 s. Quest-friendly: images are downscaled to small
 // canvases, GIFs are decoded to a few small frames, and at most two muted video pods play at once (only in the room you are
 // in). If nothing loads the panels stay dark and the pods keep their original empty glow.
-import { THREE, U, LOW } from './shared.js';
+import { THREE, U, LOW } from './shared.js?v=13';
 
 const KEY = 'resonanceChamber.pods.v1';
 const MAXV = LOW ? 1 : 2;
@@ -68,10 +68,19 @@ export function createPods({ rooms, media, onChange = () => {} }) {
   let qTail = Promise.resolve();
   const queued = (fn) => { const p = qTail.then(fn, fn); qTail = p.then(() => new Promise((r) => setTimeout(r, 350)), () => new Promise((r) => setTimeout(r, 350))); return p; };
   const CACHE = 'resonanceChamber.pods.img.v1';
-  async function getBlob(id) {
+  // v13: images come from Google's resized-image server (small, CORS *, not subject to API download throttling), then
+  // drive.usercontent, then the API. GIFs skip the resizer so they stay animated. Videos: usercontent, then the API.
+  const ucUrl = (id) => `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
+  const lhUrl = (id, w) => `https://lh3.googleusercontent.com/d/${encodeURIComponent(id)}=w${w}`;
+  async function getBlob(id, gif) {
     let c = null; try { c = await caches.open(CACHE); const hit = await c.match('https://pods.cache/' + id); if (hit) return await hit.blob(); } catch { c = null; }
-    const res = await queued(() => fetch(url(id), { credentials: 'omit' })); if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
+    const srcs = [...(gif ? [] : [lhUrl(id, 512)]), ucUrl(id), url(id)]; let blob = null, err = null;
+    for (const u of srcs) {
+      try { const res = await queued(() => fetch(u, { credentials: 'omit' })); if (!res.ok) throw new Error('HTTP ' + res.status);
+        const b = await res.blob(); if (!/^image\//.test(b.type) && b.size < 4096) throw new Error('not an image'); blob = b; break; }
+      catch (e) { err = e; }
+    }
+    if (!blob) throw err || new Error('download failed');
     if (c) { try { await c.put('https://pods.cache/' + id, new Response(blob)); } catch { /* storage full */ } }
     return blob;
   }
@@ -106,7 +115,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
   async function loadImage(r, it) {
     if (r.cache.has(it.id)) { const c = r.cache.get(it.id); c.used = performance.now(); return c; }
     const S = SHAPE[r.kind];
-    const blob = await getBlob(it.id);
+    const blob = await getBlob(it.id, it.gif);
     const cv = document.createElement('canvas'); cv.width = S.tw; cv.height = S.th; const g = cv.getContext('2d');
     const draw = (src, w, h) => { const a = w / h, pa = S.tw / S.th; let sx = 0, sy = 0, sw = w, sh = h;
       if (a > pa) { sw = h * pa; sx = (w - sw) / 2; } else { sh = w / pa; sy = (h - sh) / 2; }
@@ -136,8 +145,9 @@ export function createPods({ rooms, media, onChange = () => {} }) {
       v.addEventListener('loadeddata', () => { if (done) return; done = true; clearTimeout(to);
         const tex = new THREE.VideoTexture(v); tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
         v.play().catch(() => { /* will retry when the room is active */ }); ok({ tex, v, crop: cover(v.videoWidth || 16, v.videoHeight || 9, aspect) }); }, { once: true });
-      v.addEventListener('error', () => { if (done) return; done = true; clearTimeout(to); fail(new Error('video error')); }, { once: true });
-      v.src = url(it.id);
+      v.addEventListener('error', () => { if (done || !alt) return; done = true; clearTimeout(to); fail(new Error('video error')); });
+      let alt = false; v.addEventListener('error', () => { if (done || alt) return; alt = true; v.src = url(it.id); });   // usercontent failed: try the API
+      v.src = ucUrl(it.id);
     });
   }
   const release = (p, slot) => { if (slot && slot.v) { slot.v.pause(); slot.v.removeAttribute('src'); slot.v.load(); slot.tex.dispose(); } };

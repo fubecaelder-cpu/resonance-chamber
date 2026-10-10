@@ -2,7 +2,7 @@
 // Layered neon arches, glossy reflective floor, light flowing along the walls toward the next room, drifting particles.
 // drain=true (crimson → monochrome): colour drains out and the surfaces turn into op-art stripes and checkers as you walk.
 // Ends are iris veils (with a solid end wall) that open as you approach.
-import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js';
+import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=13';
 
 export function buildCorridor(cfg) {
   const { L } = cfg, W = 2.6, HH = 3.6, HW = W / 2, drain = !!cfg.drain;

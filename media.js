@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js';
-import { DRIVE_DEFAULTS } from './config.js';
+import { THREE, OPT, f3 } from './shared.js?v=13';
+import { DRIVE_DEFAULTS } from './config.js?v=13';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -225,6 +225,9 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     ROOM_NAMES.forEach((n, i) => { const id = parseFolderId(q.get(n)); if (id) drive.folders[i] = id; }); }
   const saveDrive = () => { try { localStorage.setItem(DKEY, JSON.stringify(drive)); } catch { /* ignore */ } };
   const drv = [0, 1, 2].map(() => ({ ch: null, folder: '', title: '', items: [], idx: 0, on: false, state: 'none', msg: '', paused: false, repeat: false, fails: 0 }));
+  // v13: stream from drive.usercontent.google.com first (public files, CORS *, Range, no API-key download throttling);
+  // the API alt=media URL is the fallback. The API key is still used for listing folders.
+  const ucUrl = (id) => `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
   const streamUrl = (id) => `${API}/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true&key=${encodeURIComponent(drive.key)}`;
   async function getJSON(url, what) {
     let r; try { r = await fetch(url, { credentials: 'omit' }); } catch { throw new Error('Could not reach Google Drive (offline or blocked?)'); }
@@ -291,16 +294,17 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     d.idx = ((idx % d.items.length) + d.items.length) % d.items.length; d.on = true; d.paused = false;
     const it = d.items[d.idx]; d.ch.v.loop = d.repeat || d.items.length === 1;
     d.msg = `Loading ${it.name}…`; changed();
-    chLoad(d.ch, streamUrl(it.id), true, () => {
+    const ok = () => {
       d.fails = 0; d.msg = `${it.name}  (${d.idx + 1}/${d.items.length})`; console.log('[drive] playing', it.name, d.ch.v.videoWidth + 'x' + d.ch.v.videoHeight);
       if (room === i && !d.paused && !custActive()) chPlay(d.ch, () => { d.msg = it.name + ' (muted: press Play for sound)'; changed(); });
       changed();
-    }, () => {
+    };
+    chLoad(d.ch, ucUrl(it.id), true, ok, () => { console.warn('[drive] usercontent failed, trying the API for', it.name); chLoad(d.ch, streamUrl(it.id), true, ok, () => {
       d.fails++;
       console.warn('[drive] could not play', it.name);
       if (d.fails >= d.items.length) { d.state = 'error'; d.msg = 'Videos would not load (Drive may be briefly limiting downloads, or files are not MP4 H.264 / WebM): retrying every minute'; d.on = false; changed(); return; }
       drvStart(i, d.idx + 1);
-    });
+    }); });
   }
   function drvOff(i, stop = true) { const d = drv[i]; d.on = false; if (d.ch && stop) chStop(d.ch); }
   function setDrive({ key, folders }) {
