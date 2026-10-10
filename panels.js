@@ -32,23 +32,25 @@ const BTN = [
   { id: 'reset', x: 0.0, y: -0.19, glyph: 2, sx: 0.78 },
 ];
 // media wing (v6): hinged to the right of the main board, angled in towards you
-const WW = 0.5, WH = 0.56;
+const WW = 0.5, WH = 0.72, WOY = -0.08;   // v11: taller (PODS row at the bottom); content coords unchanged, board offset by WOY
 const WBTN = [
   { id: 'm-load', x: -0.15, y: 0.1, glyph: 3, label: 'LOAD' }, { id: 'm-play', x: 0.0, y: 0.1, glyph: 4, label: 'PLAY / PAUSE' },
   { id: 'm-next', x: 0.15, y: 0.1, glyph: 10, label: 'NEXT' },
   { id: 'm-vol-', x: -0.15, y: -0.04, glyph: 0, label: 'VOL −' }, { id: 'm-vol+', x: 0.15, y: -0.04, glyph: 1, label: 'VOL +' },
   { id: 'm-loop', x: -0.15, y: -0.18, glyph: 5, label: 'LOOP' }, { id: 'm-default', x: 0.0, y: -0.18, glyph: 7, label: 'DEFAULT' },
   { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
+  { id: 'p-toggle', x: -0.15, y: -0.335, glyph: 9, label: 'PODS' }, { id: 'p-shuffle', x: 0.15, y: -0.335, glyph: 10, label: 'SHUFFLE' },
 ];
 // screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
-const SW = 0.5, SH = 0.74;
-const SROWS = [{ k: 'height', name: 'HEIGHT · BOTTOM EDGE', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }];
+const SW = 0.5, SH = 0.88, SOY = -0.07;   // v11: taller (OPACITY row); content coords unchanged, board offset by SOY
+const SROWS = [{ k: 'height', name: 'HEIGHT · BOTTOM EDGE', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }, { k: 'opacity', name: 'OPACITY', y: -0.325 }];
 const SBTN = [
   { id: 's-down', x: -0.17, y: 0.215, glyph: 12, label: 'DOWN' }, { id: 's-up', x: 0.17, y: 0.215, glyph: 11, label: 'UP' },
   { id: 's-farther', x: -0.17, y: 0.08, glyph: 13, label: 'FARTHER' }, { id: 's-closer', x: 0.17, y: 0.08, glyph: 14, label: 'CLOSER' },
   { id: 's-smaller', x: -0.17, y: -0.055, glyph: 0, label: 'SMALLER' }, { id: 's-bigger', x: 0.17, y: -0.055, glyph: 1, label: 'BIGGER' },
   { id: 's-tilt-', x: -0.17, y: -0.19, glyph: 15, label: 'TILT UP' }, { id: 's-tilt+', x: 0.17, y: -0.19, glyph: 16, label: 'TILT DOWN' },
-  { id: 's-reset', x: -0.17, y: -0.3, glyph: 2, label: 'RESET', sx: 0.78 },
+  { id: 's-reset', x: -0.17, y: -0.44, glyph: 2, label: 'RESET', sx: 0.78 },
+  { id: 's-op-', x: -0.17, y: -0.325, glyph: 0, label: 'LESS' }, { id: 's-op+', x: 0.17, y: -0.325, glyph: 1, label: 'MORE' },
 ];
 
 const PVS = /* glsl */`
@@ -173,9 +175,9 @@ function drawBoard(ct, st) {
   ct.t.needsUpdate = true;
 }
 
-function drawWing(ct, st, ms) {
+function drawWing(ct, st, ms, pv) {
   const { c, g } = ct, W = c.width, H = c.height;
-  const X = (x) => (x / WW + 0.5) * W, Y = (y) => (0.5 - y / WH) * H, S = W / WW;
+  const X = (x) => (x / WW + 0.5) * W, Y = (y) => (0.5 - (y - WOY) / WH) * H, S = W / WW;
   const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
   if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6;
@@ -189,16 +191,19 @@ function drawWing(ct, st, ms) {
     if (g.measureText(t).width > W - 70 && lines[lines.length - 1]) { if (lines.length === 2) { lines[1] += '…'; break; } lines.push(w); } else lines[lines.length - 1] = t; }
   lines.forEach((l, i) => g.fillText(l, W / 2, Y(0.2 - i * 0.026)));
   for (const b of WBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR + 0.012) * S, 0, Math.PI * 2); g.fill();
-    const lab = b.id === 'm-loop' ? ms.loopLabel : b.id === 'm-screens' ? ms.screensLabel : b.label;
-    g.fillStyle = b.id === 'm-loop' || b.id === 'm-screens' ? st.value : st.label; g.font = '600 24px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(lab, X(b.x), Y(b.y - 0.074)); }
+    const lab = b.id === 'm-loop' ? ms.loopLabel : b.id === 'm-screens' ? ms.screensLabel : b.id === 'p-toggle' ? (pv && pv.on ? 'PODS ON' : 'PODS OFF') : b.label;
+    g.fillStyle = b.id === 'm-loop' || b.id === 'm-screens' || b.id === 'p-toggle' ? st.value : st.label; g.font = '600 24px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(lab, X(b.x), Y(b.y - 0.074)); }
   g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('VOLUME', W / 2, Y(-0.012));
   g.fillStyle = st.value; g.font = '800 52px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(ms.volume <= 0 ? 'MUTE' : `${Math.round(ms.volume * 100)}%`, W / 2, Y(-0.05));
+  g.fillStyle = st.edge; g.fillRect(W * 0.12, Y(-0.262), W * 0.76, 3);
+  g.fillStyle = st.label; g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('PODS', W / 2, Y(-0.31));
+  g.fillStyle = st.value; g.font = '600 22px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(pv ? pv.count : '', W / 2, Y(-0.345));
   ct.t.needsUpdate = true;
 }
 
 function drawScreenWing(ct, st, sv) {
   const { c, g } = ct, W = c.width, H = c.height;
-  const X = (x) => (x / SW + 0.5) * W, Y = (y) => (0.5 - y / SH) * H, S = W / SW;
+  const X = (x) => (x / SW + 0.5) * W, Y = (y) => (0.5 - (y - SOY) / SH) * H, S = W / SW;
   const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
   if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6;
@@ -207,8 +212,8 @@ function drawScreenWing(ct, st, sv) {
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = st.title; g.font = '700 46px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('SCREEN', W / 2, Y(0.318));
   for (const b of SBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR * (b.sx || 1) + 0.012) * S, 0, Math.PI * 2); g.fill(); }
-  const vals = { height: sv.height, dist: sv.dist, size: sv.size, tilt: sv.tilt };
-  const HINT = { height: sv.hHeight, dist: sv.hDist, size: sv.hSize, tilt: sv.hTilt };   // v10: the available range for each value
+  const vals = { height: sv.height, dist: sv.dist, size: sv.size, tilt: sv.tilt, opacity: sv.opacity };
+  const HINT = { height: sv.hHeight, dist: sv.hDist, size: sv.hSize, tilt: sv.hTilt, opacity: sv.hOpacity };   // v10: the available range for each value
   for (const r of SROWS) {
     g.fillStyle = st.label; g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(r.name, W / 2, Y(r.y + 0.044));
     g.fillStyle = st.value; g.font = '800 54px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(vals[r.k], W / 2, Y(r.y + 0.0));
@@ -216,8 +221,8 @@ function drawScreenWing(ct, st, sv) {
   }
   g.globalAlpha = 1;
   g.textAlign = 'left'; g.font = '700 28px system-ui, Segoe UI, Roboto, sans-serif';
-  if (sv.msg) { g.fillStyle = '#ffd27a'; g.fillText(sv.msg, X(-0.11), Y(-0.3)); }
-  else { g.fillStyle = st.label; g.fillText(sv.home ? 'RESET · DEFAULT SPOT' : 'RESET TO DEFAULT', X(-0.11), Y(-0.3)); }
+  if (sv.msg) { g.fillStyle = '#ffd27a'; g.fillText(sv.msg, X(-0.11), Y(-0.44)); }
+  else { g.fillStyle = st.label; g.fillText(sv.home ? 'RESET · DEFAULT SPOT' : 'RESET · 100% OPACITY', X(-0.11), Y(-0.44)); }
   ct.t.needsUpdate = true;
 }
 
@@ -245,10 +250,10 @@ function buildPanel(style, parent, pos, faceTo) {
   const hinge = new THREE.Group(); hinge.position.set(BW / 2 + 0.05, 0, -0.005); hinge.rotation.y = -0.42; head.add(hinge);
   const wing = new THREE.Group(); wing.position.set(WW / 2 + 0.04, 0, 0); hinge.add(wing);
   const wfm = frameMat(st, WW / 2, WH / 2);
-  const wframe = new THREE.Mesh(new THREE.BoxGeometry(WW + 0.07, WH + 0.07, 0.035), wfm); wframe.position.z = -0.02; wing.add(wframe);
+  const wframe = new THREE.Mesh(new THREE.BoxGeometry(WW + 0.07, WH + 0.07, 0.035), wfm); wframe.position.set(0, WOY, -0.02); wing.add(wframe);
   const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); hinge.add(knuckle);
   const wct = canvasTex(1024, Math.round(1024 * WH / WW));
-  const wboard = new THREE.Mesh(new THREE.PlaneGeometry(WW, WH), boardMat(wct.t)); wing.add(wboard);
+  const wboard = new THREE.Mesh(new THREE.PlaneGeometry(WW, WH), boardMat(wct.t)); wboard.position.y = WOY; wing.add(wboard);
   const wbuttons = WBTN.map((b) => {
     const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
@@ -256,12 +261,12 @@ function buildPanel(style, parent, pos, faceTo) {
   });
   // screen wing on a hinge at the left edge, swung 24° towards the user (mirror of the media wing)
   const shinge = new THREE.Group(); shinge.position.set(-BW / 2 - 0.05, 0, -0.005); shinge.rotation.y = 0.42; head.add(shinge);
-  const swing = new THREE.Group(); swing.position.set(-SW / 2 - 0.04, -(SH - BH) / 2, 0); shinge.add(swing);
+  const swing = new THREE.Group(); swing.position.set(-SW / 2 - 0.04, -(0.74 - BH) / 2, 0); shinge.add(swing);
   const sfm = frameMat(st, SW / 2, SH / 2);
-  const sframe = new THREE.Mesh(new THREE.BoxGeometry(SW + 0.07, SH + 0.07, 0.035), sfm); sframe.position.z = -0.02; swing.add(sframe);
+  const sframe = new THREE.Mesh(new THREE.BoxGeometry(SW + 0.07, SH + 0.07, 0.035), sfm); sframe.position.set(0, SOY, -0.02); swing.add(sframe);
   const sknuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); shinge.add(sknuckle);
   const sct = canvasTex(1024, Math.round(1024 * SH / SW));
-  const sboard = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), boardMat(sct.t)); swing.add(sboard);
+  const sboard = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), boardMat(sct.t)); sboard.position.y = SOY; swing.add(sboard);
   const sbuttons = SBTN.map((b) => {
     const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
     if (b.sx) m.scale.set(b.sx, 1, b.sx);
@@ -272,14 +277,15 @@ function buildPanel(style, parent, pos, faceTo) {
 }
 
 // ---------- system ----------
-export function createPanels({ renderer, rig, camera, rooms, onChange, media, screens }) {
+export function createPanels({ renderer, rig, camera, rooms, onChange, media, screens, pods }) {
   const panels = rooms.map((r, i) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space;
     p.buttons.forEach((b) => { b.userData.btn.room = i; }); return p; });
   const redrawScreen = (i) => { if (screens) drawScreenWing(panels[i].sct, panels[i].st, screens.view(i)); };
   panels.forEach((_, i) => redrawScreen(i));
   const redraw = () => panels.forEach((p) => drawBoard(p.ct, p.st));
-  const redrawMedia = () => { const ms = media.view(); panels.forEach((p) => {
-    drawWing(p.wct, p.st, ms);
+  const redrawMedia = () => { const ms = media.view(); panels.forEach((p, i) => {
+    const pv = pods ? pods.view(i) : null; drawWing(p.wct, p.st, ms, pv);
+    p.wbuttons[WBTN.findIndex((b) => b.id === 'p-toggle')].material.uniforms.uOn.value = pv && pv.on ? 1 : 0;
     const by = (id) => p.wbuttons[WBTN.findIndex((b) => b.id === id)].material.uniforms;
     by('m-play').uGlyph.value = ms.playing ? 8 : 4; by('m-play').uOn.value = ms.ready ? 1 : 0;
     by('m-loop').uOn.value = ms.loopOn ? 1 : 0;
@@ -293,6 +299,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
 
   function act(id, room = 0) {
     if (id.startsWith('m-')) { media.act(id); return; }
+    if (id.startsWith('p-')) { if (pods) pods.act(id, room); return; }
     if (id.startsWith('s-')) { if (screens) screens.act(id, room); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);

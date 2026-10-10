@@ -1,5 +1,6 @@
 // Neon pod chamber builder (Room 1 pink, Room 2 crimson). Everything is built in room-local space:
 // focal point at local -z, entry doorway at local +z (angle 0).
+import { clipMirror } from "./shared.js";
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
   makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js';
 import { roomMedia, MEDIA_GLSL } from './media.js';
@@ -195,6 +196,7 @@ export function buildChamber(cfg) {
     for (let i = 0; i < 6; i++) { const z = -4.6 + i * 1.65, x = 2.5 + 0.42 * i;   // v10: rows start 0.4 m further in (clear of the monitor bay)
       all.push([i, -x, z], [i, x, z]); }
     const PODS = all.filter(([i]) => cfg.podIdx.includes(i)).map(([, x, z]) => [x, z]);
+    out.podSpots = PODS.map(([x, z]) => ({ kind: 'tube', x, z }));   // v11: holo media panels (pods.js)
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       dummy.lookAt(0, 0, z - 1.2); dummy.updateMatrix(); return dummy.matrix.clone(); });
     const parts = (local) => podM.map((pm) => pm.clone().multiply(local));
@@ -283,7 +285,7 @@ export function buildChamber(cfg) {
     const mirror = world.clone(true); mirror.scale.y = -1;
     const drop = []; mirror.traverse((o) => { if (o.userData.noMirror) drop.push(o); }); drop.forEach((o) => o.removeFromParent());
     mirror.traverse((o) => { if (o.material && o.material.transparent) o.renderOrder = (o.userData.ro || 0); });
-    root.add(mirror); out.mirror = mirror;
+    clipMirror(mirror); root.add(mirror); out.mirror = mirror;
   }
   out.focalWorld = root.localToWorld(new THREE.Vector3(0, FY, TZ - 1.5));
   return out;

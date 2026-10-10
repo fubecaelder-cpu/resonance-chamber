@@ -383,6 +383,6 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
   const audible = () => (st.ready && !cust.v.paused && !cust.v.muted && st.volume > 0) || drv.some((d) => d.ch && !d.ch.v.paused && !d.ch.v.muted && st.volume > 0);
   // start listing any folders configured via localStorage or URL params
   setTimeout(() => [0, 1, 2].forEach((i) => { if (drive.folders[i]) listFolder(i); }), 0);
-  return { st, video: cust.v, act, view, loadFile, loadURL, restoreDefault, attachAudio, update, audible, picker,
+  return { drive, driveAPI: API, st, video: cust.v, act, view, loadFile, loadURL, restoreDefault, attachAudio, update, audible, picker,
     drive, drv, setDrive, bookmarkURL, setRenderer: (x) => { renderer = x; } };
 }

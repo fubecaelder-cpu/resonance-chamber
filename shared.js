@@ -265,3 +265,30 @@ export function makeVeil(style, end = 0) {
   const g = new THREE.PlaneGeometry(W, Hh); g.translate(0, Hh / 2, 0);
   const mesh = new THREE.Mesh(g, m); mesh.userData.veil = true; return mesh;
 }
+
+// v11: the floor-reflection copy only shows what was ABOVE the floor. Anything that dips below the floor (the portal tunnel,
+// ring bases) would otherwise flip up and show through the floor line, so mirror materials discard fragments above the floor.
+const _mirMats = new Map();
+function mirrorMat(m) {
+  if (_mirMats.has(m)) return _mirMats.get(m);
+  const c = m.clone();
+  if (m.uniforms) c.uniforms = m.uniforms;              // keep animated uniforms shared with the original
+  c.onBeforeCompile = (sh) => {
+    if (m.onBeforeCompile && m.onBeforeCompile !== c.onBeforeCompile) m.onBeforeCompile(sh);
+    sh.vertexShader = sh.vertexShader.replace(/void\s+main\s*\(\s*(void)?\s*\)\s*\{/, (s) => `varying float vMirY;\n${s}\n#ifdef USE_INSTANCING\n vMirY = (modelMatrix * instanceMatrix * vec4(position, 1.0)).y;\n#else\n vMirY = (modelMatrix * vec4(position, 1.0)).y;\n#endif\n`);
+    sh.fragmentShader = sh.fragmentShader.replace(/void\s+main\s*\(\s*(void)?\s*\)\s*\{/, (s) => `varying float vMirY;\n${s}\n if (vMirY > 0.002) discard;\n`);
+  };
+  c.customProgramCacheKey = () => 'mirclip|' + (m.customProgramCacheKey ? m.customProgramCacheKey() : '');
+  _mirMats.set(m, c); return c;
+}
+export function clipMirror(mirror) {
+  mirror.traverse((o) => {
+    if (!o.material) return;
+    const orig = o.material;
+    o.material = Array.isArray(orig) ? orig.map(mirrorMat) : mirrorMat(orig);
+    if (!Array.isArray(orig)) {        // follow runtime opacity / visibility changes made on the original material
+      const c = o.material;
+      o.onBeforeRender = () => { c.opacity = orig.opacity; c.visible = orig.visible; if (orig.color && c.color) c.color.copy(orig.color); if (orig.map !== c.map) c.map = orig.map; };
+    }
+  });
+}

@@ -10,6 +10,8 @@ export const DEF = { dy: 0, dz: 0, s: 1, t: 0 };
 export const LIM = { dy: [-8, 1.0], dz: [0, 3.6], s: [0.6, 1.8], t: [-10 * Math.PI / 180, 30 * Math.PI / 180] };
 const STEP = { dy: 0.25, dz: 0.4, s: 0.1, t: 5 * Math.PI / 180 };
 // the monitor bay (room-local, identical in every room): between the focal wall and the arrival area, under the ceiling
+// v11: screen opacity, identical in every room (100% down to 10% in 10% steps); Reset restores 100%
+export const OPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
 export const BAY = { back: -6.0, front: -2.7, wall: 6.45, floor: 0, ceil: 7.96 };
 
 export function createScreens({ monitors, onChange = () => {} }) {
@@ -29,8 +31,35 @@ export function createScreens({ monitors, onChange = () => {} }) {
     const sup = [-1, 1].map((sg) => { const ph = sg * half * 0.6;
       return { rod: mk(new THREE.CylinderGeometry(0.016, 0.016, 1, 6)), leg: mk(new THREE.CylinderGeometry(0.03, 0.03, 1, 10)), foot: mk(new THREE.CylinderGeometry(0.2, 0.24, 0.04, 24)),
         top: new THREE.Vector3(-r * Math.sin(ph), h / 2 + 0.1, r - r * Math.cos(ph)), bot: new THREE.Vector3(-r * Math.sin(ph), -h / 2 - 0.1, r - r * Math.cos(ph)) }; });
-    return { ...m, pts, sup, tgt: { ...DEF }, cur: { ...DEF }, flash: 0, msg: '' };
+    return { ...m, pts, sup, tgt: { ...DEF }, cur: { ...DEF }, flash: 0, msg: '', opI: 0, op: 1, opU: fadeable(m.mount) };
   });
+
+  // ---------- v11 opacity: every material in the mount gets its own copy with an opacity multiplier ----------
+  function fadeable(mount) {
+    const u = { value: 1 }, mats = [];
+    mount.traverse((o) => {
+      if (!o.material || Array.isArray(o.material)) return;
+      const m0 = o.material, m = m0.clone(); if (m0.uniforms) m.uniforms = m0.uniforms;
+      const add = m0.blending === THREE.AdditiveBlending;
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uOp = u;
+        sh.fragmentShader = sh.fragmentShader.replace(/void\s+main\s*\(\s*(void)?\s*\)/, 'void mainOp_()') +
+          `\nuniform float uOp;\nvoid main(){ mainOp_(); ${add ? 'gl_FragColor.rgb *= uOp;' : 'gl_FragColor.a = clamp(gl_FragColor.a, 0.0, 1.0) * uOp;'} }\n`;
+      };
+      m.customProgramCacheKey = () => 'scrOp|' + (m0.customProgramCacheKey ? m0.customProgramCacheKey() : '');
+      m.userData.baseTransparent = m0.transparent; m.userData.baseDepthWrite = m0.depthWrite; m.userData.baseRO = o.renderOrder;
+      o.material = m; mats.push([o, m]);
+    });
+    return { u, mats, faded: false };
+  }
+  function applyOp(o) {
+    const F = o.opU; F.u.value = o.op; const fade = o.op < 0.999;
+    if (fade === F.faded) return; F.faded = fade;
+    for (const [mesh, m] of F.mats) {
+      m.transparent = fade || m.userData.baseTransparent; m.depthWrite = fade ? false : m.userData.baseDepthWrite;
+      mesh.renderOrder = fade ? 45 + (m.userData.baseRO || 0) : m.userData.baseRO; m.needsUpdate = true;
+    }
+  }
 
   // ---------- geometry helpers (all identical for every room) ----------
   function extents(o, st) {   // min/max of the sample points in room-local space
@@ -78,14 +107,18 @@ export function createScreens({ monitors, onChange = () => {} }) {
       const p = {}; for (const k of Object.keys(LIM)) p[k] = Math.min(LIM[k][1], Math.max(LIM[k][0], sv[k]));
       fit(o, p, ['dy', 'dz']); o.tgt = valid(o, p) ? p : { ...DEF };
     }
+    if (sv && typeof sv.op === 'number') { const j = OPS.findIndex((v) => Math.abs(v - sv.op) < 0.051); o.opI = j >= 0 ? j : 0; }
+    o.op = OPS[o.opI];
     o.cur = { ...o.tgt };
   });
 
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M.map((o) => o.tgt))); } catch { /* ignore */ } };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M.map((o) => ({ ...o.tgt, op: OPS[o.opI] })))); } catch { /* ignore */ } };
   function act(id, i) {
     const o = M[i]; if (!o) return;
     const a = id.slice(2);
-    if (a === 'reset') { o.tgt = { ...DEF }; o.msg = ''; }
+    if (a === 'reset') { o.tgt = { ...DEF }; o.opI = 0; o.msg = ''; }
+    else if (a === 'op-' || a === 'op+') { const j = o.opI + (a === 'op-' ? 1 : -1);
+      if (j < 0 || j >= OPS.length) { o.flash = 1.2; o.msg = 'LIMIT REACHED'; } else { o.opI = j; o.msg = ''; } }
     else { const n = tryMove(o, a); if (n) { o.tgt = n; o.msg = ''; } else { o.flash = 1.2; o.msg = a === 'down' ? 'ON THE FLOOR' : 'LIMIT REACHED'; } }
     save(); onChange(i);
   }
@@ -110,13 +143,14 @@ export function createScreens({ monitors, onChange = () => {} }) {
     o.root.updateMatrixWorld(true);
     o.monPos.set(0, y + c.dy, -r + c.dz + 0.3); o.root.localToWorld(o.monPos);
   }
-  M.forEach(apply);
+  M.forEach(apply); M.forEach(applyOp);
   function update(dt) {
     const k = 1 - Math.exp(-dt * 4.5);
     M.forEach((o, i) => {
       let moving = false;
       for (const key of ['dy', 'dz', 's', 't']) { const d = o.tgt[key] - o.cur[key]; if (Math.abs(d) > 1e-4) { o.cur[key] += d * k; moving = true; } else o.cur[key] = o.tgt[key]; }
       if (moving) apply(o);
+      const ot = OPS[o.opI], od = ot - o.op; if (Math.abs(od) > 1e-3) { o.op += od * k; applyOp(o); } else if (o.op !== ot) { o.op = ot; applyOp(o); }
       if (o.flash > 0) { o.flash -= dt; if (o.flash <= 0) { o.msg = ''; onChange(i); } }
     });
   }
@@ -132,9 +166,9 @@ export function createScreens({ monitors, onChange = () => {} }) {
   }
   const deg = (v) => (v > 0.001 ? '+' : v < -0.001 ? '−' : '') + Math.abs(Math.round(v * 180 / Math.PI)) + '°';
   const view = (i) => { const o = M[i], t = o.tgt, R = ranges(o, t);
-    return { height: Math.max(0, R.bottom).toFixed(2) + ' m', dist: (t.dz >= 0.005 ? '+' : '') + t.dz.toFixed(2) + ' m', size: Math.round(t.s * 100) + '%', tilt: deg(t.t),
+    return { height: Math.max(0, R.bottom).toFixed(2) + ' m', dist: (t.dz >= 0.005 ? '+' : '') + t.dz.toFixed(2) + ' m', size: Math.round(t.s * 100) + '%', tilt: deg(t.t), opacity: Math.round(OPS[o.opI] * 100) + '%', hOpacity: `${Math.round(OPS[OPS.length - 1] * 100)} – 100%`,
       hHeight: `FLOOR 0.00 – ${R.hiB.toFixed(2)} m`, hDist: `${R.dz0.toFixed(2)} – ${R.dz1.toFixed(2)} m`, hSize: `${Math.round(LIM.s[0] * 100)} – ${Math.round(LIM.s[1] * 100)}%`, hTilt: `${deg(LIM.t[0])} – ${deg(LIM.t[1])}`,
-      msg: o.msg, home: Math.abs(t.dy) + Math.abs(t.dz) + Math.abs(t.s - 1) + Math.abs(t.t) < 1e-3 }; };
+      msg: o.msg, home: Math.abs(t.dy) + Math.abs(t.dz) + Math.abs(t.s - 1) + Math.abs(t.t) < 1e-3 && o.opI === 0 }; };
   return { act, update, view, M, BAY, valid: (i, st) => valid(M[i], st), extents: (i, st) => extents(M[i], st || M[i].tgt),
-    set: (i, st) => { M[i].tgt = { ...st }; M[i].cur = { ...st }; apply(M[i]); save(); onChange(i); } };
+    op: (i) => M[i].op, set: (i, st) => { M[i].tgt = { ...st }; M[i].cur = { ...st }; apply(M[i]); save(); onChange(i); } };
 }

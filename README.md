@@ -45,3 +45,9 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 - Choosing a file or pasting a URL in the bottom-left box takes over the screens until **Back to Drive playlists** (or DEFAULT on the MEDIA panel) is pressed.
 - MEDIA panel in a Drive room: PLAY/PAUSE, NEXT, LOOP (PLAYLIST or REPEAT 1), DEFAULT (built-in visuals in this room; PLAY brings Drive back), VOLUME.
 - Overrides: the "Google Drive folders" section of the page box (saved on the device), or URL params `?pink=<folderId>&crimson=<folderId>&mono=<folderId>&key=<apiKey>`.
+
+## v11
+
+- **Floor reflection fix:** the mirrored copy of each room now only draws what is above the floor, so nothing that dips below the floor (portal rings, tunnel base) can flip up and show above the floor line. Applied in every room and corridor.
+- **Pod media:** every pod (pink and crimson glass tubes, op-art monoliths) shows a glowing holographic panel that shuffles images (JPG, PNG, WEBP, animated GIF) and videos from Google Drive. It uses the room folder's `Pods` subfolder if there is one, otherwise the room folder itself. Each pod shows a different item and crossfades every 8–12 s. Images are downscaled to small textures, and at most 2 muted video pods play at once, only in the room you are in. If nothing loads, the pods keep their plain glow. Folders are checked once a minute.
+- **Panel:** MEDIA wing has **PODS ON/OFF** and **SHUFFLE**. SCREEN wing has an **OPACITY** row (100% down to 10% in 10% steps), saved per room and the same in every room. RESET goes back to 100%.

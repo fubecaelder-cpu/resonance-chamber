@@ -202,7 +202,9 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- pods: upgraded empty glowing capsules ----------
   {
     const PODS = [];
-    for (let i = 2; i < 6; i++) { const z = -4.6 + i * 1.65, x = Math.min(4.3, 2.5 + 0.42 * i); PODS.push([-x, z], [x, z]); }   // 8 pods, mirrored left/right (v10: none in the monitor bay)
+    for (let i = 2; i < 6; i++) { const z = -4.6 + i * 1.65, x = Math.min(4.3, 2.5 + 0.42 * i); PODS.push([-x, z], [x, z]); }
+    out.podSpots = PODS.map(([x, z]) => ({ kind: 'tube', x, z }));   // v11: holo media panels (pods.js)
+    // 8 pods, mirrored left/right (v10: none in the monitor bay)
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
       dummy.lookAt(0, 0, z - 1.2); dummy.updateMatrix(); return dummy.matrix.clone(); });
     const parts = (local) => podM.map((pm) => pm.clone().multiply(local));

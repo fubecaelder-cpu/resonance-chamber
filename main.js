@@ -10,6 +10,7 @@ import { buildCorridor } from './corridor.js';
 import { createPanels, settings } from './panels.js';
 import { createMedia, buildMonitor, roomMedia } from './media.js';
 import { createScreens } from './screens.js';
+import { createPods } from './pods.js';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -78,7 +79,12 @@ const screens = createScreens({ onChange: (i) => { if (panelsReady) panelSys.red
   { mount: mon2.mount, brackets: mon2.brackets, geo: mon2.geo, root: room2.root, kit: room2.kit, monPos: MON_POS[1] },
   { mount: mon3.mount, brackets: mon3.brackets, geo: mon3.geo, root: room3.root, kit: room3.kit, monPos: MON_POS[2] },
 ] });
-const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, rooms: [
+const pods = createPods({ media, onChange: () => { if (panelsReady) panelSys.redrawMedia(); }, rooms: [
+  { root: room1.root, spots: room1.podSpots, tint: 0xff4fa3 },
+  { root: room2.root, spots: room2.podSpots, tint: 0xff2038 },
+  { root: room3.root, spots: room3.podSpots, tint: 0xffffff },
+] });
+const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, pods, rooms: [
   { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'crimson', root: room2.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'mono', root: room3.root, pos: PANEL_POS, faceTo: PANEL_FACE },
@@ -379,7 +385,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   return url; };
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
-window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
+window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
 window.__act = (id, room = 0) => panelSys.act(id, room); window.__screens = screens;
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse
@@ -454,7 +460,7 @@ renderer.setAnimationLoop(() => {
   const tick = Math.floor(t * 2);
   if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
   const zi = { r1: 0, r2: 1, r3: 2 }[zone]; if (zi !== undefined) lastRoom = zi;
-  media.update(dt, lastRoom);
+  media.update(dt, lastRoom); pods.update(dt, lastRoom);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

@@ -125,6 +125,7 @@ export function buildOpRoom(cfg) {
   {
     const mono = [];
     for (const a of [0.95, 1.4, 1.85, -0.95, -1.4, -1.85]) mono.push(mtx(Math.sin(a) * 5.2, 1.7, Math.cos(a) * 5.2, a + Math.PI));
+    out.podSpots = [0.95, 1.4, 1.85, -0.95, -1.4, -1.85].map((a) => ({ kind: 'slab', x: Math.sin(a) * 5.2, z: Math.cos(a) * 5.2, ry: a + Math.PI }));   // v11: holo media panels on the monoliths
     instanced(new THREE.BoxGeometry(0.9, 3.4, 0.28), mat(/* glsl */`
       ${BR}
       void main(){ float x = vL.x * 3.0 + vL.y * 1.2 + sin(vL.y * 2.0 + uTime * 0.15 + vH * 6.0) * 0.35;
