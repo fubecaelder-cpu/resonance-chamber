@@ -1,10 +1,10 @@
 // Neon pod chamber builder (Room 1 pink, Room 2 crimson). Everything is built in room-local space:
 // focal point at local -z, entry doorway at local +z (angle 0).
-import { clipMirror } from "./shared.js?v=14";
+import { clipMirror } from "./shared.js?v=15";
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
-  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js?v=14';
-import { roomMedia, MEDIA_GLSL } from './media.js?v=14';
-import { MON_GEO } from './shared.js?v=14';
+  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js?v=15';
+import { roomMedia, MEDIA_GLSL } from './media.js?v=15';
+import { MON_GEO } from './shared.js?v=15';
 
 
 // floor helpers shared by the room floors

@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=14';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=15';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=14';
-import { pinkRoomCfg } from './pinkroom.js?v=14';
-import { buildOpRoom } from './oproom.js?v=14';
-import { buildCorridor } from './corridor.js?v=14';
-import { createPanels, settings } from './panels.js?v=14';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=14';
-import { createScreens } from './screens.js?v=14';
-import { createPods } from './pods.js?v=14';
+import { buildChamber } from './chamber.js?v=15';
+import { pinkRoomCfg } from './pinkroom.js?v=15';
+import { buildOpRoom } from './oproom.js?v=15';
+import { buildCorridor } from './corridor.js?v=15';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=15';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=15';
+import { createScreens } from './screens.js?v=15';
+import { createPods } from './pods.js?v=15';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -195,6 +195,11 @@ function panner(ctx, pos, dest, ref = 2.5) {
   const p = ctx.createPanner(); Object.assign(p, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: ref, rolloffFactor: 1.2 });
   setParam(p, 'position', pos.x, pos.y, pos.z); p.connect(dest); return p;
 }
+function applyTheta(ramp = 0.4) {   // gentle: 100% on the panel is a gain of 0.08 per ear
+  if (!A.theta) return; const g = settings.theta ? 0.08 * THETA_VOLS[settings.thetaI] / 100 : 0;
+  const p = A.theta.gain, t = A.ctx.currentTime, v = p.value;   // hold the current level, then glide (never jumps to the default gain of 1)
+  p.cancelScheduledValues(t); p.setValueAtTime(v, t); p.setTargetAtTime(g, t, ramp / 3);
+}
 async function startAudio() {
   if (videoEl) videoEl.play().catch(() => {});
   if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
@@ -205,6 +210,11 @@ async function startAudio() {
   const now = ctx.currentTime;
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3; comp.connect(ctx.destination);
   const master = ctx.createGain(); master.gain.setValueAtTime(0.0001, now); master.gain.exponentialRampToValueAtTime(0.9, now + 3); master.connect(comp); A.master = master;
+  // v14: constant 6 Hz theta binaural beat (200 Hz left / 206 Hz right). Goes straight to the stereo output through a
+  // ChannelMerger (no panner, compressor or mono mixing), so each ear gets only its own tone everywhere in the world.
+  { const merger = ctx.createChannelMerger(2), out = ctx.createGain(); out.channelCount = 2; out.channelCountMode = 'explicit'; out.channelInterpretation = 'discrete';
+    for (const [f, ch] of [[200, 0], [206, 1]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.connect(merger, 0, ch); o.start(now); }
+    out.gain.value = 0; merger.connect(out); out.connect(ctx.destination); A.theta = out; applyTheta(4); }
   media.attachAudio(ctx, comp);   // the video soundtrack bypasses the bed fade-in and is not ducked
   A.beds = [0, 1, 2].map((i) => { const g = ctx.createGain(); g.gain.value = A.w[i]; g.connect(master); return g; });
   const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = nb.getChannelData(0);
@@ -302,7 +312,7 @@ function patchBright(m) {
   } else if (m.color) { m.userData.c0 = m.color.clone(); BRIGHT_MATS.push(m); }
 }
 function applySettings() {
-  const b = settings.bright; U.uBright.value = b;
+  const b = settings.bright; U.uBright.value = b; applyTheta();
   for (const m of BRIGHT_MATS) m.color.copy(m.userData.c0).multiplyScalar(b);
   renderer.setClearColor(new THREE.Color(0x030002).multiplyScalar(b));
   if (videoEl) videoEl.playbackRate = settings.speed;
@@ -400,7 +410,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   return url; };
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
-window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
+window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
 window.__act = (id, room = 0) => panelSys.act(id, room); window.__screens = screens;
 // screen position of a panel button (room 0..2, button 0..4), for testing with the mouse

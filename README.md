@@ -55,3 +55,4 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 ## v14
 
 - **Sprint toggle (2× smooth-locomotion speed):** in VR, click either thumbstick. On desktop, press Shift (it toggles, you don't hold it). There is also a SPRINT button on every CHAMBER CONTROLS panel. You get a short haptic pulse, and a small "» SPRINT ON" tag sits low in your view while sprint is on. The setting is saved on the device.
+- **Theta binaural beat:** a constant 6 Hz theta beat (200 Hz sine in the left ear, 206 Hz in the right) plays softly under everything, the same in every room and corridor. It starts when sound is turned on, and you need headphones to hear the beat. It runs straight to the stereo output and is never mixed to mono. CHAMBER CONTROLS has a THETA row: on/off plus volume − / + (5–100%, default 30%). The setting is saved on the device.

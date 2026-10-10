@@ -1,18 +1,19 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=14';
+import { THREE, canvasTex } from './shared.js?v=15';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const BRIGHTS = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
 const KEY = 'resonanceChamber.settings.v1';
-export const settings = { speedI: 3, brightI: 7, sprint: false, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
+export const THETA_VOLS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100];
+export const settings = { speedI: 3, brightI: 7, sprint: false, theta: true, thetaI: 5, get speed() { return SPEEDS[this.speedI]; }, get bright() { return BRIGHTS[this.brightI] / 100; } };
 try {
   const s = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); if (typeof s.sprint === 'boolean') settings.sprint = s.sprint; }
+  if (s) { if (SPEEDS.includes(s.speed)) settings.speedI = SPEEDS.indexOf(s.speed); if (BRIGHTS.includes(s.bright)) settings.brightI = BRIGHTS.indexOf(s.bright); if (typeof s.sprint === 'boolean') settings.sprint = s.sprint; if (typeof s.theta === 'boolean') settings.theta = s.theta; if (THETA_VOLS.includes(s.thetaVol)) settings.thetaI = THETA_VOLS.indexOf(s.thetaVol); }
 } catch { /* storage unavailable */ }
-function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI], sprint: settings.sprint })); } catch { /* ignore */ } }
+function saveSettings() { try { localStorage.setItem(KEY, JSON.stringify({ speed: settings.speed, bright: BRIGHTS[settings.brightI], sprint: settings.sprint, theta: settings.theta, thetaVol: THETA_VOLS[settings.thetaI] })); } catch { /* ignore */ } }
 
 // ---------- styles ----------
 const STYLES = {
@@ -25,12 +26,13 @@ const STYLES = {
 };
 
 // board layout (metres, board-local: x right, y up)
-const BW = 0.66, BH = 0.52, BR = 0.052;
+const BW = 0.66, BH = 0.66, BR = 0.052, BOY = -0.07;   // v14: taller board (THETA row); content coords unchanged, board offset by BOY
 const BTN = [
   { id: 'speed-', x: -0.21, y: 0.075, glyph: 0 }, { id: 'speed+', x: 0.21, y: 0.075, glyph: 1 },
   { id: 'bright-', x: -0.21, y: -0.085, glyph: 0 }, { id: 'bright+', x: 0.21, y: -0.085, glyph: 1 },
   { id: 'reset', x: 0.0, y: -0.19, glyph: 2, sx: 0.78 },
-  { id: 'sprint', x: -0.21, y: -0.19, glyph: 13, sx: 0.78 },   // v14: sprint toggle (2x smooth locomotion)
+  { id: 'sprint', x: -0.21, y: -0.19, glyph: 13, sx: 0.78 },
+  { id: 'theta', x: -0.24, y: -0.325, glyph: 9, sx: 0.78 }, { id: 'theta-', x: 0.07, y: -0.325, glyph: 0, sx: 0.78 }, { id: 'theta+', x: 0.24, y: -0.325, glyph: 1, sx: 0.78 },   // v14: 6 Hz theta binaural   // v14: sprint toggle (2x smooth locomotion)
 ];
 // media wing (v6): hinged to the right of the main board, angled in towards you
 const WW = 0.5, WH = 0.72, WOY = -0.08;   // v11: taller (PODS row at the bottom); content coords unchanged, board offset by WOY
@@ -142,7 +144,7 @@ function boardMat(tex) {
 
 function drawBoard(ct, st) {
   const { c, g } = ct, W = c.width, H = c.height;
-  const X = (x) => (x / BW + 0.5) * W, Y = (y) => (0.5 - y / BH) * H, S = W / BW;
+  const X = (x) => (x / BW + 0.5) * W, Y = (y) => (0.5 - (y - BOY) / BH) * H, S = W / BW;
   const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
   if (st.stripes) {   // op-art: fine concentric arcs in the background
@@ -172,6 +174,10 @@ function drawBoard(ct, st) {
   g.textAlign = 'left'; g.fillStyle = settings.sprint ? st.value : st.label; g.fillText(settings.sprint ? 'SPRINT ON' : 'SPRINT OFF', X(-0.165), Y(-0.19));
   // range ticks under each readout
   const ticks = (n, i, y) => { for (let k = 0; k < n; k++) { const x = X(-0.1 + (0.2 * k) / (n - 1)); g.fillStyle = k <= i ? st.edge : 'rgba(255,255,255,0.18)'; g.fillRect(x - 5, Y(y - 0.05) - 5, 10, 10); } };
+  g.fillStyle = st.edge; g.fillRect(W * 0.12, Y(-0.248), W * 0.76, 3);
+  g.textAlign = 'center'; g.fillStyle = st.label; g.font = '600 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('THETA 6 Hz · HEADPHONES', W / 2, Y(-0.272));
+  g.textAlign = 'left'; g.fillStyle = settings.theta ? st.value : st.label; g.font = '700 28px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(settings.theta ? 'ON' : 'OFF', X(-0.195), Y(-0.325));
+  g.textAlign = 'center'; g.fillStyle = st.value; g.font = '800 36px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(`${THETA_VOLS[settings.thetaI]}%`, X(0.155), Y(-0.325));
   ticks(SPEEDS.length, settings.speedI, 0.075); ticks(BRIGHTS.length, settings.brightI, -0.085);
   ct.t.needsUpdate = true;
 }
@@ -237,9 +243,9 @@ function buildPanel(style, parent, pos, faceTo) {
   const col = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.95, 16), fm); col.position.y = 0.5; g.add(col);
   // tilted board (centre ~1.1 m, tilted back 32° so it faces a standing user's hand and eyes)
   const head = new THREE.Group(); head.position.set(0, 1.1, 0); head.rotation.x = -0.56; g.add(head);
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(BW + 0.07, BH + 0.07, 0.035), fm); frame.position.z = -0.02; head.add(frame);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(BW + 0.07, BH + 0.07, 0.035), fm); frame.position.set(0, BOY, -0.02); head.add(frame);
   const ct = canvasTex(1024, Math.round(1024 * BH / BW));
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), boardMat(ct.t)); board.position.z = 0.0; head.add(board);
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), boardMat(ct.t)); board.position.set(0, BOY, 0); head.add(board);
   const geo = new THREE.CylinderGeometry(BR, BR + 0.004, 0.028, 40); geo.translate(0, 0.0, 0);
   const buttons = BTN.map((b) => {
     const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
@@ -283,7 +289,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     p.buttons.forEach((b) => { b.userData.btn.room = i; }); return p; });
   const redrawScreen = (i) => { if (screens) drawScreenWing(panels[i].sct, panels[i].st, screens.view(i)); };
   panels.forEach((_, i) => redrawScreen(i));
-  const redraw = () => panels.forEach((p) => { drawBoard(p.ct, p.st); p.buttons[BTN.findIndex((b) => b.id === 'sprint')].material.uniforms.uOn.value = settings.sprint ? 1 : 0; });
+  const redraw = () => panels.forEach((p) => { drawBoard(p.ct, p.st); p.buttons[BTN.findIndex((b) => b.id === 'sprint')].material.uniforms.uOn.value = settings.sprint ? 1 : 0; p.buttons[BTN.findIndex((b) => b.id === 'theta')].material.uniforms.uOn.value = settings.theta ? 1 : 0; });
   const redrawMedia = () => { const ms = media.view(); panels.forEach((p, i) => {
     const pv = pods ? pods.view(i) : null; drawWing(p.wct, p.st, ms, pv);
     p.wbuttons[WBTN.findIndex((b) => b.id === 'p-toggle')].material.uniforms.uOn.value = pv && pv.on ? 1 : 0;
@@ -308,6 +314,9 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     else if (id === 'bright+') settings.brightI = Math.min(BRIGHTS.length - 1, settings.brightI + 1);
     else if (id === 'reset') { settings.speedI = 3; settings.brightI = 7; }
     else if (id === 'sprint') settings.sprint = !settings.sprint;
+    else if (id === 'theta') settings.theta = !settings.theta;
+    else if (id === 'theta-') { settings.thetaI = Math.max(0, settings.thetaI - 1); settings.theta = true; }
+    else if (id === 'theta+') { settings.thetaI = Math.min(THETA_VOLS.length - 1, settings.thetaI + 1); settings.theta = true; }
     saveSettings(); redraw(); onChange(settings);
   }
   function press(btn, src) {
