@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=20';
-import { DRIVE_DEFAULTS } from './config.js?v=20';
+import { THREE, OPT, f3 } from './shared.js?v=21';
+import { DRIVE_DEFAULTS } from './config.js?v=21';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -321,6 +321,11 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     d.ch.v.loop = d.repeat || d.items.length === 1;
     d.msg = (d.note ? d.note + ' · ' : '') + `Loading ${it.name}…`; changed();
     const ok = () => {
+      if (!d.ch.v.videoWidth) {   // audio decoded but no picture: the video codec (typically HEVC/H.265) is unsupported here
+        const why = 'video codec not supported by this browser (likely HEVC/H.265): convert to MP4 H.264';
+        bad.set(it.id, why); console.warn('[drive] skipping', it.name, '-', why); d.note = `Skipped ${it.name}: ${why}`; chStop(d.ch);
+        return drvStart(i, d.idx + 1, tried + 1);
+      }
       d.fails = 0; d.lastT = performance.now(); d.msg = `${it.name}  (${d.idx + 1}/${d.items.length})`; console.log('[drive] playing', it.name, d.ch.v.videoWidth + 'x' + d.ch.v.videoHeight);
       if (room === i && !d.paused && !custActive()) chPlay(d.ch, () => { d.msg = it.name + ' (muted: press Play for sound)'; changed(); });
       d.note = ''; changed();
