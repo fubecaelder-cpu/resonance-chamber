@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=23';
-import { DRIVE_DEFAULTS } from './config.js?v=23';
+import { THREE, OPT, f3 } from './shared.js?v=24';
+import { DRIVE_DEFAULTS } from './config.js?v=24';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -335,7 +335,11 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       if (room === i && !d.paused && !custActive()) chPlay(d.ch, () => { d.msg = it.name + ' (muted: press Play for sound)'; changed(); });
       d.note = ''; changed();
     };
-    const big = Number(it.size) > 95 * MB; const srcs = big ? [streamUrl(it.id)] : [ucUrl(it.id), streamUrl(it.id)];   // usercontent is reliable but serves an HTML scan page for big files; the API works for any size but Google throttles it intermittently
+    const big = Number(it.size) > 95 * MB;
+    // Files Drive labels application/mp4 (e.g. the uploaded '(Quest)' copies) come from usercontent as octet-stream + nosniff,
+    // which <video> refuses; for those use the API, then a whole-file blob from usercontent relabelled video/mp4.
+    const amp = it.mimeType === 'application/mp4';
+    const srcs = big ? [streamUrl(it.id)] : amp ? [streamUrl(it.id), 'blob'] : [ucUrl(it.id), streamUrl(it.id)];   // usercontent is reliable but serves an HTML scan page for big files; the API works for any size but Google throttles it intermittently
     let lastErr = null, decodeFail = 0;
     const attempt = (k) => {
       if (k >= srcs.length) {
@@ -347,6 +351,15 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
           if (d.items[d.idx] === it) drvStart(i, d.idx + 1, tried + 1);
         };
         fetch(big ? streamUrl(it.id) : ucUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
+        return;
+      }
+      if (srcs[k] === 'blob') {
+        d.msg = `Downloading ${it.name}…`; changed();
+        fetch(ucUrl(it.id), { credentials: 'omit' }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }).then((b) => {
+          if (d.items[d.idx] !== it) return;
+          if (d.blobUrl) URL.revokeObjectURL(d.blobUrl); d.blobUrl = URL.createObjectURL(new Blob([b], { type: 'video/mp4' }));
+          chLoadT(d.ch, d.blobUrl, ok, (e) => { lastErr = e; if (e && (e.code === 3 || e.code === 4)) decodeFail++; attempt(k + 1); });
+        }).catch((e) => { lastErr = null; console.warn('[drive] blob download failed for', it.name, e.message); attempt(k + 1); });
         return;
       }
       chLoadT(d.ch, srcs[k], ok, (e) => { lastErr = e; if (e && (e.code === 3 || e.code === 4)) decodeFail++; console.warn('[drive] source', k, 'failed for', it.name, e && e.code || e); attempt(k + 1); });

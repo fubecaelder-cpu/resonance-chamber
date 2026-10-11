@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=23';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=24';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=23';
-import { pinkRoomCfg } from './pinkroom.js?v=23';
-import { buildOpRoom } from './oproom.js?v=23';
-import { buildCorridor } from './corridor.js?v=23';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=23';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=23';
-import { createScreens } from './screens.js?v=23';
-import { createPods } from './pods.js?v=23';
+import { buildChamber } from './chamber.js?v=24';
+import { pinkRoomCfg } from './pinkroom.js?v=24';
+import { buildOpRoom } from './oproom.js?v=24';
+import { buildCorridor } from './corridor.js?v=24';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=24';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=24';
+import { createScreens } from './screens.js?v=24';
+import { createPods } from './pods.js?v=24';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
