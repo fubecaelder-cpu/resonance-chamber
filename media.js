@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=21';
-import { DRIVE_DEFAULTS } from './config.js?v=21';
+import { THREE, OPT, f3 } from './shared.js?v=22';
+import { DRIVE_DEFAULTS } from './config.js?v=22';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -288,9 +288,8 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     }
   }
   setInterval(poll, Math.max(5, +new URLSearchParams(location.search).get('drivePoll') || DRIVE_DEFAULTS.pollSeconds || 60) * 1000);
-  // v19: robust per-file loading. Order: Drive API alt=media (proper CORS + Range for any size), then the public
-  // usercontent link only for files under ~95 MB (bigger ones get an HTML virus-scan page instead of the video), then the
-  // next file. Every attempt has a 25 s timeout; a playing video that freezes for 20 s also moves on. Files that can't be
+  // v19: robust per-file loading. Files under ~95 MB: public usercontent link, then the Drive API. Bigger files: the API only
+  // (usercontent answers them with an HTML virus-scan page). Then the next file. Every attempt has a 25 s timeout; a playing video that freezes for 20 s also moves on. Files that can't be
   // decoded (e.g. HEVC/H.265 on browsers without it) are remembered and skipped, with the reason shown on the panel.
   const bad = new Map();   // file id -> reason (unplayable this session)
   const MB = 1 << 20;
@@ -330,7 +329,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       if (room === i && !d.paused && !custActive()) chPlay(d.ch, () => { d.msg = it.name + ' (muted: press Play for sound)'; changed(); });
       d.note = ''; changed();
     };
-    const srcs = [streamUrl(it.id)]; if (!(Number(it.size) > 95 * MB)) srcs.push(ucUrl(it.id));
+    const big = Number(it.size) > 95 * MB; const srcs = big ? [streamUrl(it.id)] : [ucUrl(it.id), streamUrl(it.id)];   // usercontent is reliable but serves an HTML scan page for big files; the API works for any size but Google throttles it intermittently
     let lastErr = null, decodeFail = 0;
     const attempt = (k) => {
       if (k >= srcs.length) {
@@ -341,7 +340,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
           console.warn('[drive] skipping', it.name, '-', why); d.note = `Skipped ${it.name}: ${why}`; d.fails = (d.fails || 0) + 1;
           if (d.items[d.idx] === it) drvStart(i, d.idx + 1, tried + 1);
         };
-        fetch(streamUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
+        fetch(big ? streamUrl(it.id) : ucUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
         return;
       }
       chLoadT(d.ch, srcs[k], ok, (e) => { lastErr = e; if (e && (e.code === 3 || e.code === 4)) decodeFail++; console.warn('[drive] source', k, 'failed for', it.name, e && e.code || e); attempt(k + 1); });
