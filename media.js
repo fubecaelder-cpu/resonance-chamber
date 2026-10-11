@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=19';
-import { DRIVE_DEFAULTS } from './config.js?v=19';
+import { THREE, OPT, f3 } from './shared.js?v=20';
+import { DRIVE_DEFAULTS } from './config.js?v=20';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -288,23 +288,60 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     }
   }
   setInterval(poll, Math.max(5, +new URLSearchParams(location.search).get('drivePoll') || DRIVE_DEFAULTS.pollSeconds || 60) * 1000);
-  function drvStart(i, idx = drv[i].idx) {
+  // v19: robust per-file loading. Order: Drive API alt=media (proper CORS + Range for any size), then the public
+  // usercontent link only for files under ~95 MB (bigger ones get an HTML virus-scan page instead of the video), then the
+  // next file. Every attempt has a 25 s timeout; a playing video that freezes for 20 s also moves on. Files that can't be
+  // decoded (e.g. HEVC/H.265 on browsers without it) are remembered and skipped, with the reason shown on the panel.
+  const bad = new Map();   // file id -> reason (unplayable this session)
+  const MB = 1 << 20;
+  function reasonOf(err, it) {
+    if (err === 'timeout') return 'timed out loading (Drive slow or limiting downloads)';
+    if (err && err.code === 4) return Number(it.size) > 95 * MB ? 'not playable here (codec unsupported, e.g. HEVC/H.265, or download refused)' : 'codec not supported by this browser (e.g. HEVC/H.265): convert to MP4 H.264';
+    if (err && err.code === 3) return 'decode error (corrupt or unsupported encoding)';
+    return 'network error (Drive refused or throttled the download)';
+  }
+  function chLoadT(ch, src, onReady, onFail, ms = 25000) {
+    let done = false; const tm = setTimeout(() => { if (done) return; done = true; ch.loadId++; onFail('timeout'); }, ms);
+    chLoad(ch, src, true, () => { if (done) return; done = true; clearTimeout(tm); onReady(); }, (e) => { if (done) return; done = true; clearTimeout(tm); onFail(e); });
+  }
+  function drvStart(i, idx = drv[i].idx, tried = 0) {
     const d = drv[i]; if (!d.items.length) return;
-    if (!d.ch) { d.ch = channel(); d.ch.v.addEventListener('ended', () => { if (!d.repeat) drvStart(i, (d.idx + 1) % d.items.length); }); }
+    if (!d.ch) {
+      d.ch = channel(); d.ch.v.addEventListener('ended', () => { if (!d.repeat) drvStart(i, (d.idx + 1) % d.items.length); });
+      d.ch.v.addEventListener('timeupdate', () => { d.lastT = performance.now(); });
+      setInterval(() => {   // freeze watchdog
+        const v = d.ch.v; if (!d.on || d.paused || !d.ch.ready || v.paused || room !== i) { d.lastT = performance.now(); return; }
+        if (performance.now() - (d.lastT || 0) > 20000) { const it = d.items[d.idx]; console.warn('[drive] stalled, skipping', it && it.name); d.note = `Skipped ${it ? it.name : 'video'}: playback stalled`; drvStart(i, d.idx + 1); }
+      }, 5000);
+    }
     d.idx = ((idx % d.items.length) + d.items.length) % d.items.length; d.on = true; d.paused = false;
-    const it = d.items[d.idx]; d.ch.v.loop = d.repeat || d.items.length === 1;
-    d.msg = `Loading ${it.name}…`; changed();
+    if (tried >= d.items.length) { d.state = 'error'; d.on = false; d.msg = `No playable videos (${bad.size} skipped: ${d.note || ''}). Retrying every minute`; changed(); return; }
+    const it = d.items[d.idx];
+    if (bad.has(it.id)) return drvStart(i, d.idx + 1, tried + 1);
+    d.ch.v.loop = d.repeat || d.items.length === 1;
+    d.msg = (d.note ? d.note + ' · ' : '') + `Loading ${it.name}…`; changed();
     const ok = () => {
-      d.fails = 0; d.msg = `${it.name}  (${d.idx + 1}/${d.items.length})`; console.log('[drive] playing', it.name, d.ch.v.videoWidth + 'x' + d.ch.v.videoHeight);
+      d.fails = 0; d.lastT = performance.now(); d.msg = `${it.name}  (${d.idx + 1}/${d.items.length})`; console.log('[drive] playing', it.name, d.ch.v.videoWidth + 'x' + d.ch.v.videoHeight);
       if (room === i && !d.paused && !custActive()) chPlay(d.ch, () => { d.msg = it.name + ' (muted: press Play for sound)'; changed(); });
-      changed();
+      d.note = ''; changed();
     };
-    chLoad(d.ch, ucUrl(it.id), true, ok, () => { console.warn('[drive] usercontent failed, trying the API for', it.name); chLoad(d.ch, streamUrl(it.id), true, ok, () => {
-      d.fails++;
-      console.warn('[drive] could not play', it.name);
-      if (d.fails >= d.items.length) { d.state = 'error'; d.msg = 'Videos would not load (Drive may be briefly limiting downloads, or files are not MP4 H.264 / WebM): retrying every minute'; d.on = false; changed(); return; }
-      drvStart(i, d.idx + 1);
-    }); });
+    const srcs = [streamUrl(it.id)]; if (!(Number(it.size) > 95 * MB)) srcs.push(ucUrl(it.id));
+    let lastErr = null, decodeFail = 0;
+    const attempt = (k) => {
+      if (k >= srcs.length) {
+        // A media error can't tell "codec unsupported" from "download refused", so check whether the file itself is reachable.
+        const fin = (reach) => {
+          const why = lastErr === 'timeout' ? reasonOf('timeout', it) : reach && decodeFail ? 'codec not supported by this browser (likely HEVC/H.265): convert to MP4 H.264' : 'download refused or throttled by Drive (will retry later)';
+          if (reach && decodeFail) bad.set(it.id, why);
+          console.warn('[drive] skipping', it.name, '-', why); d.note = `Skipped ${it.name}: ${why}`; d.fails = (d.fails || 0) + 1;
+          if (d.items[d.idx] === it) drvStart(i, d.idx + 1, tried + 1);
+        };
+        fetch(streamUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
+        return;
+      }
+      chLoadT(d.ch, srcs[k], ok, (e) => { lastErr = e; if (e && (e.code === 3 || e.code === 4)) decodeFail++; console.warn('[drive] source', k, 'failed for', it.name, e && e.code || e); attempt(k + 1); });
+    };
+    attempt(0);
   }
   function drvOff(i, stop = true) { const d = drv[i]; d.on = false; if (d.ch && stop) chStop(d.ch); }
   function setDrive({ key, folders }) {
@@ -389,5 +426,5 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
   // start listing any folders configured via localStorage or URL params
   setTimeout(() => [0, 1, 2].forEach((i) => { if (drive.folders[i]) listFolder(i); }), 0);
   return { drive, driveAPI: API, st, video: cust.v, act, view, loadFile, loadURL, restoreDefault, attachAudio, update, audible, picker,
-    drive, drv, setDrive, bookmarkURL, setRenderer: (x) => { renderer = x; } };
+    drive, drv, bad, setDrive, bookmarkURL, setRenderer: (x) => { renderer = x; } };
 }
