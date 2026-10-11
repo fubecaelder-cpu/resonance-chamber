@@ -1,16 +1,16 @@
 // Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=18';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=19';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=18';
-import { pinkRoomCfg } from './pinkroom.js?v=18';
-import { buildOpRoom } from './oproom.js?v=18';
-import { buildCorridor } from './corridor.js?v=18';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=18';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=18';
-import { createScreens } from './screens.js?v=18';
-import { createPods } from './pods.js?v=18';
+import { buildChamber } from './chamber.js?v=19';
+import { pinkRoomCfg } from './pinkroom.js?v=19';
+import { buildOpRoom } from './oproom.js?v=19';
+import { buildCorridor } from './corridor.js?v=19';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=19';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=19';
+import { createScreens } from './screens.js?v=19';
+import { createPods } from './pods.js?v=19';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -413,7 +413,7 @@ function turnAround(ang) { camera.getWorldPosition(headP); rig.position.sub(head
 // the index finger: >= 2 cm within 300 ms turns toward the swipe (snap angle from the TURN row; in SMOOTH mode it turns 30°).
 // While a hand is fisted its pinches are ignored, so the gesture never teleports or glides.
 const G = { src: null };   // joint source override for tests: (handIndex) => { jointName: Vector3 } | null
-const gest = [0, 1].map(() => ({ hist: [], cool: 0, fist: false }));
+const gest = [0, 1].map(() => ({ st: 'off', sf: 0, n: 0, dwell: 0, lastN: 0, cool: 0, fist: false }));
 const gv = { a: new THREE.Vector3(), b: new THREE.Vector3(), d: new THREE.Vector3(), r: new THREE.Vector3() };
 function jointsOf(i) {
   if (G.src) return G.src(i);
@@ -426,27 +426,39 @@ function isFist(j) {
   return ['index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'].every((n) => j[n].distanceTo(palm) < 0.075);
 }
 let turnTick = 0;
+// v18: state machine. sf = lightly smoothed thumb position along the index axis; n = adaptive neutral (rest) position.
+// ARMED: fires once when sf leaves the neutral zone past FIRE within 350 ms of having been in neutral (starts outside neutral are ignored).
+// LOCKED (after a fire, or on making a fist): nothing fires until sf sits inside the smaller REARM zone for 200 ms
+// and the 550 ms cooldown has passed, so the return stroke never fires.
+const SW = { FIRE: 0.022, REARM: 0.009, DWELL: 0.2, COOL: 0.55, WINDOW: 0.35, SMOOTH: 0.035, ADAPT: 0.8 };
 function updateGestures(dt, now) {
   for (let i = 0; i < 2; i++) {
     const g = gest[i], j = jointsOf(i); g.cool = Math.max(0, g.cool - dt);
-    if (!j) { g.fist = false; g.hist.length = 0; continue; }
-    g.fist = isFist(j); if (!g.fist) { g.hist.length = 0; continue; }
+    g.fist = !!j && isFist(j); if (!g.fist) { g.st = 'off'; continue; }
     const p0 = j['index-finger-phalanx-proximal'], axis = gv.a.subVectors(j['index-finger-phalanx-intermediate'], p0).normalize();
     const s = gv.b.subVectors(j['thumb-tip'], p0).dot(axis);
-    g.hist.push({ t: now, s }); while (g.hist.length && now - g.hist[0].t > 0.3) g.hist.shift();
-    if (g.cool > 0) continue;
-    const first = g.hist[0], ds = s - first.s;
-    if (Math.abs(ds) >= 0.02) {
-      camera.getWorldDirection(gv.d); gv.r.crossVectors(gv.d, UP).normalize();      // head-right
-      const dir = Math.sign(axis.dot(gv.r) * ds);                                    // swipe toward head-right turns right
-      const deg = settings.turnDeg || 30; turnAround(-dir * deg * Math.PI / 180);
-      turnTick = 0.12; g.cool = 0.45; g.hist.length = 0; gest.last = { hand: i, dir };
+    if (g.st === 'off') { g.sf = g.n = s; g.st = 'locked'; g.dwell = 0; continue; }   // new fist: settle first
+    g.sf += (s - g.sf) * (1 - Math.exp(-dt / SW.SMOOTH));
+    const off = g.sf - g.n, inN = Math.abs(off) < SW.REARM;
+    if (g.st === 'locked') {
+      if (inN) { g.dwell += dt; g.n += (g.sf - g.n) * (1 - Math.exp(-dt / 0.15)); } else { g.dwell = 0; g.n += (g.sf - g.n) * (1 - Math.exp(-dt / 2.5)); }   // slow drift tracks a moved rest pose
+      if (g.dwell >= SW.DWELL && g.cool === 0) { g.st = 'armed'; g.lastN = now; }
+      continue;
+    }
+    if (inN) { g.lastN = now; g.n += (g.sf - g.n) * (1 - Math.exp(-dt / SW.ADAPT)); continue; }
+    if (Math.abs(off) >= SW.FIRE) {
+      if (now - g.lastN <= SW.WINDOW) {
+        camera.getWorldDirection(gv.d); gv.r.crossVectors(gv.d, UP).normalize();
+        const dir = Math.sign(axis.dot(gv.r) * off), deg = settings.turnDeg || 30; turnAround(-dir * deg * Math.PI / 180);
+        turnTick = 0.12; gest.last = { hand: i, dir }; gest.count = (gest.count || 0) + 1;
+      }
+      g.st = 'locked'; g.dwell = 0; g.cool = SW.COOL;   // slow drift past FIRE just re-locks
     }
   }
   if (turnTick > 0) { turnTick = Math.max(0, turnTick - dt); fadeMat.opacity = Math.max(fadeMat.opacity, 0.5 * turnTick / 0.12); fadeMat.color.setHex(0x000000); fadeMesh.visible = fadeMat.opacity > 0.002; }
 }
 const handFisted = (src) => { if (!src || !src.hand) return false; const i = tp.findIndex((s) => s.src === src); return i >= 0 && gest[i] && gest[i].fist; };
-window.__gest = { G, gest, update: updateGestures, isFist, jointsOf, walkable: (x, z) => walkable(x, z), panels: () => panelSys.panels.map((p) => p.group.getWorldPosition(new THREE.Vector3()).toArray()) };
+window.__gest = { G, gest, SW, update: updateGestures, isFist, jointsOf, walkable: (x, z) => walkable(x, z), panels: () => panelSys.panels.map((p) => p.group.getWorldPosition(new THREE.Vector3()).toArray()) };
 function xrLocomotion(dt) {
   const session = renderer.xr.getSession(); if (!session) return;
   for (const src of session.inputSources) {

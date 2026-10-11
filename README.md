@@ -68,3 +68,7 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 - **Thumb-swipe snap turn (hands):** make a loose fist with either hand and slide your thumb tip along the side of your index finger, toward the way you want to turn. Each swipe is one snap turn, with a brief dim as a cue. Pinches from a fisted hand are ignored, so this never teleports or glides you.
 - **TURN row** on CHAMBER CONTROLS: SNAP 15°, 30° or 45°, or SMOOTH. The right stick and the thumb swipe use it (in SMOOTH mode the swipe turns 30°). Saved on the device.
 - Teleport can no longer land inside a control panel.
+
+## v18
+
+- Thumb-swipe turn is calmer: hold your thumb still for a moment in a fist, then swipe. One swipe makes one turn. Bringing your thumb back to rest never turns you. Rest your thumb about 0.2 s before the next swipe (about 0.55 s between turns at most).
