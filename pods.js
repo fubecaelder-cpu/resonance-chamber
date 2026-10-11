@@ -3,7 +3,7 @@
 // Each pod shows a different item and crossfades to a new one every 8-12 s. Quest-friendly: images are downscaled to small
 // canvases, GIFs are decoded to a few small frames, and at most two muted video pods play at once (only in the room you are
 // in). If nothing loads the panels stay dark and the pods keep their original empty glow.
-import { THREE, U, LOW } from './shared.js?v=22';
+import { THREE, U, LOW } from './shared.js?v=23';
 
 const KEY = 'resonanceChamber.pods.v1';
 const MAXV = LOW ? 1 : 2;
@@ -87,6 +87,8 @@ export function createPods({ rooms, media, onChange = () => {} }) {
   const list = async (q) => { let tok = '', files = [];
     do { const b = await getJSON(`${API}/drive/v3/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent('nextPageToken,files(id,name,mimeType)')}&orderBy=name_natural&pageSize=500&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${encodeURIComponent(D.key)}${tok ? '&pageToken=' + encodeURIComponent(tok) : ''}`);
       files = files.concat(b.files || []); tok = b.nextPageToken || ''; } while (tok && files.length < 2000);
+    { const Q = /^(.*) \(Quest\)(?: part \d+ of \d+)?\.[a-z0-9]+$/i, bases = new Set(); files.forEach((f) => { const m = Q.exec(f.name); if (m) bases.add(m[1].toLowerCase()); });   // v20: skip originals that have a (Quest) copy
+      files = files.filter((f) => Q.test(f.name) || !bases.has(f.name.replace(/\.[a-z0-9]+$/i, '').toLowerCase())); }
     return files; };
 
   async function listRoom(r) {

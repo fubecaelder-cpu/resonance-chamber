@@ -1,5 +1,5 @@
 // Shared helpers for the Resonance Chamber (v3). three.js r169, no build step.
-import * as THREE from './lib/three.module.min.js?v=22';
+import * as THREE from './lib/three.module.min.js?v=23';
 export { THREE };
 
 export const Q = new URLSearchParams(location.search);

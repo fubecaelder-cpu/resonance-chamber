@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=22';
-import { DRIVE_DEFAULTS } from './config.js?v=22';
+import { THREE, OPT, f3 } from './shared.js?v=23';
+import { DRIVE_DEFAULTS } from './config.js?v=23';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -243,7 +243,13 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       files = files.concat(body.files || []); token = body.nextPageToken || '';
     } while (token && files.length < 5000);
     // v12: Drive's name search is fuzzy (a text file called "Hypnosis review" matched), so keep only real video types / extensions
-    return files.filter((f) => (/^video\//.test(f.mimeType) || f.mimeType === 'application/mp4' || /\.(mp4|m4v|webm|mov)$/i.test(f.name)) && !/\.(mkv|avi|wmv|flv)$/i.test(f.name));
+    return preferQuest(files.filter((f) => (/^video\//.test(f.mimeType) || f.mimeType === 'application/mp4' || /\.(mp4|m4v|webm|mov)$/i.test(f.name)) && !/\.(mkv|avi|wmv|flv)$/i.test(f.name)));
+  }
+  // v20: '<name> (Quest).mp4' / '<name> (Quest) part N of M.mp4' are H.264 720p copies; when one exists, its original is not tried.
+  function preferQuest(files) {
+    const Q = /^(.*) \(Quest\)(?: part \d+ of \d+)?\.[a-z0-9]+$/i, bases = new Set();
+    files.forEach((f) => { const m = Q.exec(f.name); if (m) bases.add(m[1].toLowerCase()); });
+    return files.filter((f) => Q.test(f.name) || !bases.has(f.name.replace(/\.[a-z0-9]+$/i, '').toLowerCase()));
   }
   function setItems(i, items) {
     const d = drv[i], cur = d.items[d.idx];
