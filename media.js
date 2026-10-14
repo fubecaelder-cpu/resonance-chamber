@@ -2,8 +2,8 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=24';
-import { DRIVE_DEFAULTS } from './config.js?v=24';
+import { THREE, OPT, f3 } from './shared.js?v=25';
+import { DRIVE_DEFAULTS } from './config.js?v=25';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
 export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
@@ -261,6 +261,24 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     if (!wasReady) { d.on = true; d.paused = false; d.msg = `${d.title}: ${items.length} video${items.length > 1 ? 's' : ''}`; if (i === room && !custActive()) drvStart(i); }
     else if (d.ch) d.ch.v.loop = d.repeat || items.length === 1;
   }
+  // v21: main screens play from Google Cloud Storage first (public bucket, CORS, Range), using a per-room manifest built
+  // by sync_gcs.py; the Drive playlist is the fallback when the manifest is missing/empty or every GCS file fails.
+  // Only for the site's default folders (a ?pink= / saved folder override goes straight to Drive). ?gcs=0 disables it.
+  const GCS = DRIVE_DEFAULTS.gcs, GCS_ROOM = ['pink', 'crimson', 'opart'];
+  const gcsOn = (i) => GCS && new URLSearchParams(location.search).get('gcs') !== '0' && drive.folders[i] === DRIVE_DEFAULTS.folders[i] && !drv[i].gcsFailed;
+  async function gcsList(i) {
+    const r = await fetch(`${GCS}/${GCS_ROOM[i]}/manifest.json?t=${Date.now()}`, { credentials: 'omit', cache: 'no-store' });
+    if (!r.ok) throw new Error('manifest HTTP ' + r.status);
+    const m = await r.json();
+    return (m.items || []).map((x) => ({ id: 'gcs:' + x.url, name: x.name, size: String(x.size || 0), mimeType: 'video/mp4', url: x.url, gcs: true }));
+  }
+  async function listItems(i, folder) {
+    if (gcsOn(i)) {
+      try { const items = await gcsList(i); if (items.length) { drv[i].source = 'gcs'; return items; } console.warn('[gcs]', ROOM_NAMES[i], 'manifest empty: using Drive'); }
+      catch (e) { console.warn('[gcs]', ROOM_NAMES[i], e.message, ': using Drive'); }
+    }
+    drv[i].source = 'drive'; return fetchList(folder);
+  }
   async function listFolder(i) {
     const d = drv[i], folder = drive.folders[i];
     d.folder = folder; d.items = []; d.idx = 0; d.fails = 0;
@@ -268,13 +286,17 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     if (!drive.key) { d.state = 'error'; d.msg = 'Add a Google API key to stream Drive folders'; changed(); return; }
     d.state = 'listing'; d.msg = 'Reading Drive folder…'; changed();
     try {
-      const meta = await getJSON(`${API}/drive/v3/files/${encodeURIComponent(folder)}?fields=id,name,mimeType&supportsAllDrives=true&key=${encodeURIComponent(drive.key)}`, 'Folder');
-      if (meta.mimeType !== 'application/vnd.google-apps.folder') throw new Error('That link is a file, not a folder');
-      d.title = meta.name || 'Drive folder';
-      const items = await fetchList(folder);
+      let items = gcsOn(i) ? await listItems(i, folder) : null;
+      if (items && d.source === 'gcs') d.title = ['Pink Room', 'Crimson Room', 'Op-Art Room'][i] + ' (cloud)';
+      else {
+        const meta = await getJSON(`${API}/drive/v3/files/${encodeURIComponent(folder)}?fields=id,name,mimeType&supportsAllDrives=true&key=${encodeURIComponent(drive.key)}`, 'Folder');
+        if (meta.mimeType !== 'application/vnd.google-apps.folder') throw new Error('That link is a file, not a folder');
+        d.title = meta.name || 'Drive folder';
+        if (!items) { d.source = 'drive'; items = await fetchList(folder); }
+      }
       if (drive.folders[i] !== folder) return;   // changed while we were listing
       setItems(i, items);
-      console.log('[drive]', ROOM_NAMES[i], d.title, items.length + ' video(s)');
+      console.log('[drive]', ROOM_NAMES[i], d.title, items.length + ' video(s)', 'from', d.source);
       changed();
     } catch (e) { if (drive.folders[i] !== folder) return; d.state = 'error'; d.msg = e.message; console.warn('[drive]', ROOM_NAMES[i], e.message); changed(); }
   }
@@ -286,8 +308,9 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       if (!folder || d.state === 'listing') continue;
       if (d.state === 'error' || !d.title) { listFolder(i); continue; }
       try {
-        const items = await fetchList(folder);
+        const was = d.source, items = await listItems(i, folder);
         if (drive.folders[i] !== folder) continue;
+        if (was !== d.source) { listFolder(i); continue; }
         const sig = (a) => a.map((f) => f.id).join(',');
         if (sig(items) !== sig(d.items)) { console.log('[drive]', ROOM_NAMES[i], 'folder changed:', items.length + ' video(s)'); setItems(i, items); changed(); }
       } catch (e) { console.warn('[drive] poll', ROOM_NAMES[i], e.message); }
@@ -320,6 +343,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       }, 5000);
     }
     d.idx = ((idx % d.items.length) + d.items.length) % d.items.length; d.on = true; d.paused = false;
+    if (tried >= d.items.length && d.source === 'gcs') { console.warn('[gcs]', ROOM_NAMES[i], 'no file played: falling back to Drive'); d.gcsFailed = true; d.on = false; return listFolder(i); }
     if (tried >= d.items.length) { d.state = 'error'; d.on = false; d.msg = `No playable videos (${bad.size} skipped: ${d.note || ''}). Retrying every minute`; changed(); return; }
     const it = d.items[d.idx];
     if (bad.has(it.id)) return drvStart(i, d.idx + 1, tried + 1);
@@ -339,7 +363,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     // Files Drive labels application/mp4 (e.g. the uploaded '(Quest)' copies) come from usercontent as octet-stream + nosniff,
     // which <video> refuses; for those use the API, then a whole-file blob from usercontent relabelled video/mp4.
     const amp = it.mimeType === 'application/mp4';
-    const srcs = big ? [streamUrl(it.id)] : amp ? [streamUrl(it.id), 'blob'] : [ucUrl(it.id), streamUrl(it.id)];   // usercontent is reliable but serves an HTML scan page for big files; the API works for any size but Google throttles it intermittently
+    const srcs = it.gcs ? [it.url] : big ? [streamUrl(it.id)] : amp ? [streamUrl(it.id), 'blob'] : [ucUrl(it.id), streamUrl(it.id)];   // usercontent is reliable but serves an HTML scan page for big files; the API works for any size but Google throttles it intermittently
     let lastErr = null, decodeFail = 0;
     const attempt = (k) => {
       if (k >= srcs.length) {
@@ -350,7 +374,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
           console.warn('[drive] skipping', it.name, '-', why); d.note = `Skipped ${it.name}: ${why}`; d.fails = (d.fails || 0) + 1;
           if (d.items[d.idx] === it) drvStart(i, d.idx + 1, tried + 1);
         };
-        fetch(big ? streamUrl(it.id) : ucUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
+        fetch(it.gcs ? it.url : big ? streamUrl(it.id) : ucUrl(it.id), { headers: { Range: 'bytes=0-1' }, credentials: 'omit' }).then((r) => fin(r.ok && /video|octet|mp4|webm|quicktime/.test(r.headers.get('content-type') || '')), () => fin(false));
         return;
       }
       if (srcs[k] === 'blob') {

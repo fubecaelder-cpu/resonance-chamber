@@ -9,4 +9,6 @@ export const DRIVE_DEFAULTS = {
     '17GxD2HPaYf9uV1Sm6oE88P5ZoKrPP3wz',   // Op-Art Room
   ],
   pollSeconds: 60,
+  // v21: public Cloud Storage bucket with <room>/manifest.json (built by sync_gcs.py); main screens try it before Drive
+  gcs: 'https://storage.googleapis.com/resonance-chamber-videos',
 };
