@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=25';
+import { THREE, canvasTex } from './shared.js?v=26';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -23,6 +23,8 @@ const STYLES = {
     cap: [1.0, 0.31, 0.62], glyph: [1.0, 0.95, 0.97], rim: [0.55, 0.12, 0.3], frame: [0.16, 0.04, 0.1], neon: [1.0, 0.43, 0.69], stripes: false },
   crimson: { bg0: '#1c0003', bg1: '#080001', edge: '#ff3048', title: '#ff9aa0', label: '#ff5a66', value: '#ffe0e2', socket: 'rgba(216,8,28,0.3)',
     cap: [0.86, 0.03, 0.1], glyph: [1.0, 0.85, 0.86], rim: [0.35, 0.0, 0.04], frame: [0.07, 0.0, 0.01], neon: [1.0, 0.18, 0.26], stripes: false },
+  barn: { bg0: '#2b1608', bg1: '#120803', edge: '#ff9fbd', title: '#ffe2b0', label: '#ffb87a', value: '#fff0d2', socket: 'rgba(255,159,189,0.28)',
+    cap: [1.0, 0.62, 0.74], glyph: [1.0, 0.95, 0.84], rim: [0.5, 0.3, 0.12], frame: [0.14, 0.07, 0.03], neon: [1.0, 0.62, 0.74], stripes: false },
   mono: { bg0: '#0c0c0c', bg1: '#000000', edge: '#ffffff', title: '#ffffff', label: '#d8d8d8', value: '#ffffff', socket: 'rgba(255,255,255,0.18)',
     cap: [0.95, 0.95, 0.95], glyph: [0.02, 0.02, 0.02], rim: [0.3, 0.3, 0.3], frame: [0.03, 0.03, 0.03], neon: [1.0, 1.0, 1.0], stripes: true },
 };

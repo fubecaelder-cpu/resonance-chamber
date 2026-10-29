@@ -1,8 +1,11 @@
 // Connecting corridor between two rooms. Colours blend from room A's palette to room B's along its length.
 // Layered neon arches, glossy reflective floor, light flowing along the walls toward the next room, drifting particles.
 // drain=true (crimson → monochrome): colour drains out and the surfaces turn into op-art stripes and checkers as you walk.
+// v22: styles 0-3 (pink, crimson, op-art, barn). Barn ends blend into cream cow-print walls/ceiling and a spotted floor.
+// cfg.cross = { z, cut } marks where another diagonal corridor crosses this one at 90° (the walls open up; cut also removes this
+// corridor's floor and ceiling there so the first corridor's floor/ceiling carries on through the crossing).
 // Ends are iris veils (with a solid end wall) that open as you approach.
-import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=25';
+import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=26';
 
 export function buildCorridor(cfg) {
   const { L } = cfg, W = 2.6, HH = 3.6, HW = W / 2, drain = !!cfg.drain;
@@ -13,7 +16,7 @@ export function buildCorridor(cfg) {
   const fx = new THREE.Group(); root.add(fx);
   const A = PAL[cfg.palA], B = PAL[cfg.palB];
   const v = (a) => ({ value: new THREE.Vector3(...a) });
-  const uni = { uA: v(A.PINK), uA2: v(A.HOT), uAW: v(A.WHITE), uB: v(B.PINK), uB2: v(B.HOT), uBW: v(B.WHITE), uBA: v(A.BASE), uBB: v(B.BASE) };
+  const uni = { uCow: { value: new THREE.Vector2(cfg.styleA === 3 ? 1 : 0, cfg.styleB === 3 ? 1 : 0) }, uA: v(A.PINK), uA2: v(A.HOT), uAW: v(A.WHITE), uB: v(B.PINK), uB2: v(B.HOT), uBW: v(B.WHITE), uBA: v(A.BASE), uBB: v(B.BASE) };
   const defines = drain ? (cfg.monoAtStart ? { DRAIN: 1, DRAIN_REV: 1 } : { DRAIN: 1 }) : {};
   const HEAD = /* glsl */`
     uniform vec3 uA; uniform vec3 uA2; uniform vec3 uAW; uniform vec3 uB; uniform vec3 uB2; uniform vec3 uBW; uniform vec3 uBA; uniform vec3 uBB;
@@ -42,11 +45,22 @@ export function buildCorridor(cfg) {
     }
     float breath(){ return 0.5 - 0.5 * cos(6.2831 * uBeatT / 4.0); }
   `;
-  const M = (fs, o = {}) => K.mat(HEAD + fs, { uniforms: uni, defines, ...o });
+  const CZ = cfg.cross ? cfg.cross.z : -999, CHW = cfg.cross ? W / 2 : 0, CUT = cfg.cross && cfg.cross.cut;
+  const CUTGLSL = `if (abs(vW.z - ${f3(CZ)}) < ${f3(CHW)}) discard;`;
+  // cow print (barn): blotchy black spots on cream, from layered value noise
+  const COW = /* glsl */`
+    uniform vec2 uCow;
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float cowSpot(vec2 q){ float n = vn(q * 0.62) * 0.64 + vn(q * 1.5 + 4.0) * 0.36; float w = fwidth(n) * 1.5 + 0.012; return smoothstep(0.575 - w, 0.575 + w, n); }
+    float cowW(float z){ return mix(uCow.x, uCow.y, smoothstep(0.12, 0.88, z / ${f3(L)})); }
+  `;
+  const M = (fs, o = {}) => K.mat(HEAD + COW + fs, { uniforms: uni, defines, ...o });
 
   // ---------- walls ----------
   const wallM = M(/* glsl */`
     void main(){
+      ${CUTGLSL}
       float y = abs(vW.y), z = vW.z; float t = tz(z);
       vec3 acc = mix(uA, uB, t), acc2 = mix(uA2, uB2, t), wh = mix(uAW, uBW, t), base = mix(uBA, uBB, t);
       float pz = fwidth(z), py = fwidth(y);
@@ -56,6 +70,10 @@ export function buildCorridor(cfg) {
       float sx = 1.0 - smoothstep(0.02, 0.02 + pz / 0.52 * 1.5, min(f.x, 1.0 - f.x));
       float sy = 1.0 - smoothstep(0.02, 0.02 + py / 0.9 * 1.5, min(f.y, 1.0 - f.y));
       surf *= 1.0 - max(sx, sy) * 0.8;
+      float ck = cowW(z);
+      if (ck > 0.001) { float sp = cowSpot(vec2(z, y) * 0.9 + (vW.x > 0.0 ? 31.0 : 0.0));
+        vec3 cc = mix(vec3(0.72, 0.64, 0.5), vec3(0.03, 0.025, 0.025), sp) * (1.0 - 0.3 * max(sx, sy)); cc = mix(cc, vec3(0.2, 0.11, 0.06), 1.0 - smoothstep(0.55, 0.7, y));
+        surf = mix(surf, cc, ck); }
       vec2 dc = (f - 0.5) * vec2(0.52, 0.9); float dd = abs(dc.x) * 1.7 + abs(dc.y);
       vec3 glow = acc * (1.0 - smoothstep(0.012, 0.012 + max(pz, py) * 2.0, abs(dd - 0.12))) * step(0.55, h) * 0.45;
       float rib = aline(z / 1.03 - 0.03, 0.012, pz / 1.03);
@@ -73,6 +91,7 @@ export function buildCorridor(cfg) {
       glow += acc * exp(-abs(z - uBeatT * 3.5) * 1.6) * uBeat * 0.35;
       glow += acc2 * (1.0 - smoothstep(0.03, 0.03 + py * 1.5, abs(y - 0.12))) * (0.9 + 0.6 * uBeat);
       glow += acc * 0.08 * exp(-y * 1.5);
+      glow *= 1.0 - 0.45 * ck;
       vec3 col;
       #ifdef DRAIN
         float mk = monoK(z, y);
@@ -93,10 +112,13 @@ export function buildCorridor(cfg) {
   {
     const c = new THREE.Mesh(new THREE.PlaneGeometry(W, L), M(/* glsl */`
       void main(){
+        ${CUT ? CUTGLSL : ''}
         float z = vW.z, x = vW.x, ax = abs(x); float t = tz(z);
         vec3 acc = mix(uA, uB, t), acc2 = mix(uA2, uB2, t), base = mix(uBA, uBB, t);
         float pz = fwidth(z), px = fwidth(x);
         vec3 surf = base * 0.7 * (1.0 - 0.7 * aline(z / 0.26, 0.06, pz / 0.26));
+        float ck = cowW(z);
+        if (ck > 0.001) surf = mix(surf, mix(vec3(0.6, 0.53, 0.42), vec3(0.03, 0.025, 0.025), cowSpot(vec2(z, x) * 0.8 + 57.0)), ck);
         float flow = pow(0.5 + 0.5 * sin(z * 2.0 - uTime * 3.0), 6.0);
         vec3 glow = acc2 * (1.0 - smoothstep(0.03, 0.03 + px * 1.5, ax)) * (0.35 + 0.6 * flow);
         glow += acc * (1.0 - smoothstep(0.012, 0.012 + px * 1.5, abs(ax - 0.75))) * 0.45;
@@ -118,16 +140,15 @@ export function buildCorridor(cfg) {
   // pink: interlocking-circle petal inlay; crimson: pulsing veins + lub-dub ripples; monochrome: warped op-art checker (DRAIN)
   let floor;
   {
-    const oh = (s) => new THREE.Vector3(s === 0 ? 1 : 0, s === 1 ? 1 : 0, s === 2 ? 1 : 0);
+    const oh = (s) => new THREE.Vector4(s === 0 ? 1 : 0, s === 1 ? 1 : 0, s === 2 ? 1 : 0, s === 3 ? 1 : 0);
     const cz = cfg.styleB === 1 ? L + 1.2 : -1.2;   // heartbeat ripples spread out from the crimson end
-    const m = K.mat(HEAD + /* glsl */`
-      uniform float uMirror; uniform vec3 uWA; uniform vec3 uWB;
-      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y); }
+    const m = K.mat(HEAD + COW + /* glsl */`
+      uniform float uMirror; uniform vec4 uWA; uniform vec4 uWB;
       float ln(float d, float hw){ return 1.0 - smoothstep(hw, hw + fwidth(d) * 1.5, abs(d)); }
       void main(){
+        ${CUT ? CUTGLSL : ''}
         vec2 p = vW.xz; float z = p.y, ax = abs(p.x); float t = tz(z);
-        vec3 w = mix(uWA, uWB, smoothstep(0.12, 0.88, z / ${f3(L)}));
+        vec4 w = mix(uWA, uWB, smoothstep(0.12, 0.88, z / ${f3(L)}));
         vec3 acc = mix(uA, uB, t), acc2 = mix(uA2, uB2, t), base = mix(uBA, uBB, t);
         vec2 px = fwidth(p);
         // polished slabs, staggered
@@ -135,6 +156,10 @@ export function buildCorridor(cfg) {
         vec2 gf = fract(sc);
         float seam = max(1.0 - smoothstep(0.006, 0.006 + px.x / 0.65 * 1.5, min(gf.x, 1.0 - gf.x)), 1.0 - smoothstep(0.004, 0.004 + px.y / 1.3 * 1.5, min(gf.y, 1.0 - gf.y)));
         vec3 surf = base * (0.28 + 0.06 * hash12(floor(sc))) + acc * seam * 0.08;
+        { // barn: cream tiles with slowly morphing black cow spots
+          vec2 q = p * 0.95 + vec2(0.0, 3.0) + vec2(sin(uTime * 0.05), cos(uTime * 0.04)) * 0.8;
+          float sp = cowSpot(q) ; vec3 cf = mix(vec3(0.58, 0.52, 0.42), vec3(0.025, 0.02, 0.02), sp) * (1.0 - 0.35 * seam);
+          surf = mix(surf, cf, w.w); }
         float run = 1.0 - smoothstep(0.76, 0.8, ax);
         vec3 glow = vec3(0.0);
         // pink: interlocking circles -> four-petal flowers
@@ -180,7 +205,7 @@ export function buildCorridor(cfg) {
           col = surf + glow + arrows;
         #endif
         vec3 V = normalize(CAM - vW); float fr = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);
-        gl_FragColor = vec4(col, mix(0.3, 0.75, fr) * uMirror * refl);
+        gl_FragColor = vec4(col, mix(0.3, 0.75, fr) * uMirror * refl * (1.0 - 0.45 * w.w));
       }`, { uniforms: { ...uni, uWA: { value: oh(cfg.styleA) }, uWB: { value: oh(cfg.styleB) } }, defines });
     m.transparent = true; m.depthWrite = true;
     m.blending = THREE.CustomBlending; m.blendSrc = THREE.OneFactor; m.blendDst = THREE.SrcAlphaFactor; m.blendEquation = THREE.AddEquation;
@@ -188,7 +213,7 @@ export function buildCorridor(cfg) {
   }
   // ---------- layered neon arches ----------
   {
-    const archs = []; for (let z = 0.55; z < L - 0.3; z += 1.03) archs.push(mtx(0, 0, z));
+    const archs = []; for (let z = 0.55; z < L - 0.3; z += 1.03) if (!cfg.cross || Math.abs(z - CZ) > CHW + 0.2) archs.push(mtx(0, 0, z));
     const ARCH = `
       vec3 archCol(float z, float along, float k){
         float t = tz(z); vec3 c = mix(uA, uB, t);

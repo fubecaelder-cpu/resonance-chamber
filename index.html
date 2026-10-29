@@ -31,7 +31,7 @@
 <body>
 <div id="hud"><b>RESONANCE CHAMBER</b><br>
 Quest: tap <b>ENTER VR</b>. Left stick moves, right stick snap-turns.<br>
-Three rooms in a triangle: the two glowing doorways behind you lead to the other rooms.<br>Desktop: drag to look, WASD / arrows to walk.<br>Slow headset? add <b>?quality=low</b> to the URL.</div>
+Four rooms on the corners of a square: the three glowing doorways behind you lead to the other rooms (two along the sides, one across the middle).<br>Desktop: drag to look, WASD / arrows to walk.<br>Slow headset? add <b>?quality=low</b> to the URL.</div>
 <button id="sound">▶ Start sound</button>
 <div id="media" class="open">
   <button id="mToggle">▣ Your video on the room screens</button>
@@ -44,6 +44,7 @@ Three rooms in a triangle: the two glowing doorways behind you lead to the other
       <div class="row"><input id="dF0" type="url" placeholder="Pink room: Drive folder link"></div>
       <div class="row"><input id="dF1" type="url" placeholder="Crimson room: Drive folder link"></div>
       <div class="row"><input id="dF2" type="url" placeholder="Monochrome room: Drive folder link"></div>
+      <div class="row"><input id="dF3" type="url" placeholder="Barn room: Drive folder link"></div>
       <div class="row"><button id="dGo">Stream folders</button><button id="dLink">Make bookmark link</button></div>
       <div id="dStatus"></div>
       <small>Share each folder as "Anyone with the link". Videos stream from Google; nothing is stored on the headset. MP4 (H.264/AAC) or WebM.</small>
@@ -52,6 +53,6 @@ Three rooms in a triangle: the two glowing doorways behind you lead to the other
     By default each room plays its Google Drive folder. A file or URL you choose here takes over the screens until you press Back to Drive playlists (or DEFAULT on the in-room MEDIA panel).</small>
   </div>
 </div>
-<script type="module" src="./main.js?v=25"></script>
+<script type="module" src="./main.js?v=26"></script>
 </body>
 </html>

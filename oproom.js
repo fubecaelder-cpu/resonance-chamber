@@ -1,9 +1,9 @@
 // Room 3: stark monochrome op-art chamber. Purely abstract: spirals, moiré, warped checkers, concentric rings.
 // Comfort: no flashing. Every pattern moves slowly (< ~1 Hz at any point), and the beat is a smooth 0.25 Hz luminance swell.
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, D0, DW, VEIL_R,
-  makeKit, instanced, mtx, glowSprite, archCurve, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil, DH } from './shared.js?v=25';
-import { makeParticles } from './chamber.js?v=25';
-import { PAL } from './shared.js?v=25';
+  makeKit, instanced, mtx, glowSprite, archCurve, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil, DH, DOORNEON } from './shared.js?v=26';
+import { makeParticles } from './chamber.js?v=26';
+import { PAL } from './shared.js?v=26';
 
 const placeAt = (m, p) => { m.position.copy(p); return m; };
 export function buildOpRoom(cfg) {
@@ -53,8 +53,7 @@ export function buildOpRoom(cfg) {
   for (const a of doorAngles) { const p = world.add(placeAt(new THREE.Mesh(new THREE.BoxGeometry(0.6, H - DH - DW - 0.3, 0.3), new THREE.MeshBasicMaterial({ color: 0x050505 })),
     new THREE.Vector3(Math.sin(a) * (R - 0.12), (H + DH + DW + 0.3) / 2, Math.cos(a) * (R - 0.12)))); p.children[p.children.length - 1].rotation.y = a; }
 
-  // black pilaster on the axis between the doorways hides the wall pattern's seam (v8)
-  world.add(placeAt(new THREE.Mesh(new THREE.BoxGeometry(0.5, H, 0.3), new THREE.MeshBasicMaterial({ color: 0x050505 })), new THREE.Vector3(0, H / 2, R - 0.12)));
+  // v22: the axis pilaster of v8 is gone: with four rooms in a square a doorway now sits on the axis (and has its own pilaster above)
   // floor: warped spiral checkerboard
   {
     const m = mat(/* glsl */`
@@ -124,8 +123,8 @@ export function buildOpRoom(cfg) {
   // sculptures: striped monoliths + floating op-art rings and spheres
   {
     const mono = [];
-    for (const a of [0.95, 1.4, 1.85, -0.95, -1.4, -1.85]) mono.push(mtx(Math.sin(a) * 5.2, 1.7, Math.cos(a) * 5.2, a + Math.PI));
-    out.podSpots = [0.95, 1.4, 1.85, -0.95, -1.4, -1.85].map((a) => ({ kind: 'slab', x: Math.sin(a) * 5.2, z: Math.cos(a) * 5.2, ry: a + Math.PI }));   // v11: holo media panels on the monoliths
+    for (const a of [1.12, 1.46, 1.8, -1.12, -1.46, -1.8]) mono.push(mtx(Math.sin(a) * 5.2, 1.7, Math.cos(a) * 5.2, a + Math.PI));
+    out.podSpots = [1.12, 1.46, 1.8, -1.12, -1.46, -1.8].map((a) => ({ kind: 'slab', x: Math.sin(a) * 5.2, z: Math.cos(a) * 5.2, ry: a + Math.PI }));   // v11: holo media panels on the monoliths
     instanced(new THREE.BoxGeometry(0.9, 3.4, 0.28), mat(/* glsl */`
       ${BR}
       void main(){ float x = vL.x * 3.0 + vL.y * 1.2 + sin(vL.y * 2.0 + uTime * 0.15 + vH * 6.0) * 0.35;
@@ -151,7 +150,7 @@ export function buildOpRoom(cfg) {
     const g = new THREE.Group(); g.position.set(Math.sin(d.ang) * VEIL_R, 0, Math.cos(d.ang) * VEIL_R); g.rotation.y = d.ang + Math.PI;
     g.add(makeVeil(d.style, 0));
     g.add(new THREE.Mesh(new THREE.TubeGeometry(archCurve(0.05, DW + 0.12), 64, 0.13, 8), new THREE.MeshBasicMaterial({ color: 0x080808 })));
-    neonTube(g, archCurve(0.17, DW + 0.03), d.style === 1 ? 0xff3048 : d.style === 0 ? 0xff6eb4 : 0xffffff, 1.1, 0.03, 64, 4);
+    neonTube(g, archCurve(0.17, DW + 0.03), DOORNEON[d.style], 1.1, 0.03, 64, 4);
     world.add(g);
   }
   out.points = makeParticles(fx, PAL.mono, Math.floor(OPT.particles * 0.35), false);

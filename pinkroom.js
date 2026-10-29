@@ -1,19 +1,19 @@
 // Room 1 v4: the pink chamber, redesigned. True pink palette, grand layered portal, crown chandelier with bead strands,
 // fan-vault ceiling ribs, arcade + rose-window walls, a balcony band, upgraded empty glowing pods, soft haze and bokeh.
 // Built on top of buildChamber (walls / floor / doorway / tunnel / screen / mirror) through its deluxe hooks.
-import { THREE, U, OPT, f3, R, H, TR, TZ, LOW, dummy, mtx, instanced, glowSprite, ringCurves } from './shared.js?v=25';
+import { THREE, U, OPT, f3, R, H, TR, TZ, LOW, dummy, mtx, instanced, glowSprite, ringCurves } from './shared.js?v=26';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;           // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI, BAYS = 28, BAYW = (2 * PI * R) / BAYS;
 
-const wallGLSL = /* glsl */`
+const wallGLSLFor = (doorAngs) => /* glsl */`
   {
     float pxm = max(length(fwidth(vW.xz)), fwidth(y));
     // arcade: a rounded neon arch + recessed niche in every bay between pilasters, rose window above
     float u = ang * ${f3(BAYS / (2 * PI))};
     float s = (fract(u) - 0.5) * ${f3(BAYW)};
     float bayA = (floor(u) + 0.5) / ${f3(BAYS / (2 * PI))};
-    float keep = step(0.3, abs(atan(sin(bayA - 0.5236), cos(bayA - 0.5236)))) * step(0.3, abs(atan(sin(bayA + 0.5236), cos(bayA + 0.5236)))) * step(0.72, abs(atan(sin(bayA - 3.14159), cos(bayA - 3.14159))));
+    float keep = step(0.72, abs(atan(sin(bayA - 3.14159), cos(bayA - 3.14159))))${doorAngs.map((d) => ` * step(0.3, abs(atan(sin(bayA - (${f3(d)})), cos(bayA - (${f3(d)})))))`).join('')};   // v22: no arcade arches beside any doorway (now up to three)
     float aw = 0.5, ay = 3.25;
     float dA = y < ay ? abs(abs(s) - aw) : abs(length(vec2(s, y - ay)) - aw);
     float inA = (y < ay ? step(abs(s), aw) : step(length(vec2(s, y - ay)), aw)) * step(0.55, y);
@@ -86,7 +86,7 @@ const floorGLSL = /* glsl */`
     col += PINK * aline(d * 0.8 - uTime * 0.45, 0.015, fwidth(d) * 0.8) * exp(-d * 0.3) * (0.25 + 0.4 * uInt) * DIM;
   }`;
 
-function extra({ K, world, root, fx, out, haze }) {
+function extra({ K, world, root, fx, out, haze, cfg }) {
   const { mat, neonTorus, neonTube, metalMat, glowShell, neonCore, VSf, hex } = K;
   const PC = new THREE.Vector3(0, FY, TZ + 0.06);
   const at = (z) => PC.clone().setZ(PC.z + z);
@@ -192,7 +192,7 @@ function extra({ K, world, root, fx, out, haze }) {
 
   // ---------- balcony band around the side walls ----------
   {
-    const gaps = [[PI / 6, 0.3], [-PI / 6, 0.3], [PI, 0.78]];   // doorways mirrored at ±30° (v8)
+    const gaps = [...cfg.doors.map((d) => [d.ang, 0.3]), [PI, 0.78]];   // v22: one gap per doorway (the layout is a square: doors at -45°, 0°, +45°)
     for (const cv of ringCurves(R - 0.3, 4.74, gaps, 200)) {
       const m = new THREE.Mesh(new THREE.TubeGeometry(cv, 64, 0.11, 8), metalMat({ STRIP_Y: '0.105' })); m.userData.noMirror = true; world.add(m);
     }
@@ -202,7 +202,7 @@ function extra({ K, world, root, fx, out, haze }) {
   // ---------- pods: upgraded empty glowing capsules ----------
   {
     const PODS = [];
-    for (let i = 2; i < 6; i++) { const z = -4.6 + i * 1.65, x = Math.min(4.3, 2.5 + 0.42 * i); PODS.push([-x, z], [x, z]); }
+    for (let i = 2; i < 5; i++) { const z = -4.6 + i * 1.65, x = Math.min(4.3, 2.5 + 0.42 * i); PODS.push([-x, z], [x, z]); }   // v22: 6 pods (the last pair would stand in the ±45° doorway paths)
     out.podSpots = PODS.map(([x, z]) => ({ kind: 'tube', x, z }));   // v11: holo media panels (pods.js)
     // 8 pods, mirrored left/right (v10: none in the monitor bay)
     const podM = PODS.map(([x, z]) => { dummy.position.set(x, 0, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1);
@@ -320,7 +320,7 @@ function extra({ K, world, root, fx, out, haze }) {
   }
 }
 
-export function pinkRoomCfg(tunnelU) {
+export function pinkRoomCfg(tunnelU, doors) {
   return { name: 'room1', center: [0, 0], rotY: 0, pal: 'pink', focal: 'tunnel', screen: true, tunnelU, deluxe: true,
-    podIdx: [], doors: [{ ang: -PI / 6, style: 1 }, { ang: PI / 6, style: 2 }], wallGLSL, ceilGLSL, floorGLSL, extra };
+    podIdx: [], doors, wallGLSL: wallGLSLFor(doors.map((d) => d.ang)), ceilGLSL, floorGLSL, extra };
 }

@@ -1,10 +1,10 @@
 // Neon pod chamber builder (Room 1 pink, Room 2 crimson). Everything is built in room-local space:
 // focal point at local -z, entry doorway at local +z (angle 0).
-import { clipMirror } from "./shared.js?v=25";
+import { clipMirror } from "./shared.js?v=26";
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, TL, START_Z, D0, DW, VEIL_R, PAL,
-  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil } from './shared.js?v=25';
-import { roomMedia, MEDIA_GLSL } from './media.js?v=25';
-import { MON_GEO } from './shared.js?v=25';
+  makeKit, instanced, mtx, dummy, glowSprite, canvasTex, archCurve, ringCurves, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil, DOORNEON } from './shared.js?v=26';
+import { roomMedia, MEDIA_GLSL } from './media.js?v=26';
+import { MON_GEO } from './shared.js?v=26';
 
 
 // floor helpers shared by the room floors
@@ -43,6 +43,7 @@ export function buildChamber(cfg) {
   // ---------- walls ----------
   {
     const m = mat(/* glsl */`
+      ${cfg.head || ''}
       void main(){
         float y = abs(vW.y);
         float ang = atan(vW.x, vW.z);
@@ -83,6 +84,7 @@ export function buildChamber(cfg) {
   // ---------- ceiling, beams, pilasters, pylons, conduits ----------
   {
     const m = mat(/* glsl */`
+      ${cfg.head || ''}
       void main(){
         float r = length(vW.xz);
         vec3 col = BASE2 + BASE * 0.3;
@@ -118,7 +120,7 @@ export function buildChamber(cfg) {
     const g = new THREE.Group(); g.position.set(Math.sin(d.ang) * VEIL_R, 0, Math.cos(d.ang) * VEIL_R); g.rotation.y = d.ang + Math.PI;
     const veil = makeVeil(d.style, 0); g.add(veil);
     g.add(new THREE.Mesh(new THREE.TubeGeometry(archCurve(0.05, DW + 0.12), 64, 0.13, 8), metalMat()));
-    neonTube(g, archCurve(0.17, DW + 0.03), d.style === 2 ? 0xffffff : d.style === 1 ? 0xff3048 : 0xff6fc0, 1.2, 0.03, 64, 5);
+    neonTube(g, archCurve(0.17, DW + 0.03), DOORNEON[d.style], 1.2, 0.03, 64, 5);
     neonTube(g, archCurve(0.12, DW + 0.24), hex.a, 0.9, 0.02, 64, 5);
     world.add(g);
   }
@@ -129,6 +131,7 @@ export function buildChamber(cfg) {
     const m = mat(/* glsl */`
       uniform float uMirror;
       ${FLOOR_HELPERS}
+      ${cfg.head || ''}
       void main(){
         vec2 p = vW.xz; float rr = length(p);
         ${floorDoorDiscardGLSL(doorAngles)}
@@ -153,7 +156,8 @@ export function buildChamber(cfg) {
   // ---------- focal point ----------
   const pc = new THREE.Vector3(0, TY, TZ + 0.06);
   const fg = new THREE.Group(); fg.scale.setScalar(FS); fg.position.set(0, FY - pc.y * FS, pc.z - pc.z * FS); world.add(fg);
-  if (cfg.focal === 'tunnel') buildTunnel(K, fg, cfg.tunnelU);
+  if (cfg.focalFn) cfg.focalFn(K, fg);   // v22: custom focal (barn milk vortex)
+  else if (cfg.focal === 'tunnel') buildTunnel(K, fg, cfg.tunnelU);
   else buildVortex(K, fg);
   if (!cfg.deluxe) {
     const bez = new THREE.Mesh(new THREE.TorusGeometry(TR + 0.42, 0.34, 12, 96), metalMat()); bez.position.copy(pc); fg.add(bez);
@@ -277,7 +281,7 @@ export function buildChamber(cfg) {
     out.points = makeParticles(fx, PAL[cfg.pal]);
   }
 
-  if (cfg.extra) cfg.extra({ K, world, root, fx, out, haze, FS, FY, pc });
+  if (cfg.extra) cfg.extra({ K, world, root, fx, out, haze, FS, FY, pc, cfg });
 
   // ---------- mirror copy for floor reflections ----------
   world.traverse((o) => { if (o.material && o.material.transparent) o.renderOrder = 20 + (o.userData.ro || 0); });

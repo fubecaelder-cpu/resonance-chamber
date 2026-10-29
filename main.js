@@ -1,16 +1,18 @@
-// Resonance Chamber v5 — three WebXR rooms in a triangle (pink chamber, crimson vortex room, monochrome op-art room),
+// Resonance Chamber v22 — four WebXR rooms on the corners of a square (pink chamber, crimson vortex room, monochrome op-art room,
+// Buttercup Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
-// URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=25';
+// URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=26';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=25';
-import { pinkRoomCfg } from './pinkroom.js?v=25';
-import { buildOpRoom } from './oproom.js?v=25';
-import { buildCorridor } from './corridor.js?v=25';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=25';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=25';
-import { createScreens } from './screens.js?v=25';
-import { createPods } from './pods.js?v=25';
+import { buildChamber } from './chamber.js?v=26';
+import { pinkRoomCfg } from './pinkroom.js?v=26';
+import { barnRoomCfg } from './barnroom.js?v=26';
+import { buildOpRoom } from './oproom.js?v=26';
+import { buildCorridor } from './corridor.js?v=26';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=26';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=26';
+import { createScreens } from './screens.js?v=26';
+import { createPods } from './pods.js?v=26';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -34,38 +36,49 @@ camera.position.set(0, 1.6, 0); camera.rotation.order = 'YXZ'; rig.add(camera);
 // ---------- world layout ----------
 const tunnelU = { uVideo: { value: null }, uHasVideo: { value: 0 }, uVidScale: { value: new THREE.Vector2(1, 1) },
   uVidMix: { value: OPT.video === 'full' ? 1.0 : OPT.video === '0' ? 0.0 : 0.32 }, uProc: { value: OPT.video === 'full' ? 0.0 : 1.0 } };
-// ---------- layout (v8): an equilateral triangle, side 20 m. Every room's focal axis points away from the triangle's centre,
-// and its two doorways sit mirrored at ±30° either side of the axis behind you, each looking straight down a corridor.
-const SIDE = 20, DA = Math.PI / 6;
-const RC = [[0, 0], [0, SIDE], [SIDE * Math.sqrt(3) / 2, SIDE / 2]];                 // pink, crimson, op-art centres
-const CEN = [(RC[0][0] + RC[1][0] + RC[2][0]) / 3, (RC[0][1] + RC[1][1] + RC[2][1]) / 3];
+// ---------- layout (v22): the four rooms stand on the corners of a 20 m square, in order round it (pink, crimson, op-art, barn).
+// Every room's focal axis points away from the square's centre, so its three doorways sit at -45° / 0° / +45° of the axis behind
+// you: two look straight down the corridors along the square's sides, the middle one looks down a diagonal. The two diagonals
+// (pink-op-art and crimson-barn) cross each other at the centre, so every room is also connected to every other one.
+const SIDE = 20, DA = Math.PI / 4;
+const RC = [[0, 0], [0, SIDE], [SIDE, SIDE], [SIDE, 0]];                              // pink, crimson, op-art, barn centres
+const NR = RC.length, CEN = [SIDE / 2, SIDE / 2];
 const RY = RC.map(([x, z]) => Math.atan2(CEN[0] - x, CEN[1] - z));                   // local +z (behind the arrival) faces the centre
-// door local angle for the door in room i that leads to room j (+30° or −30°)
-const doorAng = (i, j) => { const w = Math.atan2(RC[j][0] - RC[i][0], RC[j][1] - RC[i][1]); return Math.atan2(Math.sin(w - RY[i]), Math.cos(w - RY[i])) > 0 ? DA : -DA; };
+// door local angle (-45°, 0° or +45°) for the door in room i that leads to room j
+const doorAng = (i, j) => { const w = Math.atan2(RC[j][0] - RC[i][0], RC[j][1] - RC[i][1]); const a = Math.atan2(Math.sin(w - RY[i]), Math.cos(w - RY[i])); return Math.round(a / DA) * DA; };
 const doorPos = (i, j) => { const a = RY[i] + doorAng(i, j); return [RC[i][0] + Math.sin(a) * VEIL_R, RC[i][1] + Math.cos(a) * VEIL_R]; };
-const doorsOf = (i) => [0, 1, 2].filter((j) => j !== i).map((j) => ({ ang: doorAng(i, j), style: j })).sort((a, b) => a.ang - b.ang);
-const room1 = buildChamber({ ...pinkRoomCfg(tunnelU), center: RC[0], rotY: RY[0], doors: doorsOf(0) });
+const doorsOf = (i) => [0, 1, 2, 3].filter((j) => j !== i).map((j) => ({ ang: doorAng(i, j), style: j })).sort((a, b) => a.ang - b.ang);
+const room1 = buildChamber({ ...pinkRoomCfg(tunnelU, doorsOf(0)), center: RC[0], rotY: RY[0] });
 const room2 = buildChamber({ name: 'room2', center: RC[1], rotY: RY[1], pal: 'crimson', focal: 'vortex', gyro: true,
   podIdx: [2, 4], doors: doorsOf(1) });
 const room3 = buildOpRoom({ name: 'room3', center: RC[2], rotY: RY[2], doors: doorsOf(2) });
-// corridors run straight along the triangle's sides, door to door
+const room4 = buildChamber({ ...barnRoomCfg(doorsOf(3)), center: RC[3], rotY: RY[3] });
+// corridors run straight door to door: 4 along the square's sides, 2 diagonals (cC pink-op-art, cF crimson-barn)
 const CDEF = [
   { k: 'cA', i: 0, j: 1, palA: 'pink', palB: 'crimson', styleA: 0, styleB: 1 },
   { k: 'cB', i: 1, j: 2, palA: 'crimson', palB: 'mono', styleA: 1, styleB: 2, drain: true },
-  { k: 'cC', i: 2, j: 0, palA: 'mono', palB: 'pink', styleA: 2, styleB: 0, drain: true, monoAtStart: true },
+  { k: 'cC', i: 0, j: 2, palA: 'pink', palB: 'mono', styleA: 0, styleB: 2, drain: true, diag: true },
+  { k: 'cD', i: 2, j: 3, palA: 'mono', palB: 'barn', styleA: 2, styleB: 3, drain: true, monoAtStart: true },
+  { k: 'cE', i: 3, j: 0, palA: 'barn', palB: 'pink', styleA: 3, styleB: 0 },
+  { k: 'cF', i: 1, j: 3, palA: 'crimson', palB: 'barn', styleA: 1, styleB: 3, diag: true, cut: true },
 ].map((c) => { const S = doorPos(c.i, c.j), E = doorPos(c.j, c.i), L = Math.hypot(E[0] - S[0], E[1] - S[1]);
   return { ...c, S, E, L, D: [(E[0] - S[0]) / L, (E[1] - S[1]) / L] }; });
-const [corA, corB, corC] = CDEF.map((c) => buildCorridor({ name: 'cor' + c.k[1], start: c.S, rotY: Math.atan2(c.D[0], c.D[1]), L: c.L,
-  palA: c.palA, palB: c.palB, styleA: c.styleA, styleB: c.styleB, drain: !!c.drain, monoAtStart: !!c.monoAtStart }));
+// the two diagonals cross at the square's centre (both are 90° to each other): cF's floor/ceiling are cut there, cC's carry on
+const crossZ = (c) => ((CEN[0] - c.S[0]) * c.D[0] + (CEN[1] - c.S[1]) * c.D[1]);
+const cors = CDEF.map((c) => buildCorridor({ name: 'cor' + c.k[1], start: c.S, rotY: Math.atan2(c.D[0], c.D[1]), L: c.L,
+  palA: c.palA, palB: c.palB, styleA: c.styleA, styleB: c.styleB, drain: !!c.drain, monoAtStart: !!c.monoAtStart,
+  cross: c.diag ? { z: crossZ(c), cut: !!c.cut } : undefined }));
 const toWorld = (i, x, z) => { const c = Math.cos(RY[i]), s = Math.sin(RY[i]); return [RC[i][0] + x * c + z * s, RC[i][1] - x * s + z * c]; };
-const SPACES = { r1: room1.root, cA: corA.root, r2: room2.root, cB: corB.root, r3: room3.root, cC: corC.root };
+const SPACES = { r1: room1.root, r2: room2.root, r3: room3.root, r4: room4.root };
+CDEF.forEach((c, n) => { SPACES[c.k] = cors[n].root; });
 Object.values(SPACES).forEach((s) => scene.add(s));
-const ROOMS = [room1, room2, room3, corA, corB, corC];
+const ROOMS = [room1, room2, room3, room4, ...cors];
 // ---------- media: one shared video on the main monitor of every room ----------
 const mon2 = buildMonitor(room2.kit, room2.world, room2.root, 1, 'crimson', MON_GEO);   // v10: same monitor geometry in every room
 const mon3 = buildMonitor(room3.kit, room3.world, room3.root, 2, 'mono', MON_GEO);
 room1.root.updateMatrixWorld(true);
-const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos];
+const mon4 = buildMonitor(room4.kit, room4.world, room4.root, 3, 'barn', MON_GEO);   // v22: the barn's monitor (its built-in visuals are the milk vortex)
+const MON_POS = [room1.root.localToWorld(new THREE.Vector3(0, room1.hud.SCR.y, -room1.hud.SCR.r + 0.3)), mon2.worldPos, mon3.worldPos, mon4.worldPos];
 let panelsReady = false;
 const media = createMedia({ monitorPos: MON_POS, onChange: () => { if (panelsReady) panelSys.redrawMedia(); updateOverlay(); } });
 media.setRenderer(renderer);
@@ -78,21 +91,24 @@ const screens = createScreens({ onChange: (i) => { if (panelsReady) panelSys.red
   { mount: room1.hud.mount, brackets: room1.hud.brackets, geo: room1.hud.geo, root: room1.root, kit: room1.kit, monPos: MON_POS[0] },
   { mount: mon2.mount, brackets: mon2.brackets, geo: mon2.geo, root: room2.root, kit: room2.kit, monPos: MON_POS[1] },
   { mount: mon3.mount, brackets: mon3.brackets, geo: mon3.geo, root: room3.root, kit: room3.kit, monPos: MON_POS[2] },
+  { mount: mon4.mount, brackets: mon4.brackets, geo: mon4.geo, root: room4.root, kit: room4.kit, monPos: MON_POS[3] },
 ] });
 const pods = createPods({ media, onChange: () => { if (panelsReady) panelSys.redrawMedia(); }, rooms: [
   { root: room1.root, spots: room1.podSpots, tint: 0xff4fa3 },
   { root: room2.root, spots: room2.podSpots, tint: 0xff2038 },
   { root: room3.root, spots: room3.podSpots, tint: 0xffffff },
+  { root: room4.root, spots: room4.podSpots, tint: 0xffd9a0 },
 ] });
 const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, pods, rooms: [
   { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'crimson', root: room2.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'mono', root: room3.root, pos: PANEL_POS, faceTo: PANEL_FACE },
+  { style: 'barn', root: room4.root, pos: PANEL_POS, faceTo: PANEL_FACE },
 ] });
 panelsReady = true;
 
 // doorway planes (world): point, normal, lateral axis, fade colour
-const DCOL = { cA: [0xb0103c, 0x900818], cB: [0x70303a, 0x9a9a9a], cC: [0x9a9a9a, 0xff4fa3] };
+const DCOL = { cA: [0xb0103c, 0x900818], cB: [0x70303a, 0x9a9a9a], cC: [0xff4fa3, 0x9a9a9a], cD: [0x9a9a9a, 0xffb87a], cE: [0xffb87a, 0xff4fa3], cF: [0x900818, 0xffb87a] };
 const DOORS = CDEF.flatMap((c) => { const n = new THREE.Vector3(c.D[0], 0, c.D[1]), t = new THREE.Vector3(c.D[1], 0, -c.D[0]), rk = (i) => 'r' + (i + 1);
   return [{ p: new THREE.Vector3(c.S[0], 0, c.S[1]), n, t, c: DCOL[c.k][0], s: [rk(c.i), c.k] }, { p: new THREE.Vector3(c.E[0], 0, c.E[1]), n, t, c: DCOL[c.k][1], s: [c.k, rk(c.j)] }]; });
 // every doorway veil (both sides, and their mirror copies) shares one "open" uniform per doorway
@@ -106,8 +122,8 @@ const CORRS = CDEF.map((c) => ({ k: c.k, S: c.S, D: c.D, L: c.L, beds: [c.i, c.j
 const corrLocal = (c, x, z) => { const dx = x - c.S[0], dz = z - c.S[1]; return [dx * c.D[0] + dz * c.D[1], dx * c.D[1] - dz * c.D[0]]; };
 function zoneOf(h) {
   for (const c of CORRS) { const [al, la] = corrLocal(c, h.x, h.z); if (al > 0 && al < c.L && Math.abs(la) < 1.35) return c.k; }
-  const [d1, d2, d3] = RC.map(([x, z]) => Math.hypot(h.x - x, h.z - z));
-  return d1 <= d2 && d1 <= d3 ? 'r1' : d2 <= d3 ? 'r2' : 'r3';
+  let bi = 0, bd = Infinity; RC.forEach(([x, z], i) => { const d = Math.hypot(h.x - x, h.z - z); if (d < bd) { bd = d; bi = i; } });
+  return 'r' + (bi + 1);
 }
 // walkable area: room circles + corridor strips
 const REGIONS = [
@@ -132,7 +148,10 @@ function clampToWorld() {
 const quality = { haze: true, mirror: OPT.mirror, particles: true };
 let zone = null;
 function applyVisibility() {
-  for (const [k, s] of Object.entries(SPACES)) s.visible = k === zone || DOORS.some((d) => d.open.value > 0.003 && d.s.includes(k) && d.s.includes(zone));
+  const vis = {};
+  for (const k of Object.keys(SPACES)) vis[k] = k === zone || DOORS.some((d) => d.open.value > 0.003 && d.s.includes(k) && d.s.includes(zone));
+  if (vis.cC || vis.cF) vis.cC = vis.cF = true;   // the two diagonals cross at the centre: you see one through the other's open walls
+  for (const [k, s] of Object.entries(SPACES)) s.visible = vis[k];
   for (const rm of ROOMS) {
     rm.haze.forEach((o) => { o.visible = quality.haze; });
     if (rm.mirror) rm.mirror.visible = quality.mirror;
@@ -184,7 +203,7 @@ tryLoadTunnelVideo();
 const videoPoll = setInterval(() => { if (tunnelU.uHasVideo.value > 0.5 || tunnelU.uVidMix.value <= 0) clearInterval(videoPoll); else tryLoadTunnelVideo(); }, 20000);
 
 // ---------- audio: one beat clock, three room beds crossfaded by position ----------
-const A = { ctx: null, t0: 0, master: null, beds: [], noise: null, next: 0, drone1: null, drone1F: null, drone2: null, drone2F: null, w: [1, 0, 0] };
+const A = { ctx: null, t0: 0, master: null, beds: [], noise: null, next: 0, drone1: null, drone1F: null, drone2: null, drone2F: null, w: [1, 0, 0, 0] };
 const soundBtn = document.getElementById('sound');
 function setParam(node, name, x, y, z) {
   if (node[name + 'X']) { node[name + 'X'].value = x; node[name + 'Y'].value = y; node[name + 'Z'].value = z; }
@@ -216,10 +235,10 @@ async function startAudio() {
     for (const [f, ch] of [[200, 0], [206, 1]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.connect(merger, 0, ch); o.start(now); }
     out.gain.value = 0; merger.connect(out); out.connect(ctx.destination); A.theta = out; applyTheta(4); }
   media.attachAudio(ctx, comp);   // the video soundtrack bypasses the bed fade-in and is not ducked
-  A.beds = [0, 1, 2].map((i) => { const g = ctx.createGain(); g.gain.value = A.w[i]; g.connect(master); return g; });
+  A.beds = [0, 1, 2, 3].map((i) => { const g = ctx.createGain(); g.gain.value = A.w[i]; g.connect(master); return g; });
   const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = nb.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; A.noise = nb;
-  const [b1, b2, b3] = A.beds;
+  const [b1, b2, b3, b4] = A.beds;
   // bed 1 (pink): ambient loop + warm drone + positional tunnel hum
   fetch(ASSET_AUDIO).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status))).then((b) => ctx.decodeAudioData(b)).then((buf) => {
     const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const g = ctx.createGain(); g.gain.value = 0.5; s.connect(g); g.connect(b1); s.start();
@@ -242,6 +261,12 @@ async function startAudio() {
     const trem = ctx.createGain(); trem.gain.value = 0.6; trem.connect(g);
     const lfo = ctx.createOscillator(); lfo.frequency.value = settings.speed / BEAT; A.lfo3 = lfo; const lg = ctx.createGain(); lg.gain.value = 0.3; lfo.connect(lg); lg.connect(trem.gain); lfo.start(now);
     for (const [fr, gn] of [[220, 0.025], [329.6, 0.018], [440.5, 0.006]]) osc(ctx, 'sine', fr, gn, trem, now); }
+  // bed 4 (barn): a warm, rounded pad (G add9, soft and low) that slowly breathes; the cowbell-like chimes come from scheduleBeat
+  { const g = ctx.createGain(); g.gain.value = 0.5; g.connect(b4);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.6; lp.connect(g);
+    const br = ctx.createGain(); br.gain.value = 0.7; br.connect(lp);
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.08 * settings.speed; A.lfo4 = lfo; const lg = ctx.createGain(); lg.gain.value = 0.25; lfo.connect(lg); lg.connect(br.gain); lfo.start(now);
+    for (const [fr, gn] of [[98, 0.12], [146.8, 0.1], [196, 0.07], [293.7, 0.04], [329.6, 0.025]]) osc(ctx, 'sine', fr, gn, br, now); }
 }
 function noiseBurst(dest, at, f, q, gain, dur) {
   const ctx = A.ctx, n = ctx.createBufferSource(); n.buffer = A.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
@@ -253,10 +278,17 @@ function thump(dest, at, f0, f1, gain, decay) {
   const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(gain, at + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, at + decay);
   o.connect(g); g.connect(dest); o.start(at); o.stop(at + decay + 0.05);
 }
+// soft cowbell-like chime: two detuned triangle partials through a gentle band-pass, quick bloom and a short ring-out
+function cowbell(dest, at, f, gain, dur = 0.9) {
+  const ctx = A.ctx, bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 1.35; bp.Q.value = 1.1;
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(gain, at + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  for (const r of [1, 1.504]) { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f * r; o.connect(bp); o.start(at); o.stop(at + dur + 0.05); }
+  bp.connect(g); g.connect(dest);
+}
 function scheduleBeat(n) {
   const ctx = A.ctx, k = 1 / settings.speed, at = ctx.currentTime + (n * BEAT - visualTime()) * k; if (at < ctx.currentTime + 0.02) return;
   const I = intensityAt(n * BEAT), surge = n % 4 === 3, amp = (0.5 + 0.5 * I) * (surge ? 1.3 : 1);
-  const [b1, b2, b3] = A.beds;
+  const [b1, b2, b3, b4] = A.beds;
   // room 1: kick + riser, chime on surges, drone pump
   thump(b1, at, 120, 40, 0.75 * amp, 1.3);
   { const rs = Math.max(ctx.currentTime, at - 1.6 * k), n1 = ctx.createBufferSource(); n1.buffer = A.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
@@ -278,13 +310,21 @@ function scheduleBeat(n) {
   // room 3: crisp minimal pulse — short clean thump + click on the beat, soft ticks once per second
   thump(b3, at, 70, 50, 0.5 * amp, 0.35); noiseBurst(b3, at, 3200, 6, 0.08, 0.03);
   for (let j = 1; j < 4; j++) noiseBurst(b3, at + j * k, 4200, 8, 0.025, 0.02);
+  // room 4 (barn): a soft, round thump and a cowbell-like chime on the beat, quieter echoes each second, a pentatonic bell phrase on surges
+  thump(b4, at, 88, 46, 0.38 * amp, 0.7); cowbell(b4, at, 540, 0.07 * amp, 1.0);
+  for (let j = 1; j < 4; j++) cowbell(b4, at + j * k, [660, 495, 590][j - 1], 0.022 * amp, 0.6);
+  if (surge) for (const [f, d0] of [[784, 0], [987.8, 0.16], [1174.7, 0.32], [1568, 0.48]]) {
+    const d = d0 * k, c = ctx.createOscillator(); c.frequency.value = f; const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, at + d); cg.gain.exponentialRampToValueAtTime(0.03 * I, at + d + 0.02); cg.gain.exponentialRampToValueAtTime(0.0001, at + d + 2.4);
+    c.connect(cg); cg.connect(b4); c.start(at + d); c.stop(at + d + 2.5);
+  }
 }
 soundBtn.addEventListener('click', startAudio);
 function updateBeds(h) {
   let w;
   const c = CORRS.find((cc) => cc.k === zone);
-  if (c) { const t = THREE.MathUtils.clamp(corrLocal(c, h.x, h.z)[0] / c.L, 0, 1); w = [0, 0, 0]; w[c.beds[0]] += 1 - t; w[c.beds[1]] += t; }
-  else w = zone === 'r1' ? [1, 0, 0] : zone === 'r2' ? [0, 1, 0] : [0, 0, 1];
+  if (c) { const t = THREE.MathUtils.clamp(corrLocal(c, h.x, h.z)[0] / c.L, 0, 1); w = [0, 0, 0, 0]; w[c.beds[0]] += 1 - t; w[c.beds[1]] += t; }
+  else { w = [0, 0, 0, 0]; w[+zone.slice(1) - 1] = 1; }
   A.w = w;
   const duck = media.audible() ? 0.5 : 1;   // the ambient beds dip while your video's soundtrack plays
   if (A.ctx && A.beds.length) A.beds.forEach((g, i) => g.gain.setTargetAtTime(w[i] * duck, A.ctx.currentTime, 0.25));
@@ -318,7 +358,8 @@ function applySettings() {
   if (videoEl) videoEl.playbackRate = settings.speed;
   if (A.ctx) { const now = A.ctx.currentTime;
     if (A.lfo2) A.lfo2.frequency.setTargetAtTime(0.125 * settings.speed, now, 0.1);
-    if (A.lfo3) A.lfo3.frequency.setTargetAtTime(settings.speed / BEAT, now, 0.1); }
+    if (A.lfo3) A.lfo3.frequency.setTargetAtTime(settings.speed / BEAT, now, 0.1);
+    if (A.lfo4) A.lfo4.frequency.setTargetAtTime(0.08 * settings.speed, now, 0.1); }
 }
 function intensityAt(t) { const c = t % 210; return 0.4 + 0.6 * THREE.MathUtils.smoothstep(c, 0, 120) * (1 - THREE.MathUtils.smoothstep(c, 190, 210)); }
 
@@ -512,7 +553,7 @@ function desktopMove(dt) {
   rig.position.addScaledVector(fwd, f * 2.2 * sprintMul() * dt).addScaledVector(right, s * 2.2 * sprintMul() * dt); clampToWorld();
 }
 // start room option (?room=2 / ?room=3), handy for previews
-{ const r = +(Q.get('room') || 1) - 1; const i = r >= 0 && r < 3 ? r : 0; const [x, z] = toWorld(i, ...SPAWN); rig.position.set(x, 0, z); yaw = RY[i]; applyLook(); }
+{ const r = +(Q.get('room') || 1) - 1; const i = r >= 0 && r < NR ? r : 0; const [x, z] = toWorld(i, ...SPAWN); rig.position.set(x, 0, z); yaw = RY[i]; applyLook(); }
 window.__layout = { RC, RY, CDEF, toWorld, SPAWN };
 // debug: top-down plan view (orthographic, cut at 4.2 m so ceilings and upper walls are skipped)
 window.__plan = (cx, cz, half, px = 1024) => {
@@ -552,7 +593,7 @@ function updateOverlay() {
   el.textContent = media.st.kind === 'none' && !media.st.error ? 'Showing your Google Drive playlists (rooms with empty folders show built-in visuals)' : media.st.status;
   el.className = media.st.error ? 'err' : '';
   const ds = $('dStatus');
-  if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
+  if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono', 'Barn'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
 }
 if ($('mFile')) {
   $('mFile').addEventListener('click', () => { media.picker.click(); });
@@ -561,9 +602,9 @@ if ($('mFile')) {
   $('mUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') goUrl(); });
   $('mDefault').addEventListener('click', () => media.restoreDefault());
   $('mToggle').addEventListener('click', () => $('media').classList.toggle('open'));
-  $('dKey').value = media.drive.key; [0, 1, 2].forEach((i) => { $('dF' + i).value = media.drive.folders[i]; });
+  $('dKey').value = media.drive.key; [0, 1, 2, 3].forEach((i) => { if ($('dF' + i)) $('dF' + i).value = media.drive.folders[i]; });
   $('dGo').addEventListener('click', () => {
-    const bad = media.setDrive({ key: $('dKey').value, folders: [0, 1, 2].map((i) => $('dF' + i).value) });
+    const bad = media.setDrive({ key: $('dKey').value, folders: [0, 1, 2, 3].map((i) => ($('dF' + i) ? $('dF' + i).value : media.drive.folders[i])) });
     if (bad.length) $('dStatus').textContent = `That doesn't look like a Drive folder link: ${bad.join(', ')}`;
   });
   $('dLink').addEventListener('click', () => {
@@ -603,7 +644,7 @@ renderer.setAnimationLoop(() => {
   }
   const tick = Math.floor(t * 2);
   if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
-  const zi = { r1: 0, r2: 1, r3: 2 }[zone]; if (zi !== undefined) lastRoom = zi;
+  const zi = { r1: 0, r2: 1, r3: 2, r4: 3 }[zone]; if (zi !== undefined) lastRoom = zi;
   media.update(dt, lastRoom); pods.update(dt, lastRoom);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;

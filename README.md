@@ -1,7 +1,7 @@
 # Resonance Chamber v10 (WebXR, three.js r169, static files, no build step)
 Serve this folder over HTTPS, open it in the Meta Quest browser and tap ENTER VR.
 
-Three rooms joined in a triangle. Each room has a doorway to each of the other two, so you can walk the loop in either direction with the left stick:
+Four rooms on the corners of a square (v22), every room joined to every other one (see v22 below). Older text below still describes the original triangle layout:
 1. **Pink chamber** (start, redesigned in v4): true pink palette (hot pink, bubblegum and rose, with warm pink-black shadows). A grand portal around the spiral tunnel with stepped bezels, neon rings, a slowly turning petal iris and a flower halo. A crown chandelier with ring tiers, hanging crystal strands and a soft light cone. Fan-vault ribs, a balcony ring, an arcade of arches with rose windows, and a glossy mandala floor (marble slabs, glow rings, a ring of petal inlays, a rosette and a twinkling bead ring). Ten upgraded empty glowing pods (metal bases, iridescent glass, light columns, floating halos). The curved screen sits above the portal.
 2. **Crimson vortex room**: blood-red to rose, with a funnel vortex and a lub-dub heartbeat pulse, a dark glossy floor with veins that pulse outward from the vortex and double heartbeat ripples, gyroscope rings and four empty pods.
 3. **Monochrome op-art room**: purely abstract black and white (moiré walls, chevrons, a warped checker floor, a spiral tunnel, striped monoliths, rings and spheres). Slow motion only, with no flashing.
@@ -72,3 +72,11 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 ## v18
 
 - Thumb-swipe turn is calmer: hold your thumb still for a moment in a fist, then swipe. One swipe makes one turn. Bringing your thumb back to rest never turns you. Rest your thumb about 0.2 s before the next swipe (about 0.55 s between turns at most).
+
+## v22: the Buttercup Barn (4th room) and a square layout
+
+- **New room:** a playful, people-free dairy barn in cream, black and soft pink. Cow-print walls with slowly drifting black spots, a floor of cow-spot tiles that morph, mirrored wooden stalls with brass rails, hay bales and glowing lanterns on both sides, a hanging brass bell, warm golden light, floating glowing glass milk bottles as the video pods, and a swirling milk-and-cream spiral vortex portal where the main screen sits. Audio: a warm rounded pad, soft cowbell-like chimes on the beat, and the same constant 6 Hz theta beat (200/206 Hz) as everywhere.
+- **Fully functional like the others:** same control panel in the same spot (speed, brightness, SCREEN wing, Pods on/off/shuffle, Sprint, Media, Height, Turn, Theta), the movable main monitor, glossy floor reflection, room detection and audio crossfade, teleport and all locomotion.
+- **Square layout (20 m sides):** pink (0,0), crimson (0,20), op-art (20,20), barn (20,0). Every room has three doorways behind the arrival spot: left and right lead along the sides of the square (6.24 m corridors) and the middle one crosses the square diagonally (14.5 m). The two diagonals cross at the centre of the square, where their walls open up. That is 6 corridors in all, so every room still connects to every other. Each corridor fades between the two rooms' colours and has colour-matched floor arrows.
+- **Google:** the barn plays its Drive folder ("Barn Room" inside "Resonance Chamber Videos", with a "Pods" subfolder for the milk-bottle pods) and, once you upload there with `sync_gcs.py`, the Google Cloud copy first (`barn/manifest.json`). Until a video exists the screen shows the milk vortex. URL options: `?barn=<Drive folder link or id>`, `?room=4` (start in the barn), `?gcs=0` (Drive only).
+- Doorways in the pink and op-art rooms moved to the new angles (0° and ±45° from the room's axis, the centre line); the pink-room wall pattern and the op-art monoliths follow.

@@ -2,15 +2,15 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=25';
-import { DRIVE_DEFAULTS } from './config.js?v=25';
+import { THREE, OPT, f3 } from './shared.js?v=26';
+import { DRIVE_DEFAULTS } from './config.js?v=26';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
-export const ROOM_NAMES = ['pink', 'crimson', 'mono'];
+export const ROOM_NAMES = ['pink', 'crimson', 'mono', 'barn'];   // v22: the 4th room is the Buttercup Barn (?barn=<folder>)
 // ---------- shared uniforms / GLSL ----------
 const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); black.needsUpdate = true;
 // per-room monitor uniforms: which video texture the room's monitor shows, its aspect, and a 0..1 fade
-export const roomMedia = [0, 1, 2].map(() => ({ uMedia: { value: black }, uMediaAsp: { value: 16 / 9 }, uMediaOn: { value: 0 } }));
+export const roomMedia = [0, 1, 2, 3].map(() => ({ uMedia: { value: black }, uMediaAsp: { value: 16 / 9 }, uMediaOn: { value: 0 } }));
 // Letterboxed video inside a screen of aspect `sasp` (width / height). The texture holds raw sRGB bytes and this project
 // writes shader output straight to the (sRGB) framebuffer, so colours pass through unchanged (no double conversion).
 export const MEDIA_GLSL = /* glsl */`
@@ -27,6 +27,20 @@ export const MEDIA_GLSL = /* glsl */`
 
 // ---------- monitor for rooms 2 and 3 (room 1 keeps its curved FIELD MONITOR, with the same media hook) ----------
 const BUILTIN = {
+  // v22: the barn's placeholder while no video is loaded: the same swirling milk-and-cream spiral as the portal behind it
+  barn: /* glsl */`
+    vec3 builtin(vec2 p, float asp){
+      float r = length(p), a = atan(p.y, p.x), ld = log(r + 0.04);
+      float sw = a + uTime * 0.38 + 2.3 * ld;
+      float arms = 0.5 + 0.5 * sin(sw * 3.0 + ld * 5.0 - uTime * 0.55), arms2 = 0.5 + 0.5 * sin(sw * 5.0 - ld * 7.0 + uTime * 0.4);
+      vec3 cream = vec3(1.0, 0.94, 0.8), pink = vec3(1.0, 0.6, 0.72), gold = vec3(1.0, 0.76, 0.4);
+      vec3 col = mix(pink, cream, smoothstep(0.18, 0.78, arms));
+      col = mix(col, gold, 0.35 * smoothstep(0.55, 0.9, arms2) * (1.0 - arms * 0.5));
+      float w = (length(fwidth(vec2(cos(a), sin(a)))) + fwidth(ld) * 2.3) * 2.5; col = mix(vec3(0.85, 0.68, 0.62), col, clamp(1.3 - w * 0.9, 0.0, 1.0));
+      col *= 0.6 + 0.4 * smoothstep(1.2, 0.0, r);
+      col += gold * exp(-r * 6.0) * (0.6 + 0.8 * uBeat) + cream * exp(-abs(r - uBeatT * 0.5) * 22.0) * uBeat * 0.35;
+      return col * (0.85 + 0.2 * uBeat);
+    }`,
   crimson: /* glsl */`
     float ecg(float t){ return 0.06 * exp(-pow((t - 0.12) / 0.03, 2.0)) - 0.1 * exp(-pow((t - 0.27) / 0.01, 2.0)) + 0.55 * exp(-pow((t - 0.3) / 0.011, 2.0))
       - 0.16 * exp(-pow((t - 0.33) / 0.012, 2.0)) + 0.32 * exp(-pow((t - 0.58) / 0.012, 2.0)) - 0.08 * exp(-pow((t - 0.61) / 0.012, 2.0)) + 0.1 * exp(-pow((t - 0.8) / 0.04, 2.0)); }
@@ -218,13 +232,14 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
 
   // ---------- Google Drive: one folder per room, streamed as a looping playlist ----------
   const API = new URLSearchParams(location.search).get('driveApi') || 'https://www.googleapis.com';   // override only used for local testing
-  const drive = { key: DRIVE_DEFAULTS.key || '', folders: (DRIVE_DEFAULTS.folders || []).concat(['', '', '']).slice(0, 3) };
-  try { const s = JSON.parse(localStorage.getItem(DKEY) || 'null'); if (s) { drive.key = s.key || ''; if (Array.isArray(s.folders)) drive.folders = s.folders.slice(0, 3).map((f) => f || ''); } } catch { /* ignore */ }
+  const drive = { key: DRIVE_DEFAULTS.key || '', folders: (DRIVE_DEFAULTS.folders || []).concat(['', '', '', '']).slice(0, 4) };
+  // v22: saves from before the barn keep its default folder
+  try { const s = JSON.parse(localStorage.getItem(DKEY) || 'null'); if (s) { drive.key = s.key || ''; if (Array.isArray(s.folders)) s.folders.slice(0, 4).forEach((f, i) => { drive.folders[i] = f || ''; }); } } catch { /* ignore */ }
   { const q = new URLSearchParams(location.search);
     if (q.get('key')) drive.key = q.get('key');
     ROOM_NAMES.forEach((n, i) => { const id = parseFolderId(q.get(n)); if (id) drive.folders[i] = id; }); }
   const saveDrive = () => { try { localStorage.setItem(DKEY, JSON.stringify(drive)); } catch { /* ignore */ } };
-  const drv = [0, 1, 2].map(() => ({ ch: null, folder: '', title: '', items: [], idx: 0, on: false, state: 'none', msg: '', paused: false, repeat: false, fails: 0 }));
+  const drv = [0, 1, 2, 3].map(() => ({ ch: null, folder: '', title: '', items: [], idx: 0, on: false, state: 'none', msg: '', paused: false, repeat: false, fails: 0 }));
   // v13: stream from drive.usercontent.google.com first (public files, CORS *, Range, no API-key download throttling);
   // the API alt=media URL is the fallback. The API key is still used for listing folders.
   const ucUrl = (id) => `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
@@ -264,7 +279,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
   // v21: main screens play from Google Cloud Storage first (public bucket, CORS, Range), using a per-room manifest built
   // by sync_gcs.py; the Drive playlist is the fallback when the manifest is missing/empty or every GCS file fails.
   // Only for the site's default folders (a ?pink= / saved folder override goes straight to Drive). ?gcs=0 disables it.
-  const GCS = DRIVE_DEFAULTS.gcs, GCS_ROOM = ['pink', 'crimson', 'opart'];
+  const GCS = DRIVE_DEFAULTS.gcs, GCS_ROOM = ['pink', 'crimson', 'opart', 'barn'];
   const gcsOn = (i) => GCS && new URLSearchParams(location.search).get('gcs') !== '0' && drive.folders[i] === DRIVE_DEFAULTS.folders[i] && !drv[i].gcsFailed;
   async function gcsList(i) {
     const r = await fetch(`${GCS}/${GCS_ROOM[i]}/manifest.json?t=${Date.now()}`, { credentials: 'omit', cache: 'no-store' });
@@ -287,7 +302,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     d.state = 'listing'; d.msg = 'Reading Drive folder…'; changed();
     try {
       let items = gcsOn(i) ? await listItems(i, folder) : null;
-      if (items && d.source === 'gcs') d.title = ['Pink Room', 'Crimson Room', 'Op-Art Room'][i] + ' (cloud)';
+      if (items && d.source === 'gcs') d.title = ['Pink Room', 'Crimson Room', 'Op-Art Room', 'Barn Room'][i] + ' (cloud)';
       else {
         const meta = await getJSON(`${API}/drive/v3/files/${encodeURIComponent(folder)}?fields=id,name,mimeType&supportsAllDrives=true&key=${encodeURIComponent(drive.key)}`, 'Folder');
         if (meta.mimeType !== 'application/vnd.google-apps.folder') throw new Error('That link is a file, not a folder');
@@ -303,7 +318,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
   // poll every minute so videos dropped into a folder later show up without reloading
   async function poll() {
     if (document.hidden || !drive.key) return;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const d = drv[i], folder = drive.folders[i];
       if (!folder || d.state === 'listing') continue;
       if (d.state === 'error' || !d.title) { listFolder(i); continue; }
@@ -396,11 +411,11 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     const bad = [];
     if (folders) folders.forEach((f, i) => { const id = parseFolderId(f); if (id === null) bad.push(ROOM_NAMES[i]); else drive.folders[i] = id; });
     saveDrive();
-    [0, 1, 2].forEach((i) => { drvOff(i); listFolder(i); });
+    [0, 1, 2, 3].forEach((i) => { drvOff(i); listFolder(i); });
     return bad;
   }
   function bookmarkURL() {
-    const u = new URL(location.href); ['pink', 'crimson', 'mono', 'key'].forEach((k) => u.searchParams.delete(k));
+    const u = new URL(location.href); ['pink', 'crimson', 'mono', 'barn', 'key'].forEach((k) => u.searchParams.delete(k));
     ROOM_NAMES.forEach((n, i) => { if (drive.folders[i]) u.searchParams.set(n, drive.folders[i]); });
     if (drive.key) u.searchParams.set('key', drive.key);
     return u.toString();
@@ -456,7 +471,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
       if (!custActive()) resumeDrive();
       changed();
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const d = drv[i], u = roomMedia[i];
       let ch = null;
       if (custActive()) { if (st.ready && (st.screens === 'all' || i === room)) ch = cust; }
@@ -471,7 +486,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
   }
   const audible = () => (st.ready && !cust.v.paused && !cust.v.muted && st.volume > 0) || drv.some((d) => d.ch && !d.ch.v.paused && !d.ch.v.muted && st.volume > 0);
   // start listing any folders configured via localStorage or URL params
-  setTimeout(() => [0, 1, 2].forEach((i) => { if (drive.folders[i]) listFolder(i); }), 0);
+  setTimeout(() => [0, 1, 2, 3].forEach((i) => { if (drive.folders[i]) listFolder(i); }), 0);
   return { drive, driveAPI: API, st, video: cust.v, act, view, loadFile, loadURL, restoreDefault, attachAudio, update, audible, picker,
     drive, drv, bad, setDrive, bookmarkURL, setRenderer: (x) => { renderer = x; } };
 }

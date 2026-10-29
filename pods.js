@@ -3,7 +3,7 @@
 // Each pod shows a different item and crossfades to a new one every 8-12 s. Quest-friendly: images are downscaled to small
 // canvases, GIFs are decoded to a few small frames, and at most two muted video pods play at once (only in the room you are
 // in). If nothing loads the panels stay dark and the pods keep their original empty glow.
-import { THREE, U, LOW } from './shared.js?v=25';
+import { THREE, U, LOW } from './shared.js?v=26';
 
 const KEY = 'resonanceChamber.pods.v1';
 const MAXV = LOW ? 1 : 2;
@@ -101,7 +101,7 @@ export function createPods({ rooms, media, onChange = () => {} }) {
       const sig = files.map((f) => f.id).join(',');
       if (sig !== r.items.map((f) => f.id).join(',') || src !== r.src) {
         r.items = files.map((f) => ({ ...f, video: isVid(f), gif: isGif(f) })); r.src = src;
-        console.log('[pods]', ['pink', 'crimson', 'mono'][r.ri], subs.length ? 'Pods folder' : 'room folder', `${r.items.filter((f) => !f.video).length} image(s), ${r.items.filter((f) => f.video).length} video(s)`);
+        console.log('[pods]', ['pink', 'crimson', 'mono', 'barn'][r.ri], subs.length ? 'Pods folder' : 'room folder', `${r.items.filter((f) => !f.video).length} image(s), ${r.items.filter((f) => f.video).length} video(s)`);
       }
       r.status = r.items.length ? 'ready' : 'empty'; r.subfolder = !!subs.length;
       r.msg = r.items.length ? `${r.items.length} ITEM${r.items.length > 1 ? 'S' : ''} · ${subs.length ? 'PODS FOLDER' : 'ROOM FOLDER'}` : 'FOLDER EMPTY · GLOW ONLY';

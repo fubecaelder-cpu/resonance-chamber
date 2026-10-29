@@ -1,5 +1,5 @@
 // Shared helpers for the Resonance Chamber (v3). three.js r169, no build step.
-import * as THREE from './lib/three.module.min.js?v=25';
+import * as THREE from './lib/three.module.min.js?v=26';
 export { THREE };
 
 export const Q = new URLSearchParams(location.search);
@@ -41,7 +41,14 @@ export const PAL = {
   mono: { PINK: [0.8, 0.8, 0.8], HOT: [1.0, 1.0, 1.0], DEEP: [0.16, 0.16, 0.16], WHITE: [1.0, 1.0, 1.0], VIOL: [0.5, 0.5, 0.5],
     BASE: [0.02, 0.02, 0.02], BASE2: [0.0, 0.0, 0.0], FLOORC: [0.0, 0.0, 0.0], FOGC: [0.03, 0.03, 0.03], DIM: 1.0,
     hex: { a: 0xffffff, b: 0xffffff, c: 0xe8e8e8, d: 0xffffff, e: 0xdddddd, spr: 0xffffff, scr: 0xffffff } },
+  // v22 Buttercup Barn: cream, soft pink and warm brass-gold (the black comes from the cow spots in the wall/floor shaders).
+  // BASE is warm barn-wood brown so the shared metal (posts, rails, rings) reads as stained timber with brass-pink glints.
+  barn: { PINK: [1.0, 0.62, 0.74], HOT: [1.0, 0.78, 0.42], DEEP: [0.46, 0.2, 0.13], WHITE: [1.0, 0.95, 0.84], VIOL: [1.0, 0.7, 0.8],
+    BASE: [0.2, 0.115, 0.06], BASE2: [0.1, 0.06, 0.035], FLOORC: [0.5, 0.45, 0.36], FOGC: [0.34, 0.25, 0.17], DIM: 0.9,
+    hex: { a: 0xff9fbd, b: 0xffc46a, c: 0xfff0d2, d: 0xffe2b0, e: 0xffa6c2, spr: 0xffcf8a, scr: 0xffb87a } },
 };
+// doorway neon colour per destination style: pink room, crimson room, op-art room, barn
+export const DOORNEON = [0xff6fc0, 0xff3048, 0xffffff, 0xffb66a];
 
 export const env = { maxAniso: 4 };
 
@@ -221,8 +228,8 @@ export function makeVeil(style, end = 0) {
           if (uEnd < 0.5) discard;
           // end wall around the arch
           float dd = max(ax - ${f3(DW)}, p.y - top);
-          vec3 wc = uStyle > 1.5 ? vec3(0.03) : (uStyle > 0.5 ? vec3(0.03, 0.0, 0.006) : vec3(0.085, 0.02, 0.048));
-          vec3 ac = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.2, 0.3) : vec3(1.0, 0.36, 0.64));
+          vec3 wc = uStyle > 2.5 ? vec3(0.62, 0.52, 0.4) : uStyle > 1.5 ? vec3(0.03) : (uStyle > 0.5 ? vec3(0.03, 0.0, 0.006) : vec3(0.085, 0.02, 0.048));
+          vec3 ac = uStyle > 2.5 ? vec3(1.0, 0.7, 0.4) : uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.2, 0.3) : vec3(1.0, 0.36, 0.64));
           wc += ac * exp(-max(dd, 0.0) * 18.0) * (0.8 + 0.6 * uBeat);
           gl_FragColor = vec4(wc, 1.0); return;
         }
@@ -248,6 +255,14 @@ export function makeVeil(style, end = 0) {
           float b = 1.0 - smoothstep(0.35 - w, 0.35 + w, abs(fract(v) - 0.5) * 2.0);
           col = mix(vec3(0.01, 0.0, 0.0), mix(vec3(1.0, 0.2, 0.28), vec3(0.35, 0.0, 0.03), fract(v)), b);
           col += vec3(0.9, 0.05, 0.1) * exp(-r * 2.2) * (0.5 + 1.2 * hb);
+        } else if (uStyle > 2.5) {
+          // milk-and-cream swirl: two interleaved spiral arms of cream and soft pink round a golden glow
+          float v = lr * 2.2 + (a + uTime * 0.35 + 2.0 * lr) * 3.0 / 6.2831; float vb = lr * 2.2 + (a2 + uTime * 0.35 + 2.0 * lr) * 3.0 / 6.2831;
+          float w = min(fwidth(v), fwidth(vb)); float sm = 0.5 + 0.5 * sin(v * 6.2831);
+          col = mix(vec3(1.0, 0.62, 0.74), vec3(1.0, 0.95, 0.84), smoothstep(0.2, 0.8, sm));
+          col = mix(vec3(0.95, 0.82, 0.62), col, clamp(1.25 - w * 2.0, 0.0, 1.0));
+          col *= 0.8 + 0.2 * sin(v * 6.2831 + 1.0);
+          col += vec3(1.0, 0.8, 0.45) * exp(-r * 2.4) * (0.6 + 0.6 * uBeat);
         } else {
           float br = 0.85 + 0.15 * (0.5 - 0.5 * cos(6.2831 * uBeatT / ${f3(BEAT)}));
           float v = r * 5.0 + a * 4.0 / 6.2831 - uTime * 0.1; float vb = r * 5.0 + a2 * 4.0 / 6.2831;
@@ -256,7 +271,7 @@ export function makeVeil(style, end = 0) {
         }
         // membrane shimmer + glowing rim
         col *= 0.92 + 0.08 * sin(r * 22.0 - uTime * 1.5);
-        vec3 rim = uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.25, 0.32) : vec3(1.0, 0.5, 0.74));
+        vec3 rim = uStyle > 2.5 ? vec3(1.0, 0.72, 0.42) : uStyle > 1.5 ? vec3(1.0) : (uStyle > 0.5 ? vec3(1.0, 0.25, 0.32) : vec3(1.0, 0.5, 0.74));
         col += rim * exp(-edgeD * 14.0) * (0.9 + 0.6 * uBeat);
         col += rim * irisEdge * 1.4;
         gl_FragColor = vec4(col, 1.0);
