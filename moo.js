@@ -5,7 +5,7 @@
 // The narrator file is supplied by you (file picker, ?moo=, config.js, assets/, the GCS bucket or the barn Drive folder). Until it is, a generated
 // placeholder (a TTS-free hummed "voice", a soft pad and chimes) plays instead. The cue list (moo_cues.json, or your own JSON) says when each
 // cue fires: { "t": seconds, "type": "cowbell" | "prop" | "stepcloser" }. No three.js here: main.js wires it to the scene (props, Miss Moo).
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=29';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=30';
 
 const KEY = 'resonanceChamber.moo.v1';
 const GCS = DRIVE_DEFAULTS.gcs || '';
@@ -154,7 +154,7 @@ export function createMoo({ ensureAudio, getDrive, onChange = () => {}, onCue = 
         const files = await driveFind("name = 'moo_cues.json'"); if (files && files[0]) { try { await loadCuesFrom(files[0].id, 'moo_cues.json (Drive)'); got = true; } catch { /* next */ } }
         if (!got && GCS && await exists(`${GCS}/moo/moo_cues.json`)) { try { await loadCuesFrom(`gcs:moo/moo_cues.json`, 'moo_cues.json (GCS)'); got = true; } catch { /* next */ } }
       }
-      if (!got) { try { await loadCuesFrom('moo_cues.json?v=29', 'moo_cues.json'); } catch { /* embedded stays */ } }
+      if (!got) { try { await loadCuesFrom('moo_cues.json?v=30', 'moo_cues.json'); } catch { /* embedded stays */ } }
       // narration
       let ok = false;
       if (q && !/^(default|off|0)$/i.test(q)) ok = await loadNarrator(q);

@@ -2,20 +2,20 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=29';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=30';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=29';
-import { pinkRoomCfg } from './pinkroom.js?v=29';
-import { barnRoomCfg } from './barnroom.js?v=29';
-import { buildOpRoom } from './oproom.js?v=29';
-import { buildCorridor } from './corridor.js?v=29';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=29';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=29';
-import { createScreens } from './screens.js?v=29';
-import { createPods } from './pods.js?v=29';
-import { createMoo } from './moo.js?v=29';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=29';
-import { createMissMoo } from './misscow.js?v=29';
+import { buildChamber } from './chamber.js?v=30';
+import { pinkRoomCfg } from './pinkroom.js?v=30';
+import { barnRoomCfg } from './barnroom.js?v=30';
+import { buildOpRoom } from './oproom.js?v=30';
+import { buildCorridor } from './corridor.js?v=30';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=30';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=30';
+import { createScreens } from './screens.js?v=30';
+import { createPods } from './pods.js?v=30';
+import { createMoo } from './moo.js?v=30';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=30';
+import { createMissMoo } from './misscow.js?v=30';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -111,7 +111,7 @@ const cow = createMissMoo(); scene.add(cow.group, cow.mirror);
 const cowRun = { s: 0, walkLen: 1, path: [], yaw: 0, speed: 0, started: false };
 const mooOnCue = (c) => {
   if (c.type === 'cowbell') cow.ring(c.gain === undefined ? 1 : Math.min(1.4, c.gain));
-  else if (c.type === 'prop') { MOO_U.uPropT.value = 0; MOO_U.uPropK.value = c.gain === undefined ? 1 : Math.min(1.5, c.gain); }
+  else if (c.type === 'prop') { cow.flash(c.gain === undefined ? 1 : Math.min(1.5, c.gain)); MOO_U.uPropT.value = 0; MOO_U.uPropK.value = c.gain === undefined ? 1 : Math.min(1.5, c.gain); }
 };
 let mooReady = false;
 const moo = createMoo({ ensureAudio: () => startAudio(), getDrive: () => ({ key: media.drive.key, folder: media.drive.folders[3] }),
