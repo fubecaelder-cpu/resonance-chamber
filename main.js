@@ -2,20 +2,20 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=28';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=29';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=28';
-import { pinkRoomCfg } from './pinkroom.js?v=28';
-import { barnRoomCfg } from './barnroom.js?v=28';
-import { buildOpRoom } from './oproom.js?v=28';
-import { buildCorridor } from './corridor.js?v=28';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=28';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=28';
-import { createScreens } from './screens.js?v=28';
-import { createPods } from './pods.js?v=28';
-import { createMoo } from './moo.js?v=28';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=28';
-import { createMissMoo } from './misscow.js?v=28';
+import { buildChamber } from './chamber.js?v=29';
+import { pinkRoomCfg } from './pinkroom.js?v=29';
+import { barnRoomCfg } from './barnroom.js?v=29';
+import { buildOpRoom } from './oproom.js?v=29';
+import { buildCorridor } from './corridor.js?v=29';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=29';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=29';
+import { createScreens } from './screens.js?v=29';
+import { createPods } from './pods.js?v=29';
+import { createMoo } from './moo.js?v=29';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=29';
+import { createMissMoo } from './misscow.js?v=29';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 

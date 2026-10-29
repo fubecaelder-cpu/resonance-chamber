@@ -93,7 +93,7 @@ All playful and cartoon, no people, nothing explicit. It sits on the existing co
 **What it is**
 - **Moo Track**: a narrator voice slowly circles your head (WebAudio HRTF panner, listener = your head, so it works the same on desktop and in a headset; wear headphones). A heartbeat-like low drone pulses from below you. A cowbell rings and other cues fire at the times in the cue list. The room beds dip to 50% while it plays; the 6 Hz theta beat is untouched. Until you add your own narration a generated placeholder voice plays.
 - **Tunnel props** (barn end of the corridor, behind you when you spawn in the barn): sagging cables on the arches, cartoon visor headsets on drop cables, wall screens with equalizer bars and a "MOO TRACK" sign. They glow on `prop` cues. Instanced geometry, a handful of draw calls.
-- **Miss Moo**: a cartoon cow (cream with black spots, pink nose, ivory horns, brass cowbell) who starts at the far end of the tunnel and walks closer over the track (time plus `stepcloser` cues). She stops about 2 m from where you were standing when you pressed START, looks at you and rings her bell on cowbell cues, and goes back to the far end on RESTART or STOP.
+- **Miss Moo**: see v25 below. She starts at the far end of the tunnel and walks closer over the track, stops about 2 m from the barn start spot, and resets on restart.
 
 **Controls** (identical everywhere): the **Moo Track wing** at the right of the panel (START, STOP, RESTART, volume, narration file, cue file, default) and the **"Moo Track · Miss Moo" box** on the 2D page (bottom right) with the same buttons plus URL fields. Starting needs one click/tap/trigger (browser audio rules). Start it inside the barn: the tunnel door is behind you at the spawn.
 
@@ -114,4 +114,13 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=28`.
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=29` (v25).
+
+
+## v25: Miss Moo redesign
+Miss Moo is now a stylized, wholesome young woman in a cow outfit (`misscow.js`, same API plus `waveNow(sec)`):
+- Big warm eyes with lashes and glints, blush, soft smile, dark hair with rose-pink tips, bangs and long back/side locks.
+- Cow-ear headband (pink band, ivory horns, cream ears with black tips that flick).
+- Cow-print hoodie dress (hood down, long sleeves with pink cuffs, hem below the knee), black leggings, brown fur-cuffed boots, brass cowbell on a ribbon, plush cow-print tail. Fully covered, non-suggestive.
+- Animation: sway and bob, blink, head tilt that grows as she nears, a little wave when she is close, bell and tail swing on cowbell cues.
+- About 32 merged meshes per figure (64 with the mirror). Behavior (start, walk, stop, restart) is unchanged.

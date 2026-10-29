@@ -5,7 +5,7 @@
 // cfg.cross = { z, cut } marks where another diagonal corridor crosses this one at 90° (the walls open up; cut also removes this
 // corridor's floor and ceiling there so the first corridor's floor/ceiling carries on through the crossing).
 // Ends are iris veils (with a solid end wall) that open as you approach.
-import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=28';
+import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=29';
 
 export function buildCorridor(cfg) {
   const { L } = cfg, W = 2.6, HH = 3.6, HW = W / 2, drain = !!cfg.drain;
