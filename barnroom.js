@@ -1,9 +1,9 @@
-// Room 4 (v22): "Buttercup Barn" — a stylized, playful, people-free dairy barn. Cream and soft pink with black cow-print walls, cow-spot
+// Room 4 (v22): "Little Moo Barn" — a stylized, playful, people-free dairy barn. Cream and soft pink with black cow-print walls, cow-spot
 // floor tiles that slowly morph, mirrored wooden stalls with brass rails, hay bales and glowing lanterns, a hanging brass bell, glowing
 // glass milk-bottle pods and a swirling milk-and-cream spiral vortex where the main screen's tunnel would be.
 // Built on top of buildChamber (walls / floor / doorways / mirror / monitor bay) through its deluxe hooks (head, wallGLSL, ceilGLSL,
 // floorGLSL, focalFn, extra), exactly like the pink room. Nothing here depends on how many doorways the room has (it has three).
-import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=26';
+import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=27';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;     // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI;
@@ -15,7 +15,7 @@ const BARN_GLSL = /* glsl */`
     return mix(mix(mix(hash13b(i), hash13b(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash13b(i + vec3(0.0, 1.0, 0.0)), hash13b(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
                mix(mix(hash13b(i + vec3(0.0, 0.0, 1.0)), hash13b(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash13b(i + vec3(0.0, 1.0, 1.0)), hash13b(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z); }
   // 1 inside a black cow spot (anti-aliased)
-  float cowB(vec3 p){ float n = vn3b(p * 0.62) * 0.62 + vn3b(p * 1.45 + 7.3) * 0.38; float w = fwidth(n) * 1.4 + 0.012; return smoothstep(0.585 - w, 0.585 + w, n); }
+  float cowB(vec3 p){ float n = vn3b(p * 0.5) * 0.7 + vn3b(p * 1.15 + 7.3) * 0.3; float w = fwidth(n) * 0.75 + 0.003; return smoothstep(0.52 - w, 0.52 + w, n); }
 `;
 const MAT_GLSL = /* glsl */`
   vec3 woodCol(vec3 wp, vec3 N, float seed){
@@ -32,16 +32,21 @@ const MAT_GLSL = /* glsl */`
     return c * 0.85;
   }
 `;
+const DEFOG = /* glsl */`
+  // the shared fog would wash the print towards brown: pre-compensate so cream stays bright and the spots stay black (same formula as fogit)
+  vec3 defog(vec3 c, vec3 wp){ float k = (1.0 - exp(-length(wp - CAM) * 0.055)) * 0.5; return max((c - FOGC * (0.7 + 0.5 * uInt + 0.6 * uBeat) * k) / (1.0 - k), 0.0); }
+`;
 const HEAD = BARN_GLSL;
+const HEAD_MAT = BARN_GLSL + DEFOG;   // for the wall / ceiling / floor materials only (they have the camera varying)
 
 // ---------- walls: black cow print over cream, a wooden plank wainscot, a brass rail and a thin pink trim ----------
 const wallGLSL = /* glsl */`
   {
     float arc = ang * ${f3(R)};
     vec3 wp = vec3(vW.x, y, vW.z);
-    float sp = cowB(wp * 0.9);
-    vec3 cream = vec3(0.7, 0.63, 0.5);
-    vec3 cow = mix(cream * (1.0 - 0.18 * smoothstep(3.5, 8.0, y)), vec3(0.03, 0.024, 0.026), sp);
+    float sp = cowB(wp * 0.72);
+    vec3 cream = vec3(1.0, 0.975, 0.9);
+    vec3 cow = mix(cream, vec3(0.0), sp);
     float pk = arc / 0.27; float pid = floor(pk); float pf = fract(pk);
     float ph = hash12(vec2(pid, 1.0));
     vec3 wood = mix(vec3(0.2, 0.105, 0.05), vec3(0.36, 0.2, 0.095), ph) * (0.82 + 0.18 * sin(y * 55.0 + ph * 40.0 + vn3b(wp * 6.0) * 6.0));
@@ -51,17 +56,17 @@ const wallGLSL = /* glsl */`
     col += vec3(1.0, 0.75, 0.38) * (1.0 - smoothstep(0.03, 0.03 + pyy * 1.5, abs(y - 1.2))) * 0.85;
     col += PINK * (1.0 - smoothstep(0.02, 0.02 + pyy * 1.5, abs(y - 3.95))) * (0.7 + 0.6 * uBeat);
     col += PINK * (1.0 - smoothstep(0.02, 0.02 + pyy * 1.5, abs(y - 7.05))) * 0.5;
-    col += HOT * 0.55 * exp(-(dm - ${f3(RM)}) * 0.9) * (0.45 + 0.4 * uInt + 0.7 * uBeat);
-    col *= 0.9 + 0.12 * uInt;
+    col += HOT * 0.3 * exp(-(dm - ${f3(RM)}) * 0.9) * (0.45 + 0.4 * uInt + 0.7 * uBeat) * (1.0 - sp * 0.8);
+    col = defog(col, vW);
   }`;
 
 const ceilGLSL = /* glsl */`
   {
-    float sp = cowB(vec3(vW.x, 3.0, vW.z) * 0.75);
-    col = mix(vec3(0.5, 0.44, 0.34), vec3(0.035, 0.027, 0.028), sp);
-    col += PINK * 0.55 * exp(-abs(r - 2.4) * 2.5) * (0.6 + 0.4 * uInt + 0.8 * uBeat);
-    col += HOT * 0.45 * exp(-r * 0.8) * (0.6 + 0.8 * uBeat);
-    col *= 1.0 - smoothstep(5.0, ${f3(R)}, r) * 0.25;
+    float sp = cowB(vec3(vW.x, 3.0, vW.z) * 0.55);
+    col = mix(vec3(0.96, 0.92, 0.82), vec3(0.0), sp);
+    col += PINK * 0.4 * exp(-abs(r - 2.4) * 2.5) * (0.6 + 0.4 * uInt + 0.8 * uBeat) * (1.0 - sp * 0.8);
+    col += HOT * 0.25 * exp(-r * 0.8) * (0.6 + 0.8 * uBeat) * (1.0 - sp * 0.8);
+    col = defog(col, vW);
   }`;
 
 // ---------- floor: cream tiles with black cow spots; the spots slowly morph (the 3-D noise drifts through its 3rd axis) ----------
@@ -69,12 +74,12 @@ const floorGLSL = /* glsl */`
   {
     vec2 tc = p / 1.1; vec2 gf = fract(tc); vec2 ge = min(gf, 1.0 - gf) * 1.1;
     float sm = max(1.0 - smoothstep(0.012, 0.012 + px.x * 1.5, ge.x), 1.0 - smoothstep(0.012, 0.012 + px.y * 1.5, ge.y));
-    float sp = cowB(vec3(p * 0.95, uTime * 0.045));
-    vec3 cream = vec3(0.66, 0.6, 0.48);
-    col = mix(cream, vec3(0.03, 0.024, 0.026), sp) * (1.0 - 0.45 * sm);
+    float sp = cowB(vec3(p * 0.62, uTime * 0.045));
+    vec3 cream = vec3(1.0, 0.975, 0.9);
+    col = mix(cream, vec3(0.0), sp) * (1.0 - 0.3 * sm);
     col += PINK * ln(rr - 5.35, 0.016) * 0.8 * DIM + HOT * ln(rr - 5.62, 0.008) * 0.6;
     col += PINK * ln(rr - 1.0, 0.012) * 0.45 * DIM;
-    col *= 0.78 + 0.22 * uInt;
+    col = defog(col, vW);
   }`;
 
 // ---------- focal: swirling milk-and-cream spiral vortex (a funnel, like the crimson one, but soft and creamy) ----------
@@ -140,9 +145,9 @@ function extra({ K, world, root, fx, out, haze }) {
 
   // ---------- grand portal: cow-print bezel, brass lips, pink neon rings, chase lights, warm halo ----------
   {
-    const bez = new THREE.Mesh(new THREE.TorusGeometry(RM + 0.45, 0.3, 16, 96), mat(`${BARN_GLSL} void main(){ float sp = cowB(vec3(vW.x, abs(vW.y), vW.z) * 2.1);
+    const bez = new THREE.Mesh(new THREE.TorusGeometry(RM + 0.45, 0.3, 16, 96), mat(`${BARN_GLSL} void main(){ float sp = cowB(vec3(vW.x, abs(vW.y), vW.z) * 1.5);
       vec3 N = normalize(vN); float lit = 0.6 + 0.5 * max(dot(N, normalize(vec3(0.2, 0.7, 0.6))), 0.0);
-      vec3 c = mix(vec3(0.72, 0.66, 0.52), vec3(0.03, 0.024, 0.026), sp) * lit; c += PINK * pow(1.0 - abs(dot(N, normalize(CAM - vW))), 3.0) * 0.3;
+      vec3 c = mix(vec3(1.0, 0.975, 0.9), vec3(0.0), sp) * (0.8 + 0.3 * lit); c += PINK * pow(1.0 - abs(dot(N, normalize(CAM - vW))), 3.0) * 0.3;
       gl_FragColor = vec4(fogit(c, vW), 1.0); }`));
     bez.position.copy(PC); world.add(bez);
     for (const [r, tube, dz] of [[RM + 0.08, 0.07, 0.08], [RM + 0.86, 0.045, 0.22], [RM + 1.1, 0.03, 0.12]]) {
@@ -178,8 +183,8 @@ function extra({ K, world, root, fx, out, haze }) {
     g.fillStyle = grd; g.fillRect(0, 0, 1024, 256);
     for (let i = 0; i < 60; i++) { g.strokeStyle = `rgba(30,12,4,${0.08 + Math.random() * 0.12})`; g.lineWidth = 1 + Math.random() * 2; g.beginPath(); const y = Math.random() * 256; g.moveTo(0, y); g.bezierCurveTo(300, y + 6, 700, y - 6, 1024, y + 2); g.stroke(); }
     g.strokeStyle = '#ffd27a'; g.lineWidth = 9; g.strokeRect(14, 14, 996, 228); g.strokeStyle = '#ff9fbd'; g.lineWidth = 3; g.strokeRect(30, 30, 964, 196);
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'italic 700 118px Georgia, "Times New Roman", serif';
-    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 8; g.fillStyle = '#fff0d2'; g.fillText('Buttercup Barn', 512, 120);
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'italic 700 104px Georgia, "Times New Roman", serif';
+    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 8; g.fillStyle = '#fff0d2'; g.fillText('Little Moo Barn', 512, 120);
     g.shadowBlur = 0; g.fillStyle = '#ff9fbd'; g.font = '700 30px Georgia, serif'; g.fillText('✿   fresh • warm • cozy   ✿', 512, 208);
     t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
     const half = 1.75 / (R - 0.1);
@@ -190,36 +195,53 @@ function extra({ K, world, root, fx, out, haze }) {
     neonTube(world, new THREE.CatmullRomCurve3([new THREE.Vector3(-1.82, 5.06, -6.614), new THREE.Vector3(0, 5.06, -6.86), new THREE.Vector3(1.82, 5.06, -6.614)]), hex.a, 0.8, 0.02, 12, 4);
   }
 
-  // ---------- mirrored wooden stalls: posts, dividers, kick boards, brass rails, hay bales, hanging lanterns ----------
+  // ---------- mirrored wooden stalls: a continuous row of partitions down both long sides (v23: 6 stalls a side, 12 in all) ----------
+  // Every stall: posts with a brass cap and a lantern on an arm, a divider back to the wall, a kick board, three brass pipe rails,
+  // a top beam, a hay-filled feed trough on the wall, hay on the stall floor and bales along the front. All instanced (a handful of draw calls).
   const woodM = [], brassBoxM = [], pipeM = [], hayM = [], lampM = [], poolM = [], armM = [];
-  const HALF = (7.5 * PI) / 180, CENTERS = [75, 90, 105].map((d) => (d * PI) / 180), RP = 5.25;
+  const NST = 6, HALF = (7.5 * PI) / 180, A0 = (60 * PI) / 180, RP = 5.25;   // stalls span 60°..150° from the arrival axis (doors sit at 0° and ±45°)
+  const CENTERS = Array.from({ length: NST }, (_, k) => A0 + HALF + k * 2 * HALF);
   const rnd = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const PODXY = [[3.1, -2.1], [3.9, -0.4], [4.3, 1.3]];
   const lampPos = [];
   for (const s of [-1, 1]) {
     const P = (a, r) => [s * Math.sin(a) * r, Math.cos(a) * r];
-    const posts = [0, 1, 2, 3].map((k) => CENTERS[0] - HALF + k * 2 * HALF);
-    for (const a of posts) {            // corner posts, brass caps and a lantern arm
+    const posts = Array.from({ length: NST + 1 }, (_, k) => A0 + k * 2 * HALF);
+    for (const a of posts) {            // posts, brass caps and a lantern arm on every post
       const [x, z] = P(a, RP);
-      woodM.push(mtx(x, 1.1, z, s * a, 0, 0.14, 2.2, 0.14));
-      brassBoxM.push(mtx(x, 2.24, z, s * a, 0, 0.18, 0.06, 0.18));
+      woodM.push(mtx(x, 1.2, z, s * a, 0, 0.14, 2.4, 0.14));
+      brassBoxM.push(mtx(x, 2.44, z, s * a, 0, 0.18, 0.06, 0.18));
       const [ax, az] = P(a, RP - 0.12); armM.push(mtx(ax, 2.12, az, s * a, 0, 0.035, 0.035, 0.26));
       const [lx, lz] = P(a, RP - 0.24); lampPos.push([lx, 1.9, lz]);
-      // divider panel back to the wall
+      // divider panel back to the wall (full height rail on top)
       const [dx, dz] = P(a, 6.02);
       woodM.push(mtx(dx, 0.58, dz, s * a, 0, 0.09, 1.16, 1.45));
       brassBoxM.push(mtx(dx, 1.19, dz, s * a, 0, 0.06, 0.05, 1.47));
       brassBoxM.push(mtx(dx, 0.6, dz, s * a, 0, 0.03, 0.03, 1.46));
     }
-    for (const ac of CENTERS) {
+    for (let si = 0; si < NST; si++) {
+      const ac = CENTERS[si];
       const [mx, mz] = P(ac, RP * Math.cos(HALF)), yawT = s * ac + PI / 2, yawK = s * ac, len = 2 * RP * Math.sin(HALF) - 0.14;
       woodM.push(mtx(mx, 0.36, mz, yawK, 0, len, 0.72, 0.07));                       // kick board
+      woodM.push(mtx(mx, 2.38, mz, yawK, 0, len + 0.14, 0.1, 0.1));                  // top beam: the posts read as one continuous run
       for (const y of [1.0, 1.45, 1.9]) pipeM.push(mtx(mx, y, mz, yawT, PI / 2, 0.034, len, 0.034));   // brass pipe rails
       brassBoxM.push(mtx(mx, 0.74, mz, yawK, 0, len, 0.04, 0.09));                   // brass kick-board cap
-      // hay: one or two bales per stall, a little different each time
+      // feed trough on the wall with a hay mound
+      const [tx, tz] = P(ac, 6.5); woodM.push(mtx(tx, 0.72, tz, yawK, 0, 1.2, 0.34, 0.34)); brassBoxM.push(mtx(tx, 0.9, tz, yawK, 0, 1.24, 0.03, 0.06));
+      hayM.push(mtx(tx, 0.95, tz, yawK + 0.1 * (si % 2 ? 1 : -1), 0, 1.05, 0.26, 0.26));
+      // hay on the stall floor: one to three bales per stall, a little different each time (symmetrical clearances, varied hay)
       const k = rnd(ac * 7 + s * 3 + 1), [hx, hz] = P(ac + (k - 0.5) * 0.05, 6.0);
       hayM.push(mtx(hx, 0.22, hz, s * ac + (k - 0.5) * 0.25, 0, 1.0, 0.44, 0.56));
       if (k > 0.35) { const [h2x, h2z] = P(ac - 0.02, 6.08); hayM.push(mtx(h2x, 0.66, h2z, s * ac + 0.5 * k, 0, 0.75, 0.4, 0.5)); }
       if (k < 0.7) { const [h3x, h3z] = P(ac + 0.07 * (k > 0.5 ? 1 : -1), 5.55); hayM.push(mtx(h3x, 0.17, h3z, s * ac + 1.2 * k, 0, 0.5, 0.34, 0.38)); }
+      // loose bale on the walkway in front of every other stall, kept clear of the pods and the doors (the same on both sides)
+      {
+        const [fx2, fz2] = P(ac, 4.85);
+        if (PODXY.every(([px, pz]) => Math.hypot(Math.abs(fx2) - px, fz2 - pz) > 1.2)) {
+          hayM.push(mtx(fx2, 0.2, fz2, yawK + PI / 2 + 0.15 * (si - 2), 0, 0.9, 0.4, 0.5));
+          if (si === 5) hayM.push(mtx(fx2, 0.58, fz2, yawK + PI / 2 - 0.25, 0, 0.7, 0.36, 0.45));
+        }
+      }
     }
   }
   const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
@@ -336,6 +358,6 @@ function extra({ K, world, root, fx, out, haze }) {
 }
 
 export function barnRoomCfg(doors) {
-  return { name: 'room4', pal: 'barn', focal: 'tunnel', screen: false, deluxe: true, podIdx: [], doors, head: HEAD,
+  return { name: 'room4', pal: 'barn', focal: 'tunnel', screen: false, deluxe: true, podIdx: [], doors, head: HEAD_MAT,
     wallGLSL, ceilGLSL, floorGLSL, focalFn, extra };
 }

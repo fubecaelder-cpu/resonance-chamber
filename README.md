@@ -73,10 +73,16 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 
 - Thumb-swipe turn is calmer: hold your thumb still for a moment in a fist, then swipe. One swipe makes one turn. Bringing your thumb back to rest never turns you. Rest your thumb about 0.2 s before the next swipe (about 0.55 s between turns at most).
 
-## v22: the Buttercup Barn (4th room) and a square layout
+## v22: the Little Moo Barn (4th room) and a square layout
 
 - **New room:** a playful, people-free dairy barn in cream, black and soft pink. Cow-print walls with slowly drifting black spots, a floor of cow-spot tiles that morph, mirrored wooden stalls with brass rails, hay bales and glowing lanterns on both sides, a hanging brass bell, warm golden light, floating glowing glass milk bottles as the video pods, and a swirling milk-and-cream spiral vortex portal where the main screen sits. Audio: a warm rounded pad, soft cowbell-like chimes on the beat, and the same constant 6 Hz theta beat (200/206 Hz) as everywhere.
 - **Fully functional like the others:** same control panel in the same spot (speed, brightness, SCREEN wing, Pods on/off/shuffle, Sprint, Media, Height, Turn, Theta), the movable main monitor, glossy floor reflection, room detection and audio crossfade, teleport and all locomotion.
 - **Square layout (20 m sides):** pink (0,0), crimson (0,20), op-art (20,20), barn (20,0). Every room has three doorways behind the arrival spot: left and right lead along the sides of the square (6.24 m corridors) and the middle one crosses the square diagonally (14.5 m). The two diagonals cross at the centre of the square, where their walls open up. That is 6 corridors in all, so every room still connects to every other. Each corridor fades between the two rooms' colours and has colour-matched floor arrows.
-- **Google:** the barn plays its Drive folder ("Barn Room" inside "Resonance Chamber Videos", with a "Pods" subfolder for the milk-bottle pods) and, once you upload there with `sync_gcs.py`, the Google Cloud copy first (`barn/manifest.json`). Until a video exists the screen shows the milk vortex. URL options: `?barn=<Drive folder link or id>`, `?room=4` (start in the barn), `?gcs=0` (Drive only).
+- **Google:** the barn plays its Drive folder ("Little Moo Barn" inside "Resonance Chamber Videos", with a "Pods" subfolder for the milk-bottle pods) and, once you upload there with `sync_gcs.py`, the Google Cloud copy first (`barn/manifest.json`). Until a video exists the screen shows the milk vortex. URL options: `?barn=<Drive folder link or id>`, `?room=4` (start in the barn), `?gcs=0` (Drive only).
 - Doorways in the pink and op-art rooms moved to the new angles (0° and ±45° from the room's axis, the centre line); the pink-room wall pattern and the op-art monoliths follow.
+
+## v23: Little Moo Barn
+
+- The barn is now named **Little Moo Barn** (plaque, Drive-folder field, README). `?barn=<folder>` and `?room=4` work as before. The Drive folder was renamed "Little Moo Barn" (same id, same sharing, "Pods" subfolder unchanged).
+- **More stalls:** a continuous run of 6 mirrored wooden stalls down each long side (12 in all, 60°..150° from the arrival axis, clear of the three doorways, the panel and the monitor bay): posts with a lantern on every one, dividers, kick boards, three brass rails, a top beam, a hay-filled feed trough on the wall, hay in every stall and loose hay bales on the floor. All instanced, so it adds only a few draw calls.
+- **Sharper cow print:** bigger, bolder spots with crisper edges, near-white cream against true black on the walls, ceiling, floor tiles and the portal bezel. The room's fog no longer washes the print towards brown.

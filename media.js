@@ -2,11 +2,11 @@
 // so showing it on all three screens costs a single decode/upload. v7 (local only until verified): each room can also
 // stream a Google Drive folder as a looping playlist (Drive API v3 + an API key); only the room you are in decodes. Files are opened with URL.createObjectURL and never
 // leave the device. Direct .mp4/.webm URLs work when the host sends CORS headers (WebGL needs CORS-clean pixels).
-import { THREE, OPT, f3 } from './shared.js?v=26';
-import { DRIVE_DEFAULTS } from './config.js?v=26';
+import { THREE, OPT, f3 } from './shared.js?v=27';
+import { DRIVE_DEFAULTS } from './config.js?v=27';
 
 const KEY = 'resonanceChamber.media.v1', DKEY = 'resonanceChamber.drive.v1';
-export const ROOM_NAMES = ['pink', 'crimson', 'mono', 'barn'];   // v22: the 4th room is the Buttercup Barn (?barn=<folder>)
+export const ROOM_NAMES = ['pink', 'crimson', 'mono', 'barn'];   // v22: the 4th room is the Little Moo Barn (?barn=<folder>)
 // ---------- shared uniforms / GLSL ----------
 const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); black.needsUpdate = true;
 // per-room monitor uniforms: which video texture the room's monitor shows, its aspect, and a 0..1 fade
@@ -302,7 +302,7 @@ export function createMedia({ onChange = () => {}, monitorPos = [] } = {}) {
     d.state = 'listing'; d.msg = 'Reading Drive folder…'; changed();
     try {
       let items = gcsOn(i) ? await listItems(i, folder) : null;
-      if (items && d.source === 'gcs') d.title = ['Pink Room', 'Crimson Room', 'Op-Art Room', 'Barn Room'][i] + ' (cloud)';
+      if (items && d.source === 'gcs') d.title = ['Pink Room', 'Crimson Room', 'Op-Art Room', 'Little Moo Barn'][i] + ' (cloud)';
       else {
         const meta = await getJSON(`${API}/drive/v3/files/${encodeURIComponent(folder)}?fields=id,name,mimeType&supportsAllDrives=true&key=${encodeURIComponent(drive.key)}`, 'Folder');
         if (meta.mimeType !== 'application/vnd.google-apps.folder') throw new Error('That link is a file, not a folder');

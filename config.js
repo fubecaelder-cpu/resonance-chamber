@@ -7,7 +7,7 @@ export const DRIVE_DEFAULTS = {
     '1MnqCwqPWlydsSFfsi-9DBNNQDKLK668j',   // Pink Room
     '1OHoJhFtNwnFHEGM9rpVABPdkHPuV2IgF',   // Crimson Room
     '17GxD2HPaYf9uV1Sm6oE88P5ZoKrPP3wz',   // Op-Art Room
-    '1AuYLwVSCvwkxwlrREkRoCWOM0ipGmUfX',   // Barn Room (v22; its "Pods" subfolder is 1OhyaGi6AIdTRntBFQA5APWG9JCshsMPv)
+    '1AuYLwVSCvwkxwlrREkRoCWOM0ipGmUfX',   // Little Moo Barn (v22; its "Pods" subfolder is 1OhyaGi6AIdTRntBFQA5APWG9JCshsMPv)
   ],
   pollSeconds: 60,
   // v21: public Cloud Storage bucket with <room>/manifest.json (built by sync_gcs.py); main screens try it before Drive

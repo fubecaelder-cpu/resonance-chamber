@@ -1,18 +1,18 @@
 // Resonance Chamber v22 — four WebXR rooms on the corners of a square (pink chamber, crimson vortex room, monochrome op-art room,
-// Buttercup Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
+// Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=26';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=27';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=26';
-import { pinkRoomCfg } from './pinkroom.js?v=26';
-import { barnRoomCfg } from './barnroom.js?v=26';
-import { buildOpRoom } from './oproom.js?v=26';
-import { buildCorridor } from './corridor.js?v=26';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=26';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=26';
-import { createScreens } from './screens.js?v=26';
-import { createPods } from './pods.js?v=26';
+import { buildChamber } from './chamber.js?v=27';
+import { pinkRoomCfg } from './pinkroom.js?v=27';
+import { barnRoomCfg } from './barnroom.js?v=27';
+import { buildOpRoom } from './oproom.js?v=27';
+import { buildCorridor } from './corridor.js?v=27';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=27';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=27';
+import { createScreens } from './screens.js?v=27';
+import { createPods } from './pods.js?v=27';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -593,7 +593,7 @@ function updateOverlay() {
   el.textContent = media.st.kind === 'none' && !media.st.error ? 'Showing your Google Drive playlists (rooms with empty folders show built-in visuals)' : media.st.status;
   el.className = media.st.error ? 'err' : '';
   const ds = $('dStatus');
-  if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono', 'Barn'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
+  if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono', 'Little Moo Barn'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
 }
 if ($('mFile')) {
   $('mFile').addEventListener('click', () => { media.picker.click(); });

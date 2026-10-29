@@ -1,5 +1,5 @@
 // Shared helpers for the Resonance Chamber (v3). three.js r169, no build step.
-import * as THREE from './lib/three.module.min.js?v=26';
+import * as THREE from './lib/three.module.min.js?v=27';
 export { THREE };
 
 export const Q = new URLSearchParams(location.search);
@@ -41,10 +41,10 @@ export const PAL = {
   mono: { PINK: [0.8, 0.8, 0.8], HOT: [1.0, 1.0, 1.0], DEEP: [0.16, 0.16, 0.16], WHITE: [1.0, 1.0, 1.0], VIOL: [0.5, 0.5, 0.5],
     BASE: [0.02, 0.02, 0.02], BASE2: [0.0, 0.0, 0.0], FLOORC: [0.0, 0.0, 0.0], FOGC: [0.03, 0.03, 0.03], DIM: 1.0,
     hex: { a: 0xffffff, b: 0xffffff, c: 0xe8e8e8, d: 0xffffff, e: 0xdddddd, spr: 0xffffff, scr: 0xffffff } },
-  // v22 Buttercup Barn: cream, soft pink and warm brass-gold (the black comes from the cow spots in the wall/floor shaders).
+  // v22 Little Moo Barn: cream, soft pink and warm brass-gold (the black comes from the cow spots in the wall/floor shaders).
   // BASE is warm barn-wood brown so the shared metal (posts, rails, rings) reads as stained timber with brass-pink glints.
   barn: { PINK: [1.0, 0.62, 0.74], HOT: [1.0, 0.78, 0.42], DEEP: [0.46, 0.2, 0.13], WHITE: [1.0, 0.95, 0.84], VIOL: [1.0, 0.7, 0.8],
-    BASE: [0.2, 0.115, 0.06], BASE2: [0.1, 0.06, 0.035], FLOORC: [0.5, 0.45, 0.36], FOGC: [0.34, 0.25, 0.17], DIM: 0.9,
+    BASE: [0.2, 0.115, 0.06], BASE2: [0.1, 0.06, 0.035], FLOORC: [0.5, 0.45, 0.36], FOGC: [0.2, 0.15, 0.1], DIM: 0.9,
     hex: { a: 0xff9fbd, b: 0xffc46a, c: 0xfff0d2, d: 0xffe2b0, e: 0xffa6c2, spr: 0xffcf8a, scr: 0xffb87a } },
 };
 // doorway neon colour per destination style: pink room, crimson room, op-art room, barn
