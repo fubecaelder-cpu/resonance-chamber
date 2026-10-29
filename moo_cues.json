@@ -1,0 +1,28 @@
+{
+  "title": "Moo Track (built-in cue list)",
+  "duration": 180,
+  "orbitSeconds": 28,
+  "cues": [
+    { "t": 6,   "type": "cowbell" },
+    { "t": 14,  "type": "prop" },
+    { "t": 22,  "type": "stepcloser" },
+    { "t": 30,  "type": "cowbell", "az": -70 },
+    { "t": 38,  "type": "stepcloser" },
+    { "t": 46,  "type": "prop" },
+    { "t": 54,  "type": "cowbell", "az": 70 },
+    { "t": 62,  "type": "stepcloser" },
+    { "t": 72,  "type": "prop" },
+    { "t": 80,  "type": "cowbell", "az": 180 },
+    { "t": 88,  "type": "stepcloser" },
+    { "t": 98,  "type": "cowbell", "az": -40 },
+    { "t": 106, "type": "prop" },
+    { "t": 114, "type": "stepcloser" },
+    { "t": 124, "type": "cowbell", "az": 40 },
+    { "t": 132, "type": "stepcloser" },
+    { "t": 142, "type": "prop" },
+    { "t": 150, "type": "stepcloser" },
+    { "t": 160, "type": "cowbell", "az": 0 },
+    { "t": 168, "type": "stepcloser" },
+    { "t": 174, "type": "prop" }
+  ]
+}

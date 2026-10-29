@@ -26,6 +26,16 @@
   #media small { display: block; margin-top: 6px; color: #e6a0c4; line-height: 1.35; }
   #drv { margin-top: 8px; } #drv summary { cursor: pointer; color: #ffd6ea; } #dStatus { margin-top: 6px; white-space: pre-line; }
   #mStatus { margin-top: 7px; min-height: 1.3em; color: #ffd6ea; word-break: break-word; } #mStatus.err { color: #ffd27a; }
+  #moo { position: fixed; right: 16px; bottom: 16px; width: 330px; padding: 10px 12px; border: 1px solid #ffb87a; border-radius: 8px;
+         background: rgba(30,14,4,.84); color: #ffe2b0; font: 13px system-ui, sans-serif; }
+  #moo .row { display: flex; gap: 6px; margin-top: 7px; }
+  #moo button { padding: 6px 10px; border: 1px solid #ff9fbd; border-radius: 6px; background: rgba(90,40,20,.8); color: #fff0d2; font: 13px system-ui, sans-serif; cursor: pointer; }
+  #moo button:hover { background: rgba(140,70,35,.9); }
+  #moo input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #a06a40; border-radius: 6px; background: #140a04; color: #fff0d2; font: 13px system-ui, sans-serif; }
+  #moo .body { display: none; } #moo.open .body { display: block; }
+  #moo #mooToggle { width: 100%; text-align: left; }
+  #moo small { display: block; margin-top: 6px; color: #e8be90; line-height: 1.35; }
+  #mooStatus { margin-top: 7px; min-height: 1.3em; color: #ffe2b0; word-break: break-word; white-space: pre-line; } #mooStatus.err { color: #ffd27a; }
 </style>
 </head>
 <body>
@@ -53,6 +63,17 @@ Four rooms on the corners of a square: the three glowing doorways behind you lea
     By default each room plays its Google Drive folder. A file or URL you choose here takes over the screens until you press Back to Drive playlists (or DEFAULT on the in-room MEDIA panel).</small>
   </div>
 </div>
-<script type="module" src="./main.js?v=27"></script>
+<div id="moo">
+  <button id="mooToggle">🐄 Moo Track · Miss Moo</button>
+  <div class="body">
+    <div class="row"><button id="mooStart">▶ Start</button><button id="mooStop">■ Stop</button><button id="mooRestart">↻ Restart</button><button id="mooVm">Vol −</button><button id="mooVp">Vol +</button></div>
+    <div class="row"><button id="mooFile">Choose narration</button><button id="mooCuesBtn">Choose cues JSON</button><button id="mooDefault">Default</button></div>
+    <div class="row"><input id="mooUrl" type="url" placeholder="Narration URL / Drive link / gcs:moo/file.mp3"><button id="mooUrlGo">Load</button></div>
+    <div class="row"><input id="mooCueUrl" type="url" placeholder="Cue list URL (moo_cues.json)"><button id="mooCueUrlGo">Load</button></div>
+    <div id="mooStatus"></div>
+    <small>Wear headphones. Start inside Little Moo Barn, facing the focal point: the tunnel and Miss Moo are behind you. A placeholder voice plays until you add your narration file (it stays on this device when picked here).</small>
+  </div>
+</div>
+<script type="module" src="./main.js?v=28"></script>
 </body>
 </html>

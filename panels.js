@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=27';
+import { THREE, canvasTex } from './shared.js?v=28';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -50,6 +50,13 @@ const WBTN = [
   { id: 'm-screens', x: 0.15, y: -0.18, glyph: 6, label: 'SCREENS' },
   { id: 'p-toggle', x: -0.15, y: -0.335, glyph: 9, label: 'PODS' }, { id: 'p-shuffle', x: 0.15, y: -0.335, glyph: 10, label: 'SHUFFLE' },
 ];
+// Moo Track wing (v24): hinged to the right edge of the media wing (chained), curling a bit further towards you
+const MW = 0.5, MH = 0.82, MOY = -0.075;
+const KBTN = [
+  { id: 'k-start', x: -0.15, y: 0.02, glyph: 4, label: 'START' }, { id: 'k-stop', x: 0.0, y: 0.02, glyph: 17, label: 'STOP' }, { id: 'k-restart', x: 0.15, y: 0.02, glyph: 2, label: 'RESTART' },
+  { id: 'k-vol-', x: -0.15, y: -0.15, glyph: 0, label: 'VOL −' }, { id: 'k-vol+', x: 0.15, y: -0.15, glyph: 1, label: 'VOL +' },
+  { id: 'k-load', x: -0.15, y: -0.31, glyph: 3, label: 'NARRATION' }, { id: 'k-cues', x: 0.0, y: -0.31, glyph: 6, label: 'CUES' }, { id: 'k-default', x: 0.15, y: -0.31, glyph: 7, label: 'DEFAULT' },
+];
 // screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
 const SW = 0.5, SH = 0.88, SOY = -0.07;   // v11: taller (OPACITY row); content coords unchanged, board offset by SOY
 const SROWS = [{ k: 'height', name: 'HEIGHT · BOTTOM EDGE', y: 0.215 }, { k: 'dist', name: 'DISTANCE', y: 0.08 }, { k: 'size', name: 'SIZE', y: -0.055 }, { k: 'tilt', name: 'TILT', y: -0.19 }, { k: 'opacity', name: 'OPACITY', y: -0.325 }];
@@ -94,6 +101,7 @@ function buttonMat(st, glyph) {
           float c2 = max(abs(c.y + 0.04 + abs(c.x) * 0.8) * 0.78 - 0.07, abs(c.x) - 0.4); d = min(c1, c2); }
         else if (uGlyph > 14.5 && uGlyph < 16.5) { float an = uGlyph < 15.5 ? 0.5 : -0.5; vec2 c = mat2(cos(an), -sin(an), sin(an), cos(an)) * (b - vec2(0.0, 0.08));   // tilted screen on a base
           d = min(box(c, vec2(0.09, 0.36)), box(b - vec2(0.0, -0.42), vec2(0.32, 0.055))); }
+        else if (uGlyph > 16.5 && uGlyph < 17.5) d = box(b, vec2(0.3, 0.3));                                                            // stop
         else if (uGlyph > 9.5 && uGlyph < 10.5) d = min(triR(b - vec2(-0.08, 0.0), 0.44), box(b - vec2(0.3, 0.0), vec2(0.07, 0.3)));                    // next
         else if (uGlyph > 7.5 && uGlyph < 8.5) d = min(box(b - vec2(-0.19, 0.0), vec2(0.1, 0.36)), box(b - vec2(0.19, 0.0), vec2(0.1, 0.36)));   // pause
         else if (uGlyph > 4.5 && uGlyph < 5.5) { float rr2 = abs(box(b, vec2(0.3, 0.14)) - 0.1) - 0.065;                                // loop
@@ -220,6 +228,32 @@ function drawWing(ct, st, ms, pv) {
   ct.t.needsUpdate = true;
 }
 
+function drawMooWing(ct, st, v) {
+  const { c, g } = ct, W = c.width, H = c.height;
+  const X = (x) => (x / MW + 0.5) * W, Y = (y) => (0.5 - (y - MOY) / MH) * H, S = W / MW, F = 'system-ui, Segoe UI, Roboto, sans-serif';
+  const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6; for (let r = 20; r < W * 1.6; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
+  g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = st.title; g.font = `700 46px ${F}`; g.fillText('MOO TRACK', W / 2, Y(0.288));
+  g.font = `500 24px ${F}`; g.fillStyle = v.error ? '#ffd27a' : st.label;
+  const words = String(v.status || '').split(' '); const lines = ['']; for (const w of words) { const t = (lines[lines.length - 1] + ' ' + w).trim();
+    if (g.measureText(t).width > W - 70 && lines[lines.length - 1]) { if (lines.length === 3) { lines[2] += '…'; break; } lines.push(w); } else lines[lines.length - 1] = t; }
+  lines.forEach((l, i) => g.fillText(l, W / 2, Y(0.246 - i * 0.025)));
+  g.fillStyle = st.value; g.font = `800 56px ${F}`; g.fillText(v.time, W / 2, Y(0.145));
+  g.fillStyle = st.label; g.font = `600 23px ${F}`; g.fillText('VOICE: ' + v.voice, W / 2, Y(0.1)); g.font = `500 21px ${F}`; g.fillText(v.cues, W / 2, Y(0.077));
+  for (const b of KBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR + 0.012) * S, 0, Math.PI * 2); g.fill();
+    g.fillStyle = st.label; g.font = `600 23px ${F}`; g.fillText(b.label, X(b.x), Y(b.y - 0.074)); }
+  g.fillStyle = st.label; g.font = `600 24px ${F}`; g.fillText('VOLUME', W / 2, Y(-0.09));
+  g.fillStyle = st.value; g.font = `800 50px ${F}`; g.fillText(v.volume <= 0 ? 'MUTE' : `${Math.round(v.volume * 100)}%`, W / 2, Y(-0.15));
+  // Miss Moo progress
+  g.fillStyle = st.label; g.font = `700 22px ${F}`; g.fillText(`MISS MOO  ·  ${Math.round((v.cow || 0) * 100)}%`, W / 2, Y(-0.418));
+  const bx = W * 0.14, bw = W * 0.72, by = Y(-0.44); g.fillStyle = st.socket; g.fillRect(bx, by, bw, 12); g.fillStyle = st.edge; g.fillRect(bx, by, bw * Math.max(0, Math.min(1, v.cow || 0)), 12);
+  g.fillStyle = st.title; g.font = `600 19px ${F}`; g.fillText('THE TUNNEL IS BEHIND YOU AT THE BARN DOOR', W / 2, Y(-0.462));
+  ct.t.needsUpdate = true;
+}
+
 function drawScreenWing(ct, st, sv) {
   const { c, g } = ct, W = c.width, H = c.height;
   const X = (x) => (x / SW + 0.5) * W, Y = (y) => (0.5 - (y - SOY) / SH) * H, S = W / SW;
@@ -278,6 +312,19 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     wing.add(m); return m;
   });
+  // Moo Track wing (v24): chained to the right edge of the media wing
+  const mhinge = new THREE.Group(); mhinge.position.set(WW / 2 + 0.05, 0, -0.005); mhinge.rotation.y = -0.34; wing.add(mhinge);
+  const mwing = new THREE.Group(); mwing.position.set(MW / 2 + 0.04, 0, 0); mhinge.add(mwing);
+  const mfm = frameMat(st, MW / 2, MH / 2);
+  const mframe = new THREE.Mesh(new THREE.BoxGeometry(MW + 0.07, MH + 0.07, 0.035), mfm); mframe.position.set(0, MOY, -0.02); mwing.add(mframe);
+  const mknuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); mhinge.add(mknuckle);
+  const mct = canvasTex(1024, Math.round(1024 * MH / MW));
+  const mboard = new THREE.Mesh(new THREE.PlaneGeometry(MW, MH), boardMat(mct.t)); mboard.position.y = MOY; mwing.add(mboard);
+  const mbuttons = KBTN.map((b) => {
+    const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
+    m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
+    mwing.add(m); return m;
+  });
   // screen wing on a hinge at the left edge, swung 24° towards the user (mirror of the media wing)
   const shinge = new THREE.Group(); shinge.position.set(-BW / 2 - 0.05, 0, -0.005); shinge.rotation.y = 0.42; head.add(shinge);
   const swing = new THREE.Group(); swing.position.set(-SW / 2 - 0.04, -(0.74 - BH) / 2, 0); shinge.add(swing);
@@ -292,11 +339,11 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     swing.add(m); return m;
   });
-  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons, ...sbuttons], frameMat: fm, wfm, wboard, wframe, wct, wbuttons, sfm, sboard, sframe, sct, sbuttons };
+  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons, ...sbuttons, ...mbuttons], mfm, mboard, mframe, mct, mbuttons, frameMat: fm, wfm, wboard, wframe, wct, wbuttons, sfm, sboard, sframe, sct, sbuttons };
 }
 
 // ---------- system ----------
-export function createPanels({ renderer, rig, camera, rooms, onChange, media, screens, pods }) {
+export function createPanels({ renderer, rig, camera, rooms, onChange, media, screens, pods, moo }) {
   const panels = rooms.map((r, i) => { const p = buildPanel(r.style, r.root, r.pos, r.faceTo); p.space = r.space;
     p.buttons.forEach((b) => { b.userData.btn.room = i; }); return p; });
   const redrawScreen = (i) => { if (screens) drawScreenWing(panels[i].sct, panels[i].st, screens.view(i)); };
@@ -311,15 +358,21 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     by('m-screens').uGlyph.value = media.st.screens === 'all' ? 6 : 9;
     by('m-default').uOn.value = ms.defaultOn ? 1 : 0;
   }); };
+  let mooExtra = () => ({});
+  const redrawMoo = (only) => { if (!moo) return; const v = { ...moo.view(), ...mooExtra() }; panels.forEach((p, i) => { if (only !== undefined && only !== i) return; drawMooWing(p.mct, p.st, v);
+    const by = (id) => p.mbuttons[KBTN.findIndex((b) => b.id === id)].material.uniforms;
+    by('k-start').uOn.value = v.playing ? 1 : 0; }); };
+  redrawMoo();
   redrawMedia();
   redraw();
   const allButtons = panels.flatMap((p) => p.buttons);
-  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe, p.sboard, p.sframe]);
+  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe, p.sboard, p.sframe, p.mboard, p.mframe]);
 
   function act(id, room = 0) {
     if (id.startsWith('m-')) { media.act(id); return; }
     if (id.startsWith('p-')) { if (pods) pods.act(id, room); return; }
     if (id.startsWith('s-')) { if (screens) screens.act(id, room); return; }
+    if (id.startsWith('k-')) { if (moo) moo.act(id); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);
     else if (id === 'bright-') settings.brightI = Math.max(0, settings.brightI - 1);
@@ -386,7 +439,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     }
   }
   function update(dt, time) {
-    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; p.sfm.uniforms.uTime.value = time; });
+    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; p.sfm.uniforms.uTime.value = time; p.mfm.uniforms.uTime.value = time; });
     const xr = renderer.xr.isPresenting;
     if (xr && !cursorParentSet) { ctrls.forEach((s) => rig.parent.add(s.cursor)); cursorParentSet = true; }
     const targets = visibleTargets();
@@ -416,5 +469,5 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
       b.position.z = B.rest - 0.009 * B.press + 0.004 * B.hover;
     }
   }
-  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, press, act, allButtons };
+  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, redrawMoo, setMooExtra: (f) => { mooExtra = f; }, press, act, allButtons };
 }

@@ -2,17 +2,20 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=27';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=28';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=27';
-import { pinkRoomCfg } from './pinkroom.js?v=27';
-import { barnRoomCfg } from './barnroom.js?v=27';
-import { buildOpRoom } from './oproom.js?v=27';
-import { buildCorridor } from './corridor.js?v=27';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=27';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=27';
-import { createScreens } from './screens.js?v=27';
-import { createPods } from './pods.js?v=27';
+import { buildChamber } from './chamber.js?v=28';
+import { pinkRoomCfg } from './pinkroom.js?v=28';
+import { barnRoomCfg } from './barnroom.js?v=28';
+import { buildOpRoom } from './oproom.js?v=28';
+import { buildCorridor } from './corridor.js?v=28';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=28';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=28';
+import { createScreens } from './screens.js?v=28';
+import { createPods } from './pods.js?v=28';
+import { createMoo } from './moo.js?v=28';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=28';
+import { createMissMoo } from './misscow.js?v=28';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -65,9 +68,11 @@ const CDEF = [
   return { ...c, S, E, L, D: [(E[0] - S[0]) / L, (E[1] - S[1]) / L] }; });
 // the two diagonals cross at the square's centre (both are 90° to each other): cF's floor/ceiling are cut there, cC's carry on
 const crossZ = (c) => ((CEN[0] - c.S[0]) * c.D[0] + (CEN[1] - c.S[1]) * c.D[1]);
+let MOO_TUN = null;   // v24: the Moo tunnel decor on the barn end of cF (filled in by the corridor's extra hook)
 const cors = CDEF.map((c) => buildCorridor({ name: 'cor' + c.k[1], start: c.S, rotY: Math.atan2(c.D[0], c.D[1]), L: c.L,
   palA: c.palA, palB: c.palB, styleA: c.styleA, styleB: c.styleB, drain: !!c.drain, monoAtStart: !!c.monoAtStart,
-  cross: c.diag ? { z: crossZ(c), cut: !!c.cut } : undefined }));
+  cross: c.diag ? { z: crossZ(c), cut: !!c.cut } : undefined,
+  extra: c.k === 'cF' ? (cx) => { MOO_TUN = buildMooTunnel({ ...cx, zA: cx.crossZ + cx.crossHW + 0.35, zB: cx.L - 0.5 }); } : undefined }));
 const toWorld = (i, x, z) => { const c = Math.cos(RY[i]), s = Math.sin(RY[i]); return [RC[i][0] + x * c + z * s, RC[i][1] - x * s + z * c]; };
 const SPACES = { r1: room1.root, r2: room2.root, r3: room3.root, r4: room4.root };
 CDEF.forEach((c, n) => { SPACES[c.k] = cors[n].root; });
@@ -99,13 +104,28 @@ const pods = createPods({ media, onChange: () => { if (panelsReady) panelSys.red
   { root: room3.root, spots: room3.podSpots, tint: 0xffffff },
   { root: room4.root, spots: room4.podSpots, tint: 0xffd9a0 },
 ] });
-const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, pods, rooms: [
+// ---------- v24: Moo Track (spatial audio + cues), Miss Moo, tunnel props ----------
+const CFI = CDEF.findIndex((c) => c.k === 'cF'), CF = CDEF[CFI];
+const cfAt = (z, x = 0) => [CF.S[0] + CF.D[0] * z + CF.D[1] * x, CF.S[1] + CF.D[1] * z - CF.D[0] * x];
+const cow = createMissMoo(); scene.add(cow.group, cow.mirror);
+const cowRun = { s: 0, walkLen: 1, path: [], yaw: 0, speed: 0, started: false };
+const mooOnCue = (c) => {
+  if (c.type === 'cowbell') cow.ring(c.gain === undefined ? 1 : Math.min(1.4, c.gain));
+  else if (c.type === 'prop') { MOO_U.uPropT.value = 0; MOO_U.uPropK.value = c.gain === undefined ? 1 : Math.min(1.5, c.gain); }
+};
+let mooReady = false;
+const moo = createMoo({ ensureAudio: () => startAudio(), getDrive: () => ({ key: media.drive.key, folder: media.drive.folders[3] }),
+  onChange: () => { if (!mooReady) return; if (panelsReady) panelSys.redrawMoo(); updateMooOverlay(); }, onCue: mooOnCue,
+  cowPos: () => ({ x: cow.state.x, y: 0.5, z: cow.state.z }),
+  propPos: () => { const z = MOO_TUN ? (MOO_TUN.zA + MOO_TUN.zB) / 2 : CF.L - 3, [x, zz] = cfAt(z); return { x, y: 1.9, z: zz }; } });
+const panelSys = createPanels({ renderer, rig, camera, onChange: applySettings, media, screens, pods, moo, rooms: [
   { style: 'pink', root: room1.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'crimson', root: room2.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'mono', root: room3.root, pos: PANEL_POS, faceTo: PANEL_FACE },
   { style: 'barn', root: room4.root, pos: PANEL_POS, faceTo: PANEL_FACE },
 ] });
 panelsReady = true;
+panelSys.setMooExtra(() => ({ cow: moo.progress() })); panelSys.redrawMoo();
 
 // doorway planes (world): point, normal, lateral axis, fade colour
 const DCOL = { cA: [0xb0103c, 0x900818], cB: [0x70303a, 0x9a9a9a], cC: [0xff4fa3, 0x9a9a9a], cD: [0x9a9a9a, 0xffb87a], cE: [0xffb87a, 0xff4fa3], cF: [0x900818, 0xffb87a] };
@@ -164,6 +184,8 @@ const fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true
 fadeMat.userData.bp = true;   // safety fade stays pure black
 const fadeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), fadeMat); fadeMesh.renderOrder = 1000; fadeMesh.frustumCulled = false; camera.add(fadeMesh);
 const tmp = new THREE.Vector3();
+const MOO_DOOR = DOORS.find((d) => d.s[0] === 'cF' && d.s[1] === 'r4');
+const mooKeepOpen = () => zone === 'r4' && moo.S.state !== 'idle';
 // Doorways: as you approach, the veil irises open and the next space is drawn behind it, so walking through is a real,
 // continuous view (no fade). The head-fade only remains as a tiny safety net if the iris is somehow still closed at the plane
 // (e.g. a snap-teleport), and then only within ±12 cm of the plane.
@@ -171,7 +193,8 @@ function updateDoors(h, dt) {
   let f = 0, col = 0;
   for (const d of DOORS) {
     tmp.subVectors(h, d.p); const along = tmp.dot(d.n), lat = tmp.dot(d.t), dist = Math.hypot(along, lat);
-    const target = 1 - THREE.MathUtils.smoothstep(dist, 1.5, 2.9);
+    let target = 1 - THREE.MathUtils.smoothstep(dist, 1.5, 2.9);
+    if (d === MOO_DOOR && mooKeepOpen()) target = 1;   // v24: Moo Track in the barn: keep the tunnel's doorway open so you see Miss Moo walking in
     d.open.value += (target - d.open.value) * Math.min(1, dt * 5);
     if (Math.abs(target - d.open.value) < 0.002) d.open.value = target;
     if (Math.abs(lat) < 1.5 && h.y < 3.8) { const v = (1 - d.open.value) * (1 - THREE.MathUtils.smoothstep(Math.abs(along), 0.03, 0.12)); if (v > f) { f = v; col = d.c; } }
@@ -219,15 +242,19 @@ function applyTheta(ramp = 0.4) {   // gentle: 100% on the panel is a gain of 0.
   const p = A.theta.gain, t = A.ctx.currentTime, v = p.value;   // hold the current level, then glide (never jumps to the default gain of 1)
   p.cancelScheduledValues(t); p.setValueAtTime(v, t); p.setTargetAtTime(g, t, ramp / 3);
 }
-async function startAudio() {
+let audioP = null;
+function startAudio() {   // v24: returns a promise for { ctx, dest } (dest = the shared compressor) so the Moo Track can plug into the same graph
   if (videoEl) videoEl.play().catch(() => {});
-  if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+  if (audioP) { if (A.ctx && A.ctx.state === 'suspended') A.ctx.resume(); return audioP; }
+  audioP = initAudio(); return audioP;
+}
+async function initAudio() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)(); A.ctx = ctx;
   try { await ctx.resume(); } catch {}
   soundBtn.textContent = '♪ Sound on'; soundBtn.disabled = true;
   A.next = Math.floor(visualTime() / BEAT) + 1;
   const now = ctx.currentTime;
-  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3; comp.connect(ctx.destination);
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3; comp.connect(ctx.destination); A.comp = comp;
   const master = ctx.createGain(); master.gain.setValueAtTime(0.0001, now); master.gain.exponentialRampToValueAtTime(0.9, now + 3); master.connect(comp); A.master = master;
   // v14: constant 6 Hz theta binaural beat (200 Hz left / 206 Hz right). Goes straight to the stereo output through a
   // ChannelMerger (no panner, compressor or mono mixing), so each ear gets only its own tone everywhere in the world.
@@ -267,6 +294,7 @@ async function startAudio() {
     const br = ctx.createGain(); br.gain.value = 0.7; br.connect(lp);
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.08 * settings.speed; A.lfo4 = lfo; const lg = ctx.createGain(); lg.gain.value = 0.25; lfo.connect(lg); lg.connect(br.gain); lfo.start(now);
     for (const [fr, gn] of [[98, 0.12], [146.8, 0.1], [196, 0.07], [293.7, 0.04], [329.6, 0.025]]) osc(ctx, 'sine', fr, gn, br, now); }
+  return { ctx, dest: comp };
 }
 function noiseBurst(dest, at, f, q, gain, dur) {
   const ctx = A.ctx, n = ctx.createBufferSource(); n.buffer = A.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
@@ -326,7 +354,7 @@ function updateBeds(h) {
   if (c) { const t = THREE.MathUtils.clamp(corrLocal(c, h.x, h.z)[0] / c.L, 0, 1); w = [0, 0, 0, 0]; w[c.beds[0]] += 1 - t; w[c.beds[1]] += t; }
   else { w = [0, 0, 0, 0]; w[+zone.slice(1) - 1] = 1; }
   A.w = w;
-  const duck = media.audible() ? 0.5 : 1;   // the ambient beds dip while your video's soundtrack plays
+  const duck = (media.audible() ? 0.5 : 1) * moo.duck();   // the ambient beds dip while your video's soundtrack or the Moo Track plays
   if (A.ctx && A.beds.length) A.beds.forEach((g, i) => g.gain.setTargetAtTime(w[i] * duck, A.ctx.currentTime, 0.25));
 }
 
@@ -564,7 +592,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
-window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
+window.__moo = { moo, cow, cowRun, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
@@ -585,6 +613,7 @@ try { renderer.compile(scene, camera); } catch (e) { console.warn('[chamber] pre
 // ---------- loop ----------
 const fwdA = new THREE.Vector3(), upA = new THREE.Vector3(), szV = new THREE.Vector2();
 let lastHud = -1, frames = 0, prev = performance.now();
+mooReady = true;
 // ---------- 2D page overlay for media (works before Enter VR; the Quest browser may not show a file picker inside VR) ----------
 let lastRoom = 0;
 const $ = (id) => document.getElementById(id);
@@ -594,6 +623,22 @@ function updateOverlay() {
   el.className = media.st.error ? 'err' : '';
   const ds = $('dStatus');
   if (ds) ds.textContent = media.drv.map((d, i) => d.state === 'none' ? '' : `${['Pink', 'Crimson', 'Mono', 'Little Moo Barn'][i]}: ${d.on || d.state !== 'ready' ? d.msg : 'off (press PLAY on the panel)'}`).filter(Boolean).join('\n');
+}
+function updateMooOverlay() {
+  const s = document.getElementById('mooStatus'); if (!s) return; const v = moo.view();
+  s.textContent = `${v.status}\n${v.time} · voice: ${v.voice} · ${v.cues}`; s.className = v.error ? 'err' : '';
+  if (document.getElementById('mooStart')) document.getElementById('mooStart').textContent = v.state === 'playing' ? '● Playing' : v.state === 'done' ? '↻ Again' : '▶ Start';
+}
+if ($('mooToggle')) {
+  $('mooToggle').addEventListener('click', () => $('moo').classList.toggle('open'));
+  const bind = (id, act) => $(id).addEventListener('click', () => moo.act(act));
+  bind('mooStart', 'k-start'); bind('mooStop', 'k-stop'); bind('mooRestart', 'k-restart'); bind('mooFile', 'k-load'); bind('mooCuesBtn', 'k-cues'); bind('mooDefault', 'k-default');
+  const go = () => { const v = $('mooUrl').value.trim(); if (v) moo.loadNarrator(v); }; $('mooUrlGo').addEventListener('click', go);
+  $('mooUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  const goC = () => { const v = $('mooCueUrl').value.trim(); if (v) moo.loadCuesFrom(v).catch((er) => { moo.S.error = 'Cue list: ' + er.message; moo.S.status = moo.S.error; updateMooOverlay(); }); }; $('mooCueUrlGo').addEventListener('click', goC);
+  $('mooCueUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') goC(); });
+  const vm = (d) => moo.setVol(Math.max(0, Math.min(1, moo.S.vol + d))); $('mooVm').addEventListener('click', () => vm(-0.1)); $('mooVp').addEventListener('click', () => vm(0.1));
+  updateMooOverlay();
 }
 if ($('mFile')) {
   $('mFile').addEventListener('click', () => { media.picker.click(); });
@@ -612,6 +657,38 @@ if ($('mFile')) {
     $('dStatus').textContent = 'The address bar now holds your rooms\' folders: bookmark this page.';
   });
   updateOverlay();
+}
+// ---------- v24: per-frame Moo Track / Miss Moo / tunnel props ----------
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+function mooBuildPath(px, pz) {
+  const far = cfAt((MOO_TUN ? MOO_TUN.zA : CF.L - 5.5) + 0.95), pts = [far], [al] = corrLocal(CF, px, pz), zF = (MOO_TUN ? MOO_TUN.zA : 0) + 1.5;
+  const inCF = zoneOf({ x: px, z: pz }) === 'cF' && al > zF, inBarn = zoneOf({ x: px, z: pz }) === 'r4';
+  if (inCF) pts.push([px, pz]);
+  else { pts.push(CF.E.slice()); const P = inBarn ? [px, pz] : toWorld(3, SPAWN[0], SPAWN[1]); pts.push(P); }
+  const segs = []; let tot = 0; for (let i = 0; i < pts.length - 1; i++) { const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1], len = Math.hypot(dx, dz); segs.push({ a: pts[i], len, yaw: Math.atan2(dx, dz), dx: dx / len, dz: dz / len, s0: tot }); tot += len; }
+  cowRun.path = segs; cowRun.walkLen = Math.max(0.6, tot - 2.0); cowRun.s = 0; cowRun.yaw = segs[0].yaw;   // she stops 2 m short of where you started
+}
+function pathAt(s) { const sg = cowRun.path; let g = sg[sg.length - 1]; for (const q of sg) if (s <= q.s0 + q.len) { g = q; break; } const k = Math.min(Math.max(s - g.s0, 0), g.len); return { x: g.a[0] + g.dx * k, z: g.a[1] + g.dz * k, yaw: g.yaw }; }
+let mooPrev = 'idle', mooSec = -1, mooRoomDrawn = -1;
+function updateMoo(dt, now) {
+  const e = camera.matrixWorld.elements;
+  moo.update(dt, { x: headP.x, y: headP.y, z: headP.z }, Math.atan2(-e[8], e[10]));
+  if (!cowRun.path.length) mooBuildPath(...toWorld(3, SPAWN[0], SPAWN[1]));
+  const st = moo.S.state;
+  if (st !== mooPrev) { if ((st === 'starting' || st === 'playing') && (mooPrev === 'idle' || mooPrev === 'done')) mooBuildPath(headP.x, headP.z); else if (st === 'idle') mooBuildPath(...toWorld(3, SPAWN[0], SPAWN[1])); mooPrev = st; }
+  const prog = cowRun.force !== undefined && cowRun.force !== null ? cowRun.force : moo.progress(), tgt = prog * cowRun.walkLen;
+  if (prog <= 0.0001) { cowRun.s = 0; cowRun.speed = 0; } else { const ds = tgt - cowRun.s, stp = Math.sign(ds) * Math.min(Math.abs(ds), 0.5 * dt); cowRun.s += stp; cowRun.speed = Math.abs(stp) / Math.max(dt, 1e-3); }
+  const pa = pathAt(cowRun.s), dx = headP.x - pa.x, dz = headP.z - pa.z, dist = Math.hypot(dx, dz);
+  let want = pa.yaw; if (cowRun.speed < 0.03 && dist < 5.5 && cowRun.s > 0.5) want = Math.atan2(dx, dz);
+  cowRun.yaw += wrapA(want - cowRun.yaw) * (1 - Math.exp(-dt * 2.2));
+  cow.place(pa.x, pa.z, cowRun.yaw);
+  const show = SPACES.r4.visible || SPACES.cF.visible; cow.group.visible = show; cow.mirror.visible = show && quality.mirror;
+  if (show) cow.update(dt, Math.min(1, cowRun.speed / 0.4), headP, now);
+  MOO_U.uPropT.value = Math.min(60, MOO_U.uPropT.value + dt);
+  MOO_U.uMooOn.value += ((moo.S.state === 'playing' ? 1 : 0) - MOO_U.uMooOn.value) * Math.min(1, dt * 3); MOO_U.uMooPulse.value = moo.pulse();
+  // keep the in-world Moo wing (current room) in step: once a second while playing, plus on every room change
+  const key = (st === 'playing' ? Math.floor(moo.S.t) : -2), zr = { r1: 0, r2: 1, r3: 2, r4: 3 }[zone];
+  if (zr !== undefined && (key !== mooSec || zr !== mooRoomDrawn)) { mooSec = key; mooRoomDrawn = zr; panelSys.redrawMoo(zr); updateMooOverlay(); }
 }
 renderer.setAnimationLoop(() => {
   const nowMs = performance.now(); const dt = Math.min((nowMs - prev) / 1000, 0.1); prev = nowMs;
@@ -645,7 +722,7 @@ renderer.setAnimationLoop(() => {
   const tick = Math.floor(t * 2);
   if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
   const zi = { r1: 0, r2: 1, r3: 2, r4: 3 }[zone]; if (zi !== undefined) lastRoom = zi;
-  media.update(dt, lastRoom); pods.update(dt, lastRoom);
+  media.update(dt, lastRoom); pods.update(dt, lastRoom); updateMoo(dt, nowMs / 1000);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

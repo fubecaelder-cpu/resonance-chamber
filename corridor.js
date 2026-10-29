@@ -5,7 +5,7 @@
 // cfg.cross = { z, cut } marks where another diagonal corridor crosses this one at 90° (the walls open up; cut also removes this
 // corridor's floor and ceiling there so the first corridor's floor/ceiling carries on through the crossing).
 // Ends are iris veils (with a solid end wall) that open as you approach.
-import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=27';
+import { THREE, U, OPT, LOW, f3, PAL, makeKit, instanced, mtx, archCurve, makeVeil, clipMirror } from './shared.js?v=28';
 
 export function buildCorridor(cfg) {
   const { L } = cfg, W = 2.6, HH = 3.6, HW = W / 2, drain = !!cfg.drain;
@@ -236,6 +236,8 @@ export function buildCorridor(cfg) {
     const g = instanced(new THREE.TubeGeometry(archCurve(0.085, 1.17, 2.28, 32), 48, 0.13, 8), M(ARCH + `void main(){ float f = abs(dot(normalize(vN), normalize(CAM - vW)));
         gl_FragColor = vec4(archCol(vI.z, vUv.x, 0.4) * pow(f, 2.2) * (0.7 + 0.4 * uBeat), 1.0); }`, { additive: true }), archs, world);
     g.userData.ro = 2;
+    // v24: optional decor hook (the Moo tunnel on the barn end of the cF diagonal); runs before the mirror copy so it reflects in the floor too
+    if (cfg.extra) cfg.extra({ world, root, L, W, HH, archZ: archs.map((m) => m.elements[14]), crossZ: CZ, crossHW: CHW });
   }
   // ---------- end veils (iris doors) ----------
   const va = makeVeil(cfg.styleA, 1); va.position.z = 0.02; world.add(va);

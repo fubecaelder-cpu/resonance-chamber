@@ -86,3 +86,32 @@ Each room streams its own Google Drive folder as a looping playlist on its monit
 - The barn is now named **Little Moo Barn** (plaque, Drive-folder field, README). `?barn=<folder>` and `?room=4` work as before. The Drive folder was renamed "Little Moo Barn" (same id, same sharing, "Pods" subfolder unchanged).
 - **More stalls:** a continuous run of 6 mirrored wooden stalls down each long side (12 in all, 60°..150° from the arrival axis, clear of the three doorways, the panel and the monitor bay): posts with a lantern on every one, dividers, kick boards, three brass rails, a top beam, a hay-filled feed trough on the wall, hay in every stall and loose hay bales on the floor. All instanced, so it adds only a few draw calls.
 - **Sharper cow print:** bigger, bolder spots with crisper edges, near-white cream against true black on the walls, ceiling, floor tiles and the portal bezel. The room's fog no longer washes the print towards brown.
+
+## v24: Moo Track, the wired-headset tunnel and Miss Moo
+All playful and cartoon, no people, nothing explicit. It sits on the existing corridor that leads from the Little Moo Barn's back door to the crimson room (layout, zones and walking are unchanged).
+
+**What it is**
+- **Moo Track**: a narrator voice slowly circles your head (WebAudio HRTF panner, listener = your head, so it works the same on desktop and in a headset; wear headphones). A heartbeat-like low drone pulses from below you. A cowbell rings and other cues fire at the times in the cue list. The room beds dip to 50% while it plays; the 6 Hz theta beat is untouched. Until you add your own narration a generated placeholder voice plays.
+- **Tunnel props** (barn end of the corridor, behind you when you spawn in the barn): sagging cables on the arches, cartoon visor headsets on drop cables, wall screens with equalizer bars and a "MOO TRACK" sign. They glow on `prop` cues. Instanced geometry, a handful of draw calls.
+- **Miss Moo**: a cartoon cow (cream with black spots, pink nose, ivory horns, brass cowbell) who starts at the far end of the tunnel and walks closer over the track (time plus `stepcloser` cues). She stops about 2 m from where you were standing when you pressed START, looks at you and rings her bell on cowbell cues, and goes back to the far end on RESTART or STOP.
+
+**Controls** (identical everywhere): the **Moo Track wing** at the right of the panel (START, STOP, RESTART, volume, narration file, cue file, default) and the **"Moo Track · Miss Moo" box** on the 2D page (bottom right) with the same buttons plus URL fields. Starting needs one click/tap/trigger (browser audio rules). Start it inside the barn: the tunnel door is behind you at the spawn.
+
+**Supplying your narration audio** (any one of these; a later one in the list overrides an earlier one)
+1. Put the file in Drive: an audio file with "moo" in its name in the Little Moo Barn folder (found automatically).
+2. Upload `moo/narrator.mp3` (or `.m4a`) to the public bucket `resonance-chamber-videos`, or drop `assets/moo_narrator.mp3` (`.m4a/.ogg/.wav`) into the site.
+3. Set `MOO_DEFAULTS.narrator` in `config.js` (any audio URL, Drive link or file id, `gcs:moo/file.mp3`).
+4. Add `?moo=<url | Drive link | Drive file id | gcs:path>` to the page URL. `?moo=default` forces the placeholder.
+5. In the page box paste a URL and press Load, or use "Choose narration" / the NARRATION button on the panel to pick a file from the device (kept on the device, not uploaded; inside VR the Quest browser may not show a picker, so pick it on the page before entering VR).
+The cross-origin URL must allow CORS (Drive links and the GCS bucket already do). The track length is the audio length.
+
+**Editing the cues** (`moo_cues.json`, or your own file via `?moocues=<url | Drive link | file id>`, `MOO_DEFAULTS.cues`, or "Choose cues JSON"):
+```json
+{ "title": "My track", "duration": 180, "orbitSeconds": 28,
+  "cues": [ { "t": 6, "type": "cowbell", "az": -70, "gain": 1 },
+            { "t": 14, "type": "prop" },
+            { "t": 22, "type": "stepcloser" } ] }
+```
+`t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
+
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=28`.

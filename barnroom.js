@@ -3,13 +3,13 @@
 // glass milk-bottle pods and a swirling milk-and-cream spiral vortex where the main screen's tunnel would be.
 // Built on top of buildChamber (walls / floor / doorways / mirror / monitor bay) through its deluxe hooks (head, wallGLSL, ceilGLSL,
 // floorGLSL, focalFn, extra), exactly like the pink room. Nothing here depends on how many doorways the room has (it has three).
-import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=27';
+import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=28';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;     // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI;
 
 // ---------- shared GLSL: seamless 3-D value noise + cow-print mask, wood and brass shading ----------
-const BARN_GLSL = /* glsl */`
+export const BARN_GLSL = /* glsl */`
   float hash13b(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
   float vn3b(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(mix(hash13b(i), hash13b(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash13b(i + vec3(0.0, 1.0, 0.0)), hash13b(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
@@ -17,7 +17,7 @@ const BARN_GLSL = /* glsl */`
   // 1 inside a black cow spot (anti-aliased)
   float cowB(vec3 p){ float n = vn3b(p * 0.5) * 0.7 + vn3b(p * 1.15 + 7.3) * 0.3; float w = fwidth(n) * 0.75 + 0.003; return smoothstep(0.52 - w, 0.52 + w, n); }
 `;
-const MAT_GLSL = /* glsl */`
+export const MAT_GLSL = /* glsl */`
   vec3 woodCol(vec3 wp, vec3 N, float seed){
     vec3 q = vec3(wp.x, abs(wp.y), wp.z);
     float g = vn3b(vec3(q.x * 14.0 + seed * 9.0, q.y * 1.6, q.z * 14.0)) * 0.6 + vn3b(q * vec3(5.0, 0.8, 5.0) + seed) * 0.4;

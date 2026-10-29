@@ -13,3 +13,13 @@ export const DRIVE_DEFAULTS = {
   // v21: public Cloud Storage bucket with <room>/manifest.json (built by sync_gcs.py); main screens try it before Drive
   gcs: 'https://storage.googleapis.com/resonance-chamber-videos',
 };
+
+// v24 Moo Track: where the narrator audio and the cue list come from. URL params ?moo=<audio url | Drive link | Drive file id | gcs:path | assets/file.mp3 | default>
+// and ?moocues=<json url | Drive link | Drive file id> override these; a file chosen with the pickers overrides everything for the session.
+// Leave `narrator` empty to auto-find: assets/moo_narrator.(mp3|m4a|ogg|wav), then gs://BUCKET/moo/narrator.(mp3|m4a), then an audio file with "moo" in its name in the
+// Little Moo Barn Drive folder. Until one is found a generated placeholder track plays. Cues: moo_cues.json (also looked for as "moo_cues.json" in the barn Drive folder / GCS moo/).
+export const MOO_DEFAULTS = {
+  narrator: '',
+  cues: '',
+  autoFind: true,
+};
