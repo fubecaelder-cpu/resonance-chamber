@@ -2,20 +2,21 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=31';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=32';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=31';
-import { pinkRoomCfg } from './pinkroom.js?v=31';
-import { barnRoomCfg } from './barnroom.js?v=31';
-import { buildOpRoom } from './oproom.js?v=31';
-import { buildCorridor } from './corridor.js?v=31';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=31';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=31';
-import { createScreens } from './screens.js?v=31';
-import { createPods } from './pods.js?v=31';
-import { createMoo } from './moo.js?v=31';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=31';
-import { createMissMoo } from './misscow.js?v=31';
+import { buildChamber } from './chamber.js?v=32';
+import { pinkRoomCfg } from './pinkroom.js?v=32';
+import { barnRoomCfg } from './barnroom.js?v=32';
+import { buildOpRoom } from './oproom.js?v=32';
+import { buildCorridor } from './corridor.js?v=32';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=32';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=32';
+import { createScreens } from './screens.js?v=32';
+import { createPods } from './pods.js?v=32';
+import { createMoo } from './moo.js?v=32';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=32';
+import { createMissMoo } from './misscow.js?v=32';
+import { attachMooModel } from './moomodel.js?v=32';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -108,6 +109,7 @@ const pods = createPods({ media, onChange: () => { if (panelsReady) panelSys.red
 const CFI = CDEF.findIndex((c) => c.k === 'cF'), CF = CDEF[CFI];
 const cfAt = (z, x = 0) => [CF.S[0] + CF.D[0] * z + CF.D[1] * x, CF.S[1] + CF.D[1] * z - CF.D[0] * x];
 const cow = createMissMoo(); scene.add(cow.group, cow.mirror);
+const mooModel = attachMooModel(cow, (st) => console.log('[moomodel]', st.state, st.name, st.error || ''));   // v28: user model from Drive / GCS replaces the built-in figure
 const cowRun = { s: 0, walkLen: 1, path: [], yaw: 0, speed: 0, started: false };
 const mooOnCue = (c) => {
   if (c.type === 'cowbell') cow.ring(c.gain === undefined ? 1 : Math.min(1.4, c.gain));
@@ -592,7 +594,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
-window.__moo = { moo, cow, cowRun, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
+window.__moo = { moo, cow, mooModel, cowRun, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;

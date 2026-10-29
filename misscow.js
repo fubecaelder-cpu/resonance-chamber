@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=31';
-import { BARN_GLSL } from './barnroom.js?v=31';
+import { THREE, makeKit, clipMirror } from './shared.js?v=32';
+import { BARN_GLSL } from './barnroom.js?v=32';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -278,7 +278,7 @@ export function createMissMoo() {
     P.bell.rotation.x = 0.06 * Math.sin(ph * 2 + 1.0) * w + st.bellE * 0.9 * Math.sin(st.ringT * 24); P.bell.rotation.z = st.bellE * 0.45 * Math.sin(st.ringT * 19 + 1);
   }
   const API = {
-    group: rig, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
+    group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
     /** world position on the floor + heading (radians, 0 = facing +z) */
     place(x, z, yaw) { S.x = x; S.z = z; S.yaw = yaw; for (const g of [rig, mirrorRig]) { g.position.set(x, 0, z); g.rotation.y = yaw; } },
     ring(power = 1) { S.bellE = Math.min(1.4, S.bellE + power); S.ringT = 0; ringU.value = 1; },
@@ -304,6 +304,7 @@ export function createMissMoo() {
       S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)), 1 - Math.exp(-dt * 2));
       if (S.wave > 0) S.wave -= dt; S.waveW = ease(S.waveW, S.wave > 0 ? 1 : 0, 1 - Math.exp(-dt * 4));
       const wantHi = d < 6.5 || (lodHi && d < 7.5); if (wantHi !== lodHi) { lodHi = wantHi; for (const [o, gh, gl] of lodList) o.geometry = lodHi ? gh : gl; }
+      if (API.ext) { API.ext.update(dt, S, cam, t); return; }
       apply(real.P, S); apply(twin.P, S);
     },
   };

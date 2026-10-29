@@ -114,7 +114,7 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=31` (v27).
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=32` (v28).
 
 
 ## v25: Miss Moo redesign
@@ -140,3 +140,12 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 ## v27 — Miss Moo smooth / high-poly
 - Geometry rebuilt in `G(Q)`: spline-smoothed closed lathes for torso, limbs and boots (rounded overlapping joint ends, no seams), 70×53 head, real hands (palm + four 3-phalanx tapered fingers with knuckles + opposed 2-segment thumb; right glove fingerless), hair from ~150 swept tapered clumps with smooth normals.
 - Distance LOD: high set (Q=2.2, ~108k tris) within ~6.5 m, light set (Q=1.25, ~43.6k tris) beyond and always for the mirror twin. v26 was 9,686 tris per figure. Mesh count unchanged (19 per figure), so draw calls unchanged.
+
+## v28 — swappable Miss Moo model (Drive folder)
+- Drop a model into the Drive folder **Miss Moo Model** (inside Resonance Chamber Videos): https://drive.google.com/drive/folders/1B6yh_ZRRGWyTYIFNGlokrdnZKKnFZ4fT . The newest file wins; to swap, upload a new one (or replace/delete the old one). Empty folder = the built-in code Miss Moo.
+- Formats: `.glb` (best), `.vrm` (VRM 0.x/1.0 via @pixiv/three-vrm, vendored in `lib/`), `.gltf` only with embedded data. `.fbx` is converted to `.glb` by `sync_gcs.py` (FBX2glTF) and only reaches the site via GCS. Draco/meshopt-compressed files are not supported.
+- Load order (`moomodel.js`): `?moomodel=<url | Drive link/id | gcs:path | off>` → `gs://resonance-chamber-videos/model/manifest.json` (if it was made from the folder's newest file) → newest file downloaded straight from Drive → built-in figure.
+- Fitting: scaled to 1.68 m, feet on the floor, centred, facing the walk direction (+z; VRM 0.x rotated). Plays a clip named idle/stand (blends a "walk" clip while moving) if present; otherwise procedural sway, head turn toward you and tilt on VRM humanoid / common-named bones (mixamo etc.); unrigged models just glide. Blink uses the VRM `blink` expression. Prop cues flare the model's emissive pink; `?moochoker=1` adds a code-built choker + bell on the neck bone. The model carries its own small light rig.
+- Mirror twin: a pose-synced clone when the model is ≤ 70k triangles, otherwise hidden for the model.
+- Walk-in / stop at 2 m / reset are unchanged (the model rides the same rig).
+- "Sync my videos" (`sync_gcs.py`) now also copies the newest model to `model/missmoo.<ext>` + `model/manifest.json` (`--model-only` for just that).

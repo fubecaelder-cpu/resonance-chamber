@@ -22,4 +22,7 @@ export const MOO_DEFAULTS = {
   narrator: '',
   cues: '',
   autoFind: true,
+  // v28: drop a .glb / .gltf (embedded) / .vrm into the Drive folder "Miss Moo Model" and the newest one replaces the code-built Miss Moo.
+  // Order tried: ?moomodel=<url | Drive link/id | gcs:path | off>, then GCS model/manifest.json (sync_gcs.py), then the Drive folder, then the built-in figure.
+  modelFolder: '1B6yh_ZRRGWyTYIFNGlokrdnZKKnFZ4fT',
 };

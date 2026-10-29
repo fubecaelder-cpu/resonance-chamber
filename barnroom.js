@@ -3,7 +3,7 @@
 // glass milk-bottle pods and a swirling milk-and-cream spiral vortex where the main screen's tunnel would be.
 // Built on top of buildChamber (walls / floor / doorways / mirror / monitor bay) through its deluxe hooks (head, wallGLSL, ceilGLSL,
 // floorGLSL, focalFn, extra), exactly like the pink room. Nothing here depends on how many doorways the room has (it has three).
-import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=31';
+import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=32';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;     // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI;
