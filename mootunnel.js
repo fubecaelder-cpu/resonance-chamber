@@ -2,8 +2,8 @@
 // Barn side. Hanging cables slung between the corridor's neon arches, cartoon visor headsets dangling from them, little wall screens, floor cables
 // and a "MOO TRACK" sign. Everything is instanced/merged (a dozen draw calls) and lives in the corridor's `world` group, so the floor mirror copies it.
 // The headset lenses and the wall screens light up in a wave (far end first) on "prop" cues: see MOO_U.uPropT (seconds since the cue) / uPropK (strength).
-import { THREE, makeKit, instanced, mtx, canvasTex } from './shared.js?v=30';
-import { BARN_GLSL, MAT_GLSL } from './barnroom.js?v=30';
+import { THREE, makeKit, instanced, mtx, canvasTex } from './shared.js?v=31';
+import { BARN_GLSL, MAT_GLSL } from './barnroom.js?v=31';
 
 export const MOO_U = { uPropT: { value: 99 }, uPropK: { value: 0 }, uMooPulse: { value: 0 }, uMooOn: { value: 0 }, uZ0: { value: 9 } };
 const PI = Math.PI;

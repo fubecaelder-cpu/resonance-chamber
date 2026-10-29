@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=30';
-import { BARN_GLSL } from './barnroom.js?v=30';
+import { THREE, makeKit, clipMirror } from './shared.js?v=31';
+import { BARN_GLSL } from './barnroom.js?v=31';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -121,103 +121,132 @@ export function createMissMoo() {
   const ringU = brassM.uniforms.uRing;
   const chokerM = printM(110, '3.1, 1.7, 5.3');
 
-  // ---------------- geometry (built once, shared by the figure and its mirror twin). World metres. The body group pivots at the hips (y = 0.86 above the floor) ----------------
-  const HY = 0.86, THIGH = 0.45, SHIN = 0.41;
-  const geos = (() => {
-    const T = {};
-    // torso: a slender lathe (flattened front-to-back below the shoulders), then a round neck with a high collar
-    const prof = [[0.072, -0.08], [0.108, -0.045], [0.12, 0.0], [0.114, 0.08], [0.1, 0.18], [0.092, 0.26], [0.096, 0.33], [0.107, 0.41], [0.111, 0.46], [0.098, 0.5], [0.062, 0.52], [0.042, 0.538], [0.04, 0.58], [0.043, 0.598], [0.041, 0.606]]
-      .map(([r, y]) => new THREE.Vector2(r, y));
-    const lg = new THREE.LatheGeometry(prof, 32); const lp = lg.attributes.position;
-    for (let i = 0; i < lp.count; i++) { const y = lp.getY(i); lp.setZ(i, lp.getZ(i) * (y < 0.44 ? 0.66 : y > 0.53 ? 0.95 : ease(0.66, 0.95, (y - 0.44) / 0.09))); }
+  // ---------------- geometry (built twice: a high-detail set for near views and a light set for far views / the mirror twin). World metres. The body group pivots at the hips (y = 0.86 above the floor) ----------------
+  const HY = 0.86, THIGH = 0.45;
+  const sp = (pts, n) => new THREE.SplineCurve(pts.map(([r, y]) => new THREE.Vector2(r, y))).getPoints(n);
+  const lathe = (pts, n, rad) => new THREE.LatheGeometry(sp(pts, n), rad);
+  // a swept, tapered, slightly flattened tube along a quadratic curve (hair clumps). Indexed with smooth normals; uv = (pink start, t along the clump)
+  function sweep(P0, P1, P2, nrm, w, flat, segs, rad, pink) {
+    const curve = new THREE.QuadraticBezierCurve3(P0, P1, P2), pos = [], uv = [], idx = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs, c = curve.getPoint(t), T = curve.getTangent(t).normalize();
+      const zA = nrm.clone().addScaledVector(T, -nrm.dot(T)).normalize(), xA = new THREE.Vector3().crossVectors(T, zA).normalize();
+      const a = w * Math.pow(1 - t, 0.85) * (0.75 + 0.25 * Math.sin(Math.min(1, t * 4) * PI / 2)) + 0.0006, b = a * flat;
+      for (let j = 0; j < rad; j++) { const th = (j / rad) * PI * 2; const p = c.clone().addScaledVector(xA, Math.cos(th) * a).addScaledVector(zA, Math.sin(th) * b); pos.push(p.x, p.y, p.z); uv.push(pink, t); }
+    }
+    for (let i = 0; i < segs; i++) for (let j = 0; j < rad; j++) { const a = i * rad + j, b = i * rad + (j + 1) % rad, c = a + rad, d = b + rad; idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  const up = new THREE.Vector3(0, 1, 0);
+  const capsAlong = (a, b, r, cs, rs) => { const d = b.clone().sub(a), L = d.length(); const g = new THREE.CapsuleGeometry(r, Math.max(0.0005, L), cs, rs);
+    return g.applyMatrix4(new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(up, d.normalize()), new THREE.Vector3(1, 1, 1))); };
+  function G(Q) {
+    const T = {}, R = (n) => Math.max(6, Math.round(n * Q));
+    seed = 11;
+    // torso: a smooth slender lathe (flattened front-to-back below the shoulders) that continues into a round neck and high collar
+    const lg = lathe([[0.0, -0.085], [0.072, -0.08], [0.108, -0.045], [0.12, 0.0], [0.114, 0.08], [0.1, 0.18], [0.092, 0.26], [0.096, 0.33], [0.107, 0.41], [0.111, 0.46], [0.098, 0.5], [0.062, 0.52], [0.042, 0.538], [0.04, 0.58], [0.043, 0.598], [0.041, 0.606], [0.0, 0.607]], R(24), R(32));
+    const lp = lg.attributes.position;
+    for (let i = 0; i < lp.count; i++) { const y = lp.getY(i); lp.setZ(i, lp.getZ(i) * (y < 0.44 ? 0.66 : y > 0.53 ? 0.95 : ease(0.66, 0.95, THREE.MathUtils.smoothstep(y, 0.44, 0.53)))); }
     lg.computeVertexNormals(); T.torso = lg;
-    // glowing padlock emblem on the upper chest (+ its soft halo)
-    const lock = [[new THREE.BoxGeometry(0.03, 0.022, 0.006), M4(0, 0, 0)], [new THREE.TorusGeometry(0.0095, 0.0022, 6, 12, PI), M4(0, 0.011, 0)]];
-    T.emblem = merge(lock.map(([g, m]) => [g, new THREE.Matrix4().multiplyMatrices(M4(0, 0.43, 0.0765, 0.0), m)]));
+    T.emblem = merge([[new THREE.BoxGeometry(0.03, 0.022, 0.006), M4(0, 0.43, 0.0765)], [new THREE.TorusGeometry(0.0095, 0.0022, R(6), R(12), PI), M4(0, 0.441, 0.0765)]]);
     T.emblemHalo = new THREE.PlaneGeometry(0.16, 0.16).translate(0, 0.435, 0.0775);
-    T.choker = new THREE.TorusGeometry(0.0425, 0.0068, 8, 28).rotateX(PI / 2).applyMatrix4(M4(0, 0.555, 0, 0, 0, 0, 1, 1, 0.96));
-    T.bell = merge([[new THREE.CylinderGeometry(0.0125, 0.026, 0.032, 14, 1, true).translate(0, -0.022, 0)], [new THREE.SphereGeometry(0.0125, 12, 6, 0, PI * 2, 0, PI / 2).translate(0, -0.006, 0)], [ell(0.0075, 0.0075, 0.0075, 8, 6).translate(0, -0.04, 0)]]);
-    // arms: shoulder pivot (±0.145, 0.465). Upper sleeve; forearm sleeve + glove (palm). Fingers are separate so the right hand can be fingerless.
-    T.upper = merge([[ell(0.04, 0.04, 0.04, 12, 8), null, [0, 0]], [new THREE.CylinderGeometry(0.038, 0.034, 0.27, 12).translate(0, -0.135, 0), null, [0, 0]], [ell(0.034, 0.034, 0.034, 10, 8), M4(0, -0.27, 0), [0, 0]]]);
+    T.choker = new THREE.TorusGeometry(0.0425, 0.0068, R(8), R(28)).rotateX(PI / 2).applyMatrix4(M4(0, 0.555, 0, 0, 0, 0, 1, 1, 0.96));
+    T.bell = merge([[new THREE.CylinderGeometry(0.0125, 0.026, 0.032, R(14), 1, true).translate(0, -0.022, 0)], [new THREE.SphereGeometry(0.0125, R(14), R(6), 0, PI * 2, 0, PI / 2).translate(0, -0.006, 0)], [ell(0.0075, 0.0075, 0.0075, R(8), R(6)).translate(0, -0.04, 0)]]);
+    // arms: smooth closed lathes (rounded shoulder and elbow ends overlap so the joints have no seams)
+    T.upper = merge([[lathe([[0, 0.042], [0.03, 0.032], [0.04, 0.0], [0.0385, -0.06], [0.036, -0.15], [0.034, -0.235], [0.031, -0.275], [0.016, -0.3], [0, -0.304]], R(18), R(16)), null, [0, 0]]]);
     const hands = (s) => {
-      const fing = [[-0.0155, 0.026], [-0.0052, 0.033], [0.0052, 0.03], [0.0155, 0.022]].map(([x, l]) => [ell(0.0066, l, 0.0068, 8, 6), M4(x, -0.31 - l, 0.009, -0.22, 0, 0)]);
-      const thumb = [ell(0.0075, 0.021, 0.0075, 8, 6), M4(-s * 0.026, -0.3, 0.012, -0.3, 0, -s * 0.5)];
-      return { fore: merge([[new THREE.CylinderGeometry(0.034, 0.028, 0.25, 12).translate(0, -0.125, 0), null, [0.27, 0]], [new THREE.CylinderGeometry(0.0315, 0.027, 0.058, 12).translate(0, -0.257, 0), null, [0.27, 0]],
-        [ell(0.027, 0.034, 0.0135, 10, 8), M4(0, -0.292, 0.002), [0.27, 0]], [ell(0.0075, 0.0075, 0.0075, 6, 5), M4(-s * 0.021, -0.288, 0.01), [0.27, 0]], ...(s > 0 ? [] : [...fing, thumb].map(([g, m]) => [g, m, [0.27, 0]]))]),
-        fingers: s > 0 ? merge([...fing, thumb]) : null };
+      const glove = [], skin = [], cs = R(3), rs = R(8), V = (x, y, z) => new THREE.Vector3(x, y, z);
+      const inward = V(-s, 0, 0), onHip = s < 0;
+      const chain = (p, d, bend, curls, lens, radii, skinFrom) => {
+        p = p.clone(); d = d.clone().normalize();
+        for (let j = 0; j < lens.length; j++) {
+          d.addScaledVector(bend, Math.tan(curls[j])).normalize(); const q = p.clone().addScaledVector(d, lens[j]);
+          (j >= skinFrom ? skin : glove).push([capsAlong(p, q, radii[j], cs, rs)]);
+          if (j < lens.length - 1) (j + 1 >= skinFrom ? skin : glove).push([ell(radii[j] * 1.04, radii[j] * 1.04, radii[j] * 1.04, R(8), R(6)).translate(q.x, q.y, q.z)]);   // knuckle
+          p = q;
+        }
+      };
+      const fl = s > 0 ? 1 : 99;   // the right glove is fingerless: the middle and tip segments are bare
+      const curl = onHip ? [0.32, 0.48, 0.34] : [0.2, 0.34, 0.24];
+      [[0.0165, 0.95, 0.12], [0.0056, 1.06, 0.03], [-0.0056, 1.0, -0.04], [-0.0162, 0.8, -0.13]].forEach(([z, k, spread], i) => {
+        const rr = (i === 3 ? 0.86 : 1) * 1.0;
+        chain(V(-s * 0.001, -0.329, z), V(0, -1, spread), inward, curl.map((c) => c * (1 + i * 0.08)), [0.02 * k, 0.0135 * k, 0.011 * k], [0.0062 * rr, 0.0057 * rr, 0.0051 * rr], fl);
+      });
+      // thumb: from the base of the palm, forward and across (opposed)
+      chain(V(-s * 0.007, -0.296, 0.021), V(-s * 0.45, -0.75, 0.5), V(-s * 0.5, 0, -0.6).normalize(), [0.12, 0.25], [0.021, 0.017], [0.0074, 0.0064], s > 0 ? 1 : 99);
+      const fore = lathe([[0, 0.034], [0.026, 0.024], [0.034, 0.0], [0.033, -0.08], [0.029, -0.19], [0.0245, -0.245], [0.0235, -0.262], [0.026, -0.272], [0.0, -0.282]], R(18), R(16));
+      const palm = ell(0.0128, 0.033, 0.026, R(14), R(10)); const pp = palm.attributes.position;
+      for (let i = 0; i < pp.count; i++) { const y = pp.getY(i); pp.setZ(i, pp.getZ(i) * (1 - 0.18 * Math.max(0, y / 0.033))); }   // narrower at the wrist
+      palm.computeVertexNormals();
+      return { fore: merge([[fore, null, [0.27, 0]], [palm, M4(0, -0.302, 0.0), [0.6, 0]], ...glove.map(([g]) => [g, null, [0.6, 0]])]), fingers: skin.length ? merge(skin) : null };
     };
     T.handL = hands(-1); T.handR = hands(1);
-    // legs: thigh (hip pivot at ±0.062), shin + boot (knee pivot), platform foot (ankle pivot)
-    T.thigh = merge([[ell(0.058, 0.058, 0.058, 10, 8), null, [0, 0]], [new THREE.CylinderGeometry(0.058, 0.042, THIGH, 14).translate(0, -THIGH / 2, 0), null, [0, 0]], [ell(0.043, 0.043, 0.043, 10, 8), M4(0, -THIGH, 0), [0, 0]]]);
-    const shinP = [[0.044, 0.0], [0.046, -0.05], [0.055, -0.1], [0.052, -0.125], [0.046, -0.24], [0.04, -0.32], [0.0385, -0.345]].map(([r, y]) => new THREE.Vector2(r, y));
-    T.shin = merge([[new THREE.LatheGeometry(shinP, 16), null, [THIGH, 0]], [new THREE.TorusGeometry(0.0535, 0.0045, 6, 18).rotateX(PI / 2), M4(0, -0.105, 0), [THIGH, 0]]]);
-    T.foot = merge([[ell(0.045, 0.038, 0.09, 12, 8), M4(0, 0.022, 0.05), [THIGH + 0.4, -0.3]], [new THREE.CylinderGeometry(1, 1, 0.07, 20).scale(0.056, 1, 0.12), M4(0, -0.05, 0.02), [THIGH + 0.4, -0.3]], [ell(0.0385, 0.0385, 0.0385, 8, 6), M4(0, 0, 0), [THIGH + 0.4, -0.3]]]);
-    // head: slender, a softly pointed chin
-    const hg = new THREE.SphereGeometry(1, 32, 24).scale(0.1, 0.115, 0.104); const p = hg.attributes.position;
+    // legs: thigh (rounded hip and knee ends), shin + knee-high boot, platform foot
+    T.thigh = merge([[lathe([[0, 0.06], [0.042, 0.046], [0.059, 0.0], [0.058, -0.05], [0.053, -0.2], [0.047, -0.36], [0.043, -0.44], [0.03, -0.47], [0, -0.478]], R(20), R(20)), null, [0, 0]]]);
+    T.shin = merge([[lathe([[0, 0.036], [0.031, 0.02], [0.044, 0.0], [0.046, -0.05], [0.055, -0.098], [0.0535, -0.122], [0.046, -0.24], [0.04, -0.32], [0.0385, -0.345], [0.02, -0.37], [0, -0.372]], R(22), R(18)), null, [THIGH, 0]],
+      [new THREE.TorusGeometry(0.0535, 0.0045, R(6), R(18)).rotateX(PI / 2), M4(0, -0.105, 0), [THIGH, 0]]]);
+    const slab = lathe([[0, -0.035], [0.86, -0.035], [0.97, -0.03], [1.0, -0.018], [1.0, 0.018], [0.97, 0.03], [0.86, 0.035], [0, 0.035]], R(10), R(28)).scale(0.056, 1, 0.12);
+    T.foot = merge([[ell(0.045, 0.038, 0.09, R(16), R(10)), M4(0, 0.022, 0.05), [THIGH + 0.4, 0]], [slab, M4(0, -0.05, 0.02), [THIGH + 0.4, 0]], [ell(0.04, 0.04, 0.04, R(10), R(8)), null, [THIGH + 0.4, 0]]]);
+    // head: slender with a softly pointed chin
+    const hg = new THREE.SphereGeometry(1, R(32), R(24)).scale(0.1, 0.115, 0.104); const p = hg.attributes.position;
     for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < 0) { const k = 1 - 0.3 * Math.pow(-y / 0.115, 1.6); p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * (1 - 0.14 * Math.pow(-y / 0.115, 1.6))); } }
     hg.computeVertexNormals();
-    T.head = merge([[hg], [ell(0.0105, 0.021, 0.008, 8, 6), M4(0.0985, -0.006, 0.0, 0, 0, 0.05)], [ell(0.0105, 0.021, 0.008, 8, 6), M4(-0.0985, -0.006, 0.0, 0, 0, -0.05)]]);
-    // hair: a scalp cap + layered tapered wisps (flat against the head, root at the scalp, pink toward the tips)
-    const C = [0, 0.004, -0.006], HR = [0.107, 0.118, 0.108], cone = new THREE.ConeGeometry(1, 1, 5, 1).translate(0, 0.5, 0);
-    const cu = cone.attributes.position, cuv = new Float32Array(cu.count * 2); for (let i = 0; i < cu.count; i++) cuv[2 * i + 1] = cu.getY(i); cone.setAttribute('uv', new THREE.BufferAttribute(cuv, 2));
-    const pieces = [];
-    const wisp = (az, lat, down, out, tang, len, w, pink) => {
+    T.head = merge([[hg], [ell(0.0105, 0.021, 0.008, R(8), R(6)), M4(0.0985, -0.006, 0.0, 0, 0, 0.05)], [ell(0.0105, 0.021, 0.008, R(8), R(6)), M4(-0.0985, -0.006, 0.0, 0, 0, -0.05)]]);
+    // hair: a scalp cap + many curved, tapered, softly flattened clumps (smooth normals), white at the root and pink toward the tips
+    const C = [0, 0.004, -0.006], HR = [0.107, 0.118, 0.108], pieces = [], hs = Math.max(4, Math.round(4 * Q)), hr = Math.max(5, Math.round(3.4 * Q)), dens = Q > 1.5 ? 0.62 : 1;
+    const clump = (az, lat, down, out, tang, len, w, pink, curl = 0.6) => {
       const sa = Math.sin(az), ca = Math.cos(az), cl = Math.cos(lat), sl = Math.sin(lat);
-      const pos = new THREE.Vector3(C[0] + HR[0] * cl * sa * 0.985, C[1] + HR[1] * sl * 0.985, C[2] + HR[2] * cl * ca * 0.985);
+      const pos = new THREE.Vector3(C[0] + HR[0] * cl * sa * 0.975, C[1] + HR[1] * sl * 0.975, C[2] + HR[2] * cl * ca * 0.975);
       const nrm = new THREE.Vector3(cl * sa / HR[0], sl / HR[1], cl * ca / HR[2]).normalize(), tg = new THREE.Vector3(ca, 0, -sa);
-      const dir = new THREE.Vector3(0, -down, 0).addScaledVector(nrm, out).addScaledVector(tg, tang).normalize();
-      const zA = nrm.clone().addScaledVector(dir, -nrm.dot(dir)).normalize(), xA = new THREE.Vector3().crossVectors(dir, zA).normalize();
-      const m = new THREE.Matrix4().makeBasis(xA.multiplyScalar(w), dir.clone().multiplyScalar(len), zA.multiplyScalar(w * 0.42)).setPosition(pos);
-      const g = cone.clone(); const u = g.attributes.uv; for (let i = 0; i < u.count; i++) u.setX(i, pink); pieces.push([g, m]);
+      const d0 = new THREE.Vector3(0, -down, 0).addScaledVector(nrm, out).addScaledVector(tg, tang).normalize();
+      const P1 = pos.clone().addScaledVector(d0, len * 0.5), d1 = d0.clone().add(new THREE.Vector3(0, -curl, 0)).addScaledVector(nrm, 0.15).normalize(), P2 = P1.clone().addScaledVector(d1, len * 0.55);
+      pieces.push([sweep(pos, P1, P2, nrm, w, 0.42, hs, hr, pink)]);
     };
-    const D = PI / 180;
-    for (let a = -180; a < 180; a += 11) {            // crown: tousled upward/outward wisps
-      const az = (a + rnd() * 10) * D, lat = (66 + rnd() * 14) * D; wisp(az, lat, 1.1 + rnd() * 0.5, 0.7, (rnd() - 0.5) * 0.9, 0.05 + rnd() * 0.025, 0.017, 0.6 + rnd() * 0.15);
-    }
-    for (let a = -180; a < 180; a += 9) {            // upper layer
-      if (Math.abs(a) < 62) continue; const az = (a + rnd() * 8) * D, lat = (46 + rnd() * 10) * D; wisp(az, lat, 1, 0.55 + rnd() * 0.3, (rnd() - 0.5) * 0.5, 0.08 + rnd() * 0.035, 0.02, 0.5 + rnd() * 0.25);
-    }
-    for (let a = -180; a < 180; a += 8) {            // lower layer: the bob, to the jaw at the sides and shorter at the nape
-      const aa = Math.abs(a); if (aa < 76) continue; const az = (a + rnd() * 7) * D, lat = (14 + rnd() * 14) * D, side = aa > 55 && aa < 135;
-      wisp(az, lat, 1, 0.3 + rnd() * 0.3, (rnd() - 0.5) * 0.4, (side ? 0.118 : 0.085) + rnd() * 0.03, 0.021, 0.4 + rnd() * 0.25);
-    }
-    for (let a = -180; a < 180; a += 16) { const az = (a + rnd() * 8) * D; if (Math.abs(a) < 120) continue; wisp(az, (-8 + rnd() * 8) * D, 1, 0.25, 0, 0.065 + rnd() * 0.02, 0.02, 0.4); }
-    for (let i = -5; i <= 5; i++) {                   // wispy bangs over the forehead (tips fan outward, stopping above the eyes)
-      const az = (i * 9.5 + (rnd() - 0.5) * 3) * D; wisp(az, (44 + rnd() * 4) * D, 1, 0.55, i * 0.07 + (rnd() - 0.5) * 0.25, 0.066 + rnd() * 0.02 - Math.abs(i) * 0.002, 0.015, 0.4 + rnd() * 0.15);
-    }
-    for (const s of [-1, 1]) {                        // longer temple wisps framing the face
-      wisp(s * 76 * D, 26 * D, 1, 0.3, s * 0.1, 0.085, 0.016, 0.4); wisp(s * 66 * D, 38 * D, 1, 0.4, s * 0.2, 0.07, 0.015, 0.4);
-    }
-    const cap = ell(...HR, 28, 18).translate(...C); const capUv = cap.attributes.uv; for (let i = 0; i < capUv.count; i++) { capUv.setX(i, 2); capUv.setY(i, 0); }
+    const D = PI / 180, wq = Q > 1.5 ? 0.8 : 1;
+    for (let a = -180; a < 180; a += 11 * dens) { const az = (a + rnd() * 10) * D, lat = (66 + rnd() * 14) * D; clump(az, lat, 1.1 + rnd() * 0.5, 0.7, (rnd() - 0.5) * 0.9, 0.055 + rnd() * 0.03, 0.019 * wq, 0.6 + rnd() * 0.15, 0.4); }
+    for (let a = -180; a < 180; a += 9 * dens) { if (Math.abs(a) < 62) continue; const az = (a + rnd() * 8) * D, lat = (46 + rnd() * 10) * D; clump(az, lat, 1, 0.55 + rnd() * 0.3, (rnd() - 0.5) * 0.5, 0.085 + rnd() * 0.035, 0.022 * wq, 0.5 + rnd() * 0.25); }
+    for (let a = -180; a < 180; a += 8 * dens) { const aa = Math.abs(a); if (aa < 76) continue; const az = (a + rnd() * 7) * D, lat = (14 + rnd() * 14) * D, side = aa > 55 && aa < 135;
+      clump(az, lat, 1, 0.3 + rnd() * 0.3, (rnd() - 0.5) * 0.4, (side ? 0.12 : 0.088) + rnd() * 0.03, 0.023 * wq, 0.4 + rnd() * 0.25, 0.8); }
+    for (let a = -180; a < 180; a += 16 * dens) { if (Math.abs(a) < 120) continue; const az = (a + rnd() * 8) * D; clump(az, (-8 + rnd() * 8) * D, 1, 0.25, 0, 0.068 + rnd() * 0.02, 0.022 * wq, 0.4); }
+    const nb = Q > 1.5 ? 8 : 5;
+    for (let i = -nb; i <= nb; i++) { const az = (i * 9.5 * 5 / nb + (rnd() - 0.5) * 3) * D; clump(az, (44 + rnd() * 4) * D, 1, 0.55, i / nb * 0.35 + (rnd() - 0.5) * 0.25, 0.07 + rnd() * 0.02 - Math.abs(i / nb) * 0.01, 0.017 * wq, 0.4 + rnd() * 0.15, 0.25); }
+    for (const s of [-1, 1]) { clump(s * 76 * D, 26 * D, 1, 0.3, s * 0.1, 0.09, 0.017, 0.4, 0.4); clump(s * 66 * D, 38 * D, 1, 0.4, s * 0.2, 0.075, 0.016, 0.4, 0.4); }
+    const cap = ell(...HR, R(28), R(18)).translate(...C); const capUv = cap.attributes.uv; for (let i = 0; i < capUv.count; i++) { capUv.setX(i, 2); capUv.setY(i, 0); }
     T.hair = merge([[cap], ...pieces]);
     return T;
-  })();
+  }
+  const GH = G(2.2), GL = G(1.25);
+  const pick = (T, k) => k.split('.').reduce((o, n) => o && o[n], T);
+  const triOf = (T) => { let n = 0; const walk = (o) => { for (const v of Object.values(o)) if (v && v.isBufferGeometry) n += (v.index ? v.index.count : v.attributes.position.count) / 3; else if (v && typeof v === 'object') walk(v); }; walk(T); return n; };
+  const lodList = [];   // [mesh, hiGeometry, loGeometry] for the real figure
 
   const mesh = (g, m, parent, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.frustumCulled = false; parent.add(o); return o; };
 
-  function build() {
+  function build(hi) {
     const root = new THREE.Group(), P = {};
+    const L = (k, m, parent) => { const gh = pick(GH, k), gl = pick(GL, k); const o = mesh(hi ? gh : gl, m, parent); if (hi) lodList.push([o, gh, gl]); return o; };
     P.body = new THREE.Group(); P.body.position.y = HY; root.add(P.body);
-    mesh(geos.torso, torsoM, P.body); mesh(geos.emblem, emblemM, P.body); mesh(geos.emblemHalo, haloM, P.body); mesh(geos.choker, chokerM, P.body);
-    P.bell = new THREE.Group(); P.bell.position.set(0, 0.553, 0.0425); P.body.add(P.bell); mesh(geos.bell, brassM, P.bell);
+    L('torso', torsoM, P.body); L('emblem', emblemM, P.body); L('emblemHalo', haloM, P.body); L('choker', chokerM, P.body);
+    P.bell = new THREE.Group(); P.bell.position.set(0, 0.553, 0.0425); P.body.add(P.bell); L('bell', brassM, P.bell);
     P.neckP = new THREE.Group(); P.neckP.position.set(0, 0.6, 0); P.body.add(P.neckP);
     P.head = new THREE.Group(); P.head.position.y = 0.093; P.neckP.add(P.head);
-    mesh(geos.head, faceM, P.head); mesh(geos.hair, hairM, P.head);
+    L('head', faceM, P.head); L('hair', hairM, P.head);
     P.arms = [-1, 1].map((s) => {
-      const up = new THREE.Group(); up.position.set(s * 0.145, 0.465, 0); up.userData.s = s; P.body.add(up); mesh(geos.upper, armM, up);
-      const fo = new THREE.Group(); fo.position.y = -0.27; up.add(fo); const H = s < 0 ? geos.handL : geos.handR; mesh(H.fore, armM, fo); if (H.fingers) mesh(H.fingers, skinM, fo);
+      const up = new THREE.Group(); up.position.set(s * 0.145, 0.465, 0); up.userData.s = s; P.body.add(up); L('upper', armM, up);
+      const fo = new THREE.Group(); fo.position.y = -0.27; up.add(fo); const H = s < 0 ? 'handL' : 'handR'; L(H + '.fore', armM, fo); if (pick(GH, H + '.fingers')) L(H + '.fingers', skinM, fo);
       return { up, fo, s };
     });
     P.legs = [-1, 1].map((s) => {
-      const th = new THREE.Group(); th.position.set(s * 0.062, HY, 0); th.userData.s = s; root.add(th); mesh(geos.thigh, legM, th);
-      const kn = new THREE.Group(); kn.position.y = -THIGH; th.add(kn); mesh(geos.shin, legM, kn);
-      const ft = new THREE.Group(); ft.position.y = -0.345; kn.add(ft); mesh(geos.foot, legM, ft);
+      const th = new THREE.Group(); th.position.set(s * 0.062, HY, 0); th.userData.s = s; root.add(th); L('thigh', legM, th);
+      const kn = new THREE.Group(); kn.position.y = -THIGH; th.add(kn); L('shin', legM, kn);
+      const ft = new THREE.Group(); ft.position.y = -0.345; kn.add(ft); L('foot', legM, ft);
       return { th, kn, ft, s };
     });
     const pool = mesh(new THREE.CircleGeometry(1.1, 36).rotateX(-PI / 2), poolM, root, 0, 0.03, 0); pool.renderOrder = 20;
     return { root, P };
   }
-  const real = build(), twin = build();
+  const real = build(true), twin = build(false);   // the mirror twin always uses the light set
+  let lodHi = true;
   const rig = new THREE.Group(); rig.name = 'missMoo'; rig.add(real.root);
   const mirrorRig = new THREE.Group(); mirrorRig.name = 'missMooMirror'; mirrorRig.scale.y = -1; mirrorRig.add(twin.root); clipMirror(mirrorRig);
   const S = { x: 0, z: 0, yaw: 0, walk: 0, phase: 0, t: 0, blink: 2.5, blinkT: 0, look: 0, lookP: 0, tilt: 0, near: 0, bellE: 0, ringT: 99, wave: 0, waveW: 0, glow: 1, flash: 0 };
@@ -249,7 +278,7 @@ export function createMissMoo() {
     P.bell.rotation.x = 0.06 * Math.sin(ph * 2 + 1.0) * w + st.bellE * 0.9 * Math.sin(st.ringT * 24); P.bell.rotation.z = st.bellE * 0.45 * Math.sin(st.ringT * 19 + 1);
   }
   const API = {
-    group: rig, mirror: mirrorRig, state: S,
+    group: rig, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
     /** world position on the floor + heading (radians, 0 = facing +z) */
     place(x, z, yaw) { S.x = x; S.z = z; S.yaw = yaw; for (const g of [rig, mirrorRig]) { g.position.set(x, 0, z); g.rotation.y = yaw; } },
     ring(power = 1) { S.bellE = Math.min(1.4, S.bellE + power); S.ringT = 0; ringU.value = 1; },
@@ -274,6 +303,7 @@ export function createMissMoo() {
       S.look = ease(S.look, ty, 1 - Math.exp(-dt * 3)); S.lookP = ease(S.lookP, tp, 1 - Math.exp(-dt * 3));
       S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)), 1 - Math.exp(-dt * 2));
       if (S.wave > 0) S.wave -= dt; S.waveW = ease(S.waveW, S.wave > 0 ? 1 : 0, 1 - Math.exp(-dt * 4));
+      const wantHi = d < 6.5 || (lodHi && d < 7.5); if (wantHi !== lodHi) { lodHi = wantHi; for (const [o, gh, gl] of lodList) o.geometry = lodHi ? gh : gl; }
       apply(real.P, S); apply(twin.P, S);
     },
   };
