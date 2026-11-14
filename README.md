@@ -114,7 +114,7 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is now `?v=36` (it is bumped on every release). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is now `?v=37` (it is bumped on every release). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
 
 
 ## v25: Miss Moo redesign
@@ -174,3 +174,11 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - Materials: base colours are vertex colours. A roughness/metal map makes the suit glossy and the gold metallic.
 - The pink lines breathe gently (a slow pulse on any model that has an emissive map). `?moopulse=0` turns the pulse off. When you look at her, the pink glow flash still works on top of it.
 - Build scripts (kept off the site): `work/rig/stage2c.py` (colours and masks), `stage3.py` (clips, `TAG=circuit NOEXPORT=1`) and `stage4.py` (padlock, UVs, texture bake, export). Cache-bust `?v=36`.
+
+## v37 — bigger, crawling, curious Miss Moo with spiral eyes
+- **Scale +10%** (default 1.68 m → ~1.85 m), applied to her whole rig from the feet so it works for any model; the mirror twin, floor contact, follow distances and walk/crawl cadence all scale with it. Override with `?mooscale=1` (0.6–1.6).
+- **Crawl clips** in the rig (`Crawl`, `CrawlDown`, `CrawlUp`; `work/rig/crawl.py`, IK-authored then baked): a playful fox prowl on hands and knees with head up, ears perky and tails up and swishing; `CrawlUp` ends in a little pounce before she stands. `?moocrawlstride=` tunes foot sync.
+- **Spiral "hypnosis" eyes**: the eyes are their own `MooEye` material with a planar UV per eye; a hot-pink/black 2-arm spiral (canvas texture, emissive) spins slowly, both eyes the same way, mirror twin included. `?moospiral=0` turns it off, `?moospiralspeed=0.4` (turns/s), `?moospiralcolor=ff1f8f`.
+- **Curious companion** (the toggle is now "Companion"): she stays in your room or corridor and follows you when you change rooms, keeps ~1.6 m personal space, and spends most of her time exploring points of interest (monitor 10–30 s, pods/bottles, panels, doorways, barn stalls 5–15 s) — walking over, looking, head tilts, a wave now and then. She glances at you now and then, checks in every 30–60 s, and reacts (looks back, glows, may wave) if you watch her for a moment. Playful moves (hop, spin, peek, circle, hide, crawl…) every 15–35 s; crawl is ~13% of them. The Moo Track still overrides.
+- **Moo Track hallway decluttered**: hanging headsets and all cables removed; arches, sign, spiral end, floor arrows and wall screens kept (prop cues now just light the wall screens).
+- Model: `Foxfire_Ahri_circuit_v2.glb` (69.9k tris). Test hook `__moo.sim(seconds)` fast-forwards her behaviour. Cache-bust `?v=37`.

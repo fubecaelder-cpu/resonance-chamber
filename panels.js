@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=36';
+import { THREE, canvasTex } from './shared.js?v=37';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -253,7 +253,7 @@ function drawMooWing(ct, st, v) {
   const bx = W * 0.14, bw = W * 0.72, by = Y(-0.44); g.fillStyle = st.socket; g.fillRect(bx, by, bw, 12); g.fillStyle = st.edge; g.fillRect(bx, by, bw * Math.max(0, Math.min(1, v.cow || 0)), 12);
   g.fillStyle = st.title; g.font = `600 19px ${F}`; g.fillText('THE TUNNEL IS BEHIND YOU AT THE BARN DOOR', W / 2, Y(-0.462));
   // v31: companion toggle
-  g.fillStyle = st.title; g.font = `700 26px ${F}`; g.fillText(`FOLLOW ME: ${v.follow ? 'ON' : 'OFF'}`, W / 2, Y(-0.62));
+  g.fillStyle = st.title; g.font = `700 26px ${F}`; g.fillText(`COMPANION: ${v.follow ? 'ON' : 'OFF'}`, W / 2, Y(-0.62));
   ct.t.needsUpdate = true;
 }
 

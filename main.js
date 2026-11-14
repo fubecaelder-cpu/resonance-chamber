@@ -2,22 +2,22 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=36';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=37';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=36';
-import { pinkRoomCfg } from './pinkroom.js?v=36';
-import { barnRoomCfg } from './barnroom.js?v=36';
-import { buildOpRoom } from './oproom.js?v=36';
-import { buildCorridor } from './corridor.js?v=36';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=36';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=36';
-import { createScreens } from './screens.js?v=36';
-import { createPods } from './pods.js?v=36';
-import { createMoo } from './moo.js?v=36';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=36';
-import { createMissMoo } from './misscow.js?v=36';
-import { attachMooModel } from './moomodel.js?v=36';
-import { createCompanion } from './companion.js?v=36';
+import { buildChamber } from './chamber.js?v=37';
+import { pinkRoomCfg } from './pinkroom.js?v=37';
+import { barnRoomCfg } from './barnroom.js?v=37';
+import { buildOpRoom } from './oproom.js?v=37';
+import { buildCorridor } from './corridor.js?v=37';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=37';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=37';
+import { createScreens } from './screens.js?v=37';
+import { createPods } from './pods.js?v=37';
+import { createMoo } from './moo.js?v=37';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=37';
+import { createMissMoo } from './misscow.js?v=37';
+import { attachMooModel } from './moomodel.js?v=37';
+import { createCompanion } from './companion.js?v=37';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -131,7 +131,7 @@ panelsReady = true;
 // v31: companion mode toggle (?moofollow=0 starts it off; the choice is remembered on this device)
 const mooFollow = { on: Q.has('moofollow') ? Q.get('moofollow') !== '0' : (() => { try { return localStorage.getItem('mooFollow') !== '0'; } catch { return true; } })() };
 function setFollow(on) { mooFollow.on = on; try { localStorage.setItem('mooFollow', on ? '1' : '0'); } catch { /* private mode */ }
-  panelSys.redrawMoo(); const b = document.getElementById('mooFollow'); if (b) b.textContent = `🦊 Follow me: ${on ? 'ON' : 'OFF'}`; }
+  panelSys.redrawMoo(); const b = document.getElementById('mooFollow'); if (b) b.textContent = `🦊 Companion: ${on ? 'ON' : 'OFF'}`; }
 panelSys.setFollowHook(() => setFollow(!mooFollow.on));
 panelSys.setMooExtra(() => ({ cow: moo.progress(), follow: mooFollow.on })); panelSys.redrawMoo();
 
@@ -600,7 +600,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
-window.__moo = { get obst() { return MOO_OBST; }, moo, cow, mooModel, cowRun, get companion() { return companion; }, mooFollow, setFollow, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
+window.__moo = { sim: (sec, step) => mooSim(sec, step), get poi() { return MOO_POI; }, get obst() { return MOO_OBST; }, moo, cow, mooModel, cowRun, get companion() { return companion; }, mooFollow, setFollow, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
 window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
@@ -619,7 +619,20 @@ const MOO_OBST = [], MOO_LOOK = [];
   const r = sp.kind === 'slab' ? 0.9 : 0.95; MOO_OBST.push({ x: p.x, z: p.z, r, pillar: true }); MOO_LOOK.push({ x: p.x, z: p.z, stand: r + 0.75 }); });
   const m = MON_POS[i]; if (m) { const dx = m.x - RC[i][0], dz = m.z - RC[i][1], dd = Math.hypot(dx, dz); MOO_LOOK.push({ x: m.x, z: m.z, stand: Math.max(1.5, dd - 3.8) }); } });
 panelSys.panels.forEach((p) => { const q = p.group.getWorldPosition(new THREE.Vector3()); MOO_OBST.push({ x: q.x, z: q.z, r: 1.1 }); });
-const companion = createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR: [5.3, 5.3, 5.0, 4.6], obstacles: MOO_OBST, lookTargets: MOO_LOOK });
+// v37: points of interest for the curious companion, per room: the main monitor (read live, it can be moved), pods/bottles,
+// the control panel, every doorway, and the barn's stalls. Viewing spots are validated against her nav grid when chosen.
+const MOO_POI = []; const zr = (x, z) => zoneOf({ x, z });
+{ const mounts = [room1.hud.mount, mon2.mount, mon3.mount, mon4.mount], wp = new THREE.Vector3();
+  mounts.forEach((mt, i) => { if (!mt) return; const get = () => { mt.getWorldPosition(wp); return { x: wp.x, y: wp.y, z: wp.z }; }; const p0 = get();
+    MOO_POI.push({ kind: 'monitor', zone: 'r' + (i + 1), stand: 3.2, dwell: [10, 30], ...p0, get }); });
+  [room1, room2, room3, room4].forEach((rm, i) => (rm.podSpots || []).forEach((sp) => { const p = rm.root.localToWorld(new THREE.Vector3(sp.x, 0, sp.z));
+    MOO_POI.push({ kind: i === 3 ? 'bottle' : 'pod', zone: 'r' + (i + 1), x: p.x, y: 1.25, z: p.z, stand: (sp.kind === 'slab' ? 0.9 : 0.95) + 0.85, dwell: [5, 15] }); }));
+  panelSys.panels.forEach((pn) => { const q = pn.group.getWorldPosition(new THREE.Vector3()); const z0 = zr(q.x, q.z); if (z0[0] === 'r') MOO_POI.push({ kind: 'panel', zone: z0, x: q.x, y: 1.15, z: q.z, stand: 1.75, dwell: [5, 12] }); });
+  CDEF.forEach((c) => [[c.S, c.i], [c.E, c.j]].forEach(([pt, ri]) => MOO_POI.push({ kind: 'door', zone: 'r' + (ri + 1), x: pt[0], y: 1.7, z: pt[1], stand: 2.1, dwell: [4, 9] })));
+  // barn stalls: 6 a side along the walls (barnroom.js: 60°..150° from the arrival axis, radius 5.25)
+  for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) { const a = (60 + 7.5 + k * 15) * Math.PI / 180, p = room4.root.localToWorld(new THREE.Vector3(sd * Math.sin(a) * 5.25, 0, Math.cos(a) * 5.25));
+    if (k % 2 === 0) MOO_POI.push({ kind: 'stall', zone: 'r4', x: p.x, y: 0.9, z: p.z, stand: 1.4, dwell: [5, 12] }); } }
+const companion = createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR: [5.3, 5.3, 5.0, 4.6], obstacles: MOO_OBST, lookTargets: MOO_LOOK, pois: MOO_POI });
 if (document.getElementById('mooFollow')) { document.getElementById('mooFollow').addEventListener('click', () => setFollow(!mooFollow.on)); setFollow(mooFollow.on); }
 
 // ---------- precompile every room's shaders up front (avoids a hitch on first entering a room) ----------
@@ -688,6 +701,12 @@ function mooBuildPath(px, pz) {
 }
 function pathAt(s) { const sg = cowRun.path; let g = sg[sg.length - 1]; for (const q of sg) if (s <= q.s0 + q.len) { g = q; break; } const k = Math.min(Math.max(s - g.s0, 0), g.len); return { x: g.a[0] + g.dx * k, z: g.a[1] + g.dz * k, yaw: g.yaw }; }
 let mooPrev = 'idle', mooSec = -1, mooRoomDrawn = -1;
+// test hook: fast-forward Miss Moo's behaviour (no rendering) by `sec` seconds in `step` slices
+const MOO_SIM = { off: 0 };
+function mooSim(sec, step = 0.05) { camera.updateMatrixWorld(true); camera.getWorldPosition(headP); const t0 = performance.now() / 1000 + MOO_SIM.off; let t = 0;
+  const log = []; while (t < sec) { t += step; updateMoo(step, t0 + t); if (Math.round(t / step) % 20 === 0) { const S = companion.S, T = S.task;
+    log.push([+t.toFixed(1), +S.x.toFixed(2), +S.z.toFixed(2), zoneOf(S), T ? T.k + (T.p ? ':' + T.p.kind : '') + (T.phase ? '*' : '') : '-', S.act ? S.act.k : '', cow.state.crawlPhase || '', +Math.hypot(S.x - headP.x, S.z - headP.z).toFixed(2)]); } }
+  MOO_SIM.off += sec; return log; }
 function updateMoo(dt, now) {
   const e = camera.matrixWorld.elements;
   moo.update(dt, { x: headP.x, y: headP.y, z: headP.z }, Math.atan2(-e[8], e[10]));
@@ -748,7 +767,7 @@ renderer.setAnimationLoop(() => {
   const tick = Math.floor(t * 2);
   if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
   const zi = { r1: 0, r2: 1, r3: 2, r4: 3 }[zone]; if (zi !== undefined) lastRoom = zi;
-  media.update(dt, lastRoom); pods.update(dt, lastRoom); updateMoo(dt, nowMs / 1000);
+  media.update(dt, lastRoom); pods.update(dt, lastRoom); updateMoo(dt, nowMs / 1000 + MOO_SIM.off);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

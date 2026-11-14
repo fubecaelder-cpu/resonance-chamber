@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=36';
-import { BARN_GLSL } from './barnroom.js?v=36';
+import { THREE, makeKit, clipMirror } from './shared.js?v=37';
+import { BARN_GLSL } from './barnroom.js?v=37';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -248,7 +248,10 @@ export function createMissMoo() {
   const real = build(true), twin = build(false);   // the mirror twin always uses the light set
   let lodHi = true;
   const rig = new THREE.Group(); rig.name = 'missMoo'; rig.add(real.root);
-  const mirrorRig = new THREE.Group(); mirrorRig.name = 'missMooMirror'; mirrorRig.scale.y = -1; mirrorRig.add(twin.root); clipMirror(mirrorRig);
+  // v37: overall size (default 1.1 = 10 % taller, ~1.85 m); scales from her feet so floor contact and the mirror stay right
+  const SCALE = Math.min(1.6, Math.max(0.6, +(new URLSearchParams(location.search).get('mooscale') || 1.1)));
+  rig.scale.setScalar(SCALE);
+  const mirrorRig = new THREE.Group(); mirrorRig.name = 'missMooMirror'; mirrorRig.scale.set(SCALE, -SCALE, SCALE); mirrorRig.add(twin.root); clipMirror(mirrorRig);
   const S = { x: 0, z: 0, yaw: 0, walk: 0, phase: 0, t: 0, blink: 2.5, blinkT: 0, look: 0, lookP: 0, tilt: 0, near: 0, bellE: 0, ringT: 99, wave: 0, waveW: 0, glow: 1, flash: 0, speed: 0, hop: 0, lean: 0, tiltAdd: 0, flick: 0 };
   const HB = 60 / 66;
 
@@ -278,7 +281,7 @@ export function createMissMoo() {
     P.bell.rotation.x = 0.06 * Math.sin(ph * 2 + 1.0) * w + st.bellE * 0.9 * Math.sin(st.ringT * 24); P.bell.rotation.z = st.bellE * 0.45 * Math.sin(st.ringT * 19 + 1);
   }
   const API = {
-    group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
+    scale: SCALE, group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
     /** world position on the floor + heading (radians, 0 = facing +z) */
     /** hop: root lift (m), lean: sideways roll (rad); the mirror rig gets the reflected offsets (it is scaled y = -1) */
     place(x, z, yaw, hop = 0, lean = 0) { S.x = x; S.z = z; S.yaw = yaw; S.hop = hop; S.lean = lean;
@@ -290,7 +293,7 @@ export function createMissMoo() {
     update(dt, moving, cam, t, speed) {
       S.t = t; S.walk = ease(S.walk, moving, 1 - Math.exp(-dt * 4)); S.speed = speed === undefined ? moving * 0.5 : speed;
       // v31: when the real ground speed is known the stride rate follows it (about 1.1 m per leg cycle), so the feet do not skate
-      const rate = speed === undefined ? 2.0 + 3.8 * S.walk : 2.0 * (1 - S.walk) + S.walk * Math.min(11, Math.max(3, 5.7 * speed));
+      const rate = speed === undefined ? 2.0 + 3.8 * S.walk : 2.0 * (1 - S.walk) + S.walk * Math.min(11, Math.max(3, 5.7 * speed / SCALE));
       S.phase += dt * rate * (S.walk > 0.02 ? 1 : 0.0);
       S.ringT += dt; S.bellE *= Math.exp(-dt * 1.6); ringU.value *= Math.exp(-dt * 3.5); S.flash *= Math.exp(-dt * 1.6);
       // slow, dreamy blinks (0.45 s)
@@ -302,8 +305,11 @@ export function createMissMoo() {
       let ty = 0, tp = 0, near = 0, d = 99;
       if (cam) {
         const dx = cam.x - S.x, dz = cam.z - S.z; d = Math.hypot(dx, dz);
-        if (d < 7) { const a = wrap(Math.atan2(dx, dz) - S.yaw); ty = clamp(a, -0.95, 0.95); tp = clamp(-Math.atan2(cam.y - 1.55, Math.max(d, 0.5)) * 0.9, -0.2, 0.25); }
-        near = clamp(1 - (d - 2) / 5, 0, 1);
+        // v37: look target = S.lookAt (something she is examining) or the viewer, weighted by S.playerLook (companion mode keeps it low)
+        const L = S.lookAt, w = L ? 1 : (S.playerLook === undefined ? 1 : S.playerLook), tx = L ? L.x : cam.x, tyy = L ? L.y : cam.y, tz = L ? L.z : cam.z;
+        const ex = tx - S.x, ez = tz - S.z, ed = Math.hypot(ex, ez), EYE = 1.55 * SCALE * (S.crawlLow ? 0.4 : 1);
+        if (ed < (L ? 12 : 7)) { const a = wrap(Math.atan2(ex, ez) - S.yaw); ty = clamp(a, -1.0, 1.0) * w; tp = clamp(-Math.atan2(tyy - EYE, Math.max(ed, 0.5)) * 0.9, -0.3, 0.3) * w; }
+        near = clamp(1 - (d - 2) / 5, 0, 1) * (L ? 0.3 : 1);
       }
       S.look = ease(S.look, ty, 1 - Math.exp(-dt * 3)); S.lookP = ease(S.lookP, tp, 1 - Math.exp(-dt * 3));
       S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)) + (S.tiltAdd || 0), 1 - Math.exp(-dt * 3));

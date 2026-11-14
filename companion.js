@@ -1,3 +1,6 @@
+// v37: 'curious companion' — she always stays in the player's room (or corridor) but mostly explores points of interest
+// (the main monitor, pods, panels, doorways, barn stalls), glances back now and then, checks in every 30-60 s, keeps ~1.6 m
+// personal space, and mixes in fewer playful moves (incl. a crawl). Below: the original v31 notes.
 // v31: Miss Moo companion mode. She follows the player through every room and corridor at a comfortable 2-3.5 m,
 // never closer than ~1.5 m, backs off / sidesteps when approached, reroutes through doorways, catches up or quietly
 // reappears behind the player after a teleport, and does small playful things every 6-15 s. Cheap per-frame steering:
@@ -8,12 +11,12 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR, obstacles, lookTargets }) {
+export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR, obstacles, lookTargets, pois = [] }) {
   const ROOM_R = roomR;                       // per room: her disc radius (narrower than the player's 6.1 m)
   const HALF = 0.38, EXT = 2.4;               // corridor strip for her: centre line ±0.38 m (her tails are wide), overlapping into rooms
   const S = { x: 0, z: 0, yaw: 0, vx: 0, vz: 0, spd: 0, inited: false, act: null, actT: 0, next: 0, side: Math.random() < 0.5 ? -1 : 1,
     unseen: 0, pvx: 0, pvz: 0, esc: null, escT: 0, gaze: 0, gazeCool: 0, stuck: 0, lastD: 0, hop: 0, hopT: 0, hopN: 0, lean: 0, leanTo: 0, spin: 0, spinT: 0,
-    tiltT: 0, flickT: 0, mode: 'idle', prevHx: null, prevHz: null, pv: 0, faceTo: null, info: '' };
+    tiltT: 0, flickT: 0, task: null, checkinAt: 0, glanceT: 6, glanceDur: 0, reactT: 0, pl: 0.15, recent: [], mode: 'idle', prevHx: null, prevHz: null, pv: 0, faceTo: null, info: '' };
   const corr = Object.fromEntries(CORRS.map((c) => [c.k, c]));
   const corrPt = (c, al, la = 0) => [c.S[0] + al * c.D[0] + la * c.D[1], c.S[1] + al * c.D[1] - la * c.D[0]];
   const corrBetween = (i, j) => CORRS.find((c) => (c.beds[0] === i && c.beds[1] === j) || (c.beds[0] === j && c.beds[1] === i));
@@ -106,14 +109,14 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     const [x, z] = valid(hx - fx * 2.4, hz - fz * 2.4); S.x = x; S.z = z; S.vx = S.vz = 0; S.info = 'reappeared* (' + why + ')'; return false;
   }
   // ---- playful acts
-  const ACTS = { hop: 3, spin: 1.5, tilt: 3, flick: 2.5, wave: 2.5, peek: 2.5, circle: 2, wander: 2, hide: 2 };
+  const ACTS = { hop: 2, spin: 1.2, tilt: 1.5, flick: 1.5, wave: 1.2, peek: 1.2, circle: 1, hide: 1.3, crawl: 1.6 };   // crawl ≈ 13 % of playful moves
   function pickAct(still, inView, hx, hz) {
     const zp = zoneOf({ x: hx, z: hz }); const opts = [];
     for (const [k, w] of Object.entries(ACTS)) {
       if (!still && !['hop', 'tilt', 'flick', 'spin'].includes(k)) continue;
       if (k === 'wave' && !inView) continue;
       if (k === 'hide' && !nearPod(hx, hz, zp)) continue;
-      if (k === 'wander' && !lookPick(hx, hz, zp, true)) continue;
+      if (k === 'crawl' && !(cow.ext && cow.ext.canCrawl)) continue;
       opts.push([k, w]);
     }
     let r = Math.random() * opts.reduce((a, [, w]) => a + w, 0); for (const [k, w] of opts) { r -= w; if (r <= 0) return k; } return opts.length ? opts[0][0] : 'hop';
@@ -131,7 +134,39 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     else if (k === 'circle') { const cur = wrap(Math.atan2(S.x - hx, S.z - hz) - Math.atan2(fx, fz)); a.a0 = cur; a.a1 = cur + S.side * 2.3; a.dur = 6; }
     else if (k === 'wander') { a.tg = lookPick(hx, hz, zoneOf({ x: hx, z: hz })); a.dur = 11; }
     else if (k === 'hide') { a.pod = nearPod(hx, hz, zoneOf({ x: hx, z: hz })); a.dur = 10; }
+    else if (k === 'crawl') {   // prowl a few metres toward / around the player on all fours, then stand back up
+      const cur = Math.atan2(S.x - hx, S.z - hz); a.tg = null;
+      for (const da of [0.9, -0.9, 0.5, -0.5, 1.4, -1.4]) { const aa = cur + da * S.side, tx = hx + Math.sin(aa) * 2.4, tz = hz + Math.cos(aa) * 2.4, dd = Math.hypot(tx - S.x, tz - S.z);
+        if (dd > 1.6 && dd < 5 && reachable(tx, tz) && lineFree(S.x, S.z, tx, tz)) { a.tg = { x: tx, z: tz }; break; } }
+      if (!a.tg) { const dd = Math.max(0.1, Math.hypot(S.x - hx, S.z - hz)); a.tg = { x: hx + (S.x - hx) / dd * 2.4, z: hz + (S.z - hz) / dd * 2.4 }; }
+      a.dur = 16; cow.state.crawl = 1; }
     S.info = 'act: ' + k;
+  }
+  // ---- curious exploring: points of interest per room ({x, y, z, stand, dwell:[a,b], kind, get?}), viewing spot validated once per visit
+  const PS = 1.6;   // personal space (m)
+  function standFor(P, hx, hz, zp) {
+    const c = RC[+zp[1] - 1], bx = c[0] - P.x, bz = c[1] - P.z, bd = Math.hypot(bx, bz) || 1, b0 = Math.atan2(bx / bd, bz / bd);
+    const tries = P.kind === 'pod' ? [Math.atan2(S.x - P.x, S.z - P.z), b0, b0 + 1.2, b0 - 1.2, b0 + 2.2, b0 - 2.2] : [b0 + rnd(-0.35, 0.35), b0, b0 + 0.6, b0 - 0.6];
+    for (const ang of tries) for (const r of [P.stand, P.stand + 0.4, P.stand + 0.9]) {
+      const x = P.x + Math.sin(ang) * r, z = P.z + Math.cos(ang) * r;
+      if (zoneOf({ x, z }) !== zp || !reachable(x, z) || Math.hypot(x - hx, z - hz) < PS + 0.4) continue;
+      return [x, z];
+    }
+    return null;
+  }
+  function nextTask(now, hx, hz, zp) {
+    if (now > S.checkinAt && S.checkinAt > 0) { S.checkinAt = now + rnd(30, 60); return { k: 'checkin', zone: zp, t: 0, phase: 0, dwell: rnd(3, 5) }; }
+    if (!S.checkinAt) S.checkinAt = now + rnd(25, 45);
+    const list = pois.filter((p) => p.zone === zp && !S.recent.includes(p));
+    let tot = 0; const w = list.map((p) => { const v = (p.kind === 'monitor' ? 2.5 : p.kind === 'door' ? 0.6 : 1) * (Math.hypot(p.x - S.x, p.z - S.z) < 1 ? 0.2 : 1); tot += v; return v; });
+    for (let tries = 0; tries < 6 && list.length; tries++) {
+      let r = Math.random() * tot, i = 0; for (; i < list.length - 1; i++) { r -= w[i]; if (r <= 0) break; }
+      const P0 = list[i], P = P0.get ? { ...P0, ...P0.get() } : P0, sp = standFor(P, hx, hz, zp);
+      if (!sp) continue;
+      S.recent.push(P0); if (S.recent.length > 3) S.recent.shift(); S.info = 'explore: ' + P.kind;
+      return { k: 'poi', p: P, zone: zp, t: 0, phase: 0, sx: sp[0], sz: sp[1], dwell: rnd(P.dwell[0], P.dwell[1]), tiltAt: rnd(1.5, 4) };
+    }
+    return { k: 'idle', zone: zp, t: 0, dwell: rnd(2, 4) };
   }
   // ---- per frame
   function update(dt, now, hx, hz, fx, fz) {
@@ -144,9 +179,9 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     S.prevHx = hx; S.prevHz = hz; S.pv += (pv - S.pv) * (1 - Math.exp(-dt * 4)); const still = S.pv < 0.35;
     let dx = S.x - hx, dz = S.z - hz, d = Math.hypot(dx, dz);
     const zm = zoneOf(S), zp = zoneOf({ x: hx, z: hz });
-    if (d > 12) { teleportBehind(hx, hz, fx, fz, 'far'); dx = S.x - hx; dz = S.z - hz; d = Math.hypot(dx, dz); }
+    if ((d > 12 && zm !== zp) || d > 15) { teleportBehind(hx, hz, fx, fz, 'far'); dx = S.x - hx; dz = S.z - hz; d = Math.hypot(dx, dz); }
     // stuck while trying to reach the player: give up quietly
-    if (d > 5 && d >= S.lastD - 0.02 && S.spd < 0.2) S.stuck += dt; else S.stuck = Math.max(0, S.stuck - dt * 2);
+    if (zm !== zp && d > 4 && d >= S.lastD - 0.02 && S.spd < 0.2 && !cow.state.crawlPhase) S.stuck += dt; else S.stuck = Math.max(0, S.stuck - dt * 2);
     S.lastD = d; if (S.stuck > 4) { S.stuck = 0; teleportBehind(hx, hz, fx, fz, 'stuck'); dx = S.x - hx; dz = S.z - hz; d = Math.hypot(dx, dz); }
     const inView = d > 0.1 && Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)) < 1.0;
     S.unseen = inView ? 0 : S.unseen + dt;
@@ -154,38 +189,68 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     const gazing = d < 9 && Math.acos(clamp((dx * fx + dz * fz) / Math.max(d, 0.1), -1, 1)) < 0.2;
     S.gazeCool -= dt; S.gaze = gazing ? S.gaze + dt : 0;
     if (S.gaze > 0.8 && S.gazeCool <= 0) { S.gazeCool = 7; cow.flash(0.9); S.tiltT = Math.max(S.tiltT, 1.4); S.flickT = Math.max(S.flickT, 0.9); if (!S.act && Math.random() < 0.5) { S.hopT = 0; S.hopN = 1; } }
-    // choose an act
-    if (!S.act && (now > S.next || S.forced) && zm === zp && d < 6) { const k = S.forced || pickAct(still, inView, hx, hz); S.forced = null; startAct(k, hx, hz, fx, fz); }
+    // react when the player looks at her for a while: glow, turn to look back, sometimes wave
+    if (S.gaze > 1.2 && S.reactCool <= 0) { S.reactCool = 9; S.reactT = 2.6; if (!S.act && Math.random() < 0.4) cow.waveNow(2.0); }
+    S.reactCool = (S.reactCool || 0) - dt; S.reactT = Math.max(0, S.reactT - dt);
+    // occasional glance over her shoulder at the player
+    S.glanceT -= dt; if (S.glanceT <= 0) { S.glanceT = rnd(9, 22); S.glanceDur = rnd(1.2, 2.2); } S.glanceDur = Math.max(0, S.glanceDur - dt);
+    const sameZone = zm === zp, inRoom = zp[0] === 'r';
+    // choose a playful act (less often than before; mixed into the exploring)
+    if (!S.act && (now > S.next || S.forced) && sameZone && d < 8 && !(S.task && S.task.k === 'poi' && S.task.phase === 1 && !S.forced)) { const k = S.forced || pickAct(still, inView, hx, hz); S.forced = null; startAct(k, hx, hz, fx, fz); }
     // ---- goal
-    const base = Math.atan2(fx, fz); let gx = S.x, gz = S.z, speed = 0.95, face = null, scoot = false, hold = false;
+    const base = Math.atan2(fx, fz); let gx = S.x, gz = S.z, speed = 0.9, face = null, scoot = false, hold = false, lookAt = null, pl = 0.15;
     const slot = (ang, r) => [hx + Math.sin(base + ang) * r, hz + Math.cos(base + ang) * r];
-    // long acts give way as soon as the player sets off, leaves her zone or gets far
-    if (S.act && ['peek', 'circle', 'wander', 'hide'].includes(S.act.k) && (S.pv > 0.6 || zm !== zp || d > 7)) { S.act = null; S.leanTo = 0; S.next = now + rnd(6, 15); }
+    // long acts give way as soon as the player leaves her zone or gets far
+    if (S.act && ['peek', 'circle', 'hide', 'crawl'].includes(S.act.k) && (zm !== zp || d > 9 || (S.act.k !== 'crawl' && S.pv > 0.6))) { S.act = null; S.leanTo = 0; S.next = now + rnd(15, 35); }
+    if (!S.act || S.act.k !== 'crawl') cow.state.crawl = 0;
     const a = S.act;
     if (a) {
       a.t += dt;
-      if (a.k === 'peek') { [gx, gz] = slot(a.ang, 2.4); const arr = Math.hypot(gx - S.x, gz - S.z) < 0.35; if (arr) { a.phase += dt; S.leanTo = -S.side * 0.2 * Math.min(1, a.phase / 0.4) * (a.phase < 2.2 ? 1 : 0); S.tiltT = Math.max(S.tiltT, 0.2); } face = 'player'; if (a.phase > 2.6) a.t = a.dur; }
-      else if (a.k === 'circle') { const u = Math.min(1, a.t / (a.dur - 1)); [gx, gz] = slot(a.a0 + (a.a1 - a.a0) * u, 2.5); speed = 1.2; }
-      else if (a.k === 'wander' && a.tg) {
-        const tg = a.tg, vx = S.x - tg.x, vz = S.z - tg.z, vd = Math.hypot(vx, vz) || 1;
-        if (a.phase === 0) { [gx, gz] = [tg.x + vx / vd * tg.stand, tg.z + vz / vd * tg.stand]; face = tg; if (vd < tg.stand + 0.4) a.phase = 1; }
-        else if (a.phase === 1) { hold = true; face = tg; S.tiltT = Math.max(S.tiltT, 0.2); a.look = (a.look || 0) + dt; if (a.look > 2.6) a.phase = 2; }
-        else { [gx, gz] = slot(S.side * 0.6, 2.4); speed = 1.6; if (d < 3.2) a.t = a.dur; }
-      }
+      if (a.k === 'peek') { [gx, gz] = slot(a.ang, 2.4); const arr = Math.hypot(gx - S.x, gz - S.z) < 0.35; if (arr) { a.phase += dt; S.leanTo = -S.side * 0.2 * Math.min(1, a.phase / 0.4) * (a.phase < 2.2 ? 1 : 0); S.tiltT = Math.max(S.tiltT, 0.2); } face = 'player'; pl = 1; if (a.phase > 2.6) a.t = a.dur; }
+      else if (a.k === 'circle') { const u = Math.min(1, a.t / (a.dur - 1)); [gx, gz] = slot(a.a0 + (a.a1 - a.a0) * u, 2.5); speed = 1.2; pl = 0.5; }
       else if (a.k === 'hide' && a.pod) {
         const p = a.pod, ox = p.x - hx, oz = p.z - hz, od = Math.hypot(ox, oz) || 1;
         if (a.phase === 0) { [gx, gz] = [p.x + ox / od * (p.r + 0.2), p.z + oz / od * (p.r + 0.2)]; speed = 1.3; if (Math.hypot(gx - S.x, gz - S.z) < 0.4) a.phase = 1; }
         else if (a.phase === 1) { hold = true; face = 'player'; a.wait = (a.wait || 0) + dt; [gx, gz] = [S.x, S.z]; if (a.wait > 2.5) { a.phase = 2; S.hopT = 0; S.hopN = 1; cow.flash(1.0); S.flickT = 1.2; } }
-        else { [gx, gz] = [p.x + (-oz / od) * S.side * (p.r + 0.5), p.z + (ox / od) * S.side * (p.r + 0.5)]; face = 'player'; speed = 1.4; S.leanTo = S.side * 0.18;
+        else { [gx, gz] = [p.x + (-oz / od) * S.side * (p.r + 0.5), p.z + (ox / od) * S.side * (p.r + 0.5)]; face = 'player'; pl = 1; speed = 1.4; S.leanTo = S.side * 0.18;
           a.pop = (a.pop || 0) + dt; if (a.pop > 1.2) { cow.waveNow(2.0); a.t = a.dur; } }
       }
-      if (a.t >= a.dur) { S.act = null; S.leanTo = 0; S.next = now + rnd(6, 15); }
+      else if (a.k === 'crawl') {
+        const cp = cow.state.crawlPhase;
+        if (!a.end && cp === 'loop') { [gx, gz] = [a.tg.x, a.tg.z]; speed = 0.42; pl = 0.5; if (Math.hypot(a.tg.x - S.x, a.tg.z - S.z) < 0.4 || a.t > 10) { a.end = true; cow.state.crawl = 0; } }
+        else { hold = true; if (a.end && !cp) { a.t = a.dur; S.hopT = 0; S.hopN = 1; } if (!a.end && !cp && a.t > 2.5) { a.end = true; a.t = a.dur; } }
+        if (a.t > 14) cow.state.crawl = 0;
+      }
+      if (a.t >= a.dur) { S.act = null; S.leanTo = 0; cow.state.crawl = 0; S.next = now + rnd(15, 35); }
     }
     if (!S.act || ['hop', 'spin', 'tilt', 'flick', 'wave'].includes(S.act.k)) {
-      // comfort keeping
-      // too close, or the player is walking straight at her: sidestep to a free spot (never back into a wall)
-      const closing = S.pv > 0.4 && (S.pvx * -dx + S.pvz * -dz) < 0 && ((S.pvx * dx + S.pvz * dz) / Math.max(d * Math.hypot(S.pvx, S.pvz), 1e-3)) > 0.6;
-      if (d < 1.5 || (d < 2.2 && closing)) {
+      if (!sameZone) {   // the one rule: be where the player is (route through doors; catch-up teleports handle the rest)
+        S.task = null; [gx, gz] = [hx + dx / Math.max(d, 0.1) * 2.6, hz + dz / Math.max(d, 0.1) * 2.6]; speed = d > 5 ? 1.7 : 1.1; pl = 0.3;
+      } else if (!inRoom) {   // in a corridor: stay with the player at a comfortable distance (nothing to explore here)
+        S.task = null;
+        if (!still) { [gx, gz] = slot(S.side * 2.2, 2.5); speed = clamp(S.pv * 1.1 + 0.3, 0.9, 1.9); }
+        else if (d > 3.6) { [gx, gz] = [hx + dx / d * 2.8, hz + dz / d * 2.8]; speed = d > 6 ? 1.7 : 1.0; }
+        else hold = true;
+        pl = 0.4;
+      } else {
+        // exploring the room
+        if (!S.task || S.task.done || S.task.zone !== zp) S.task = nextTask(now, hx, hz, zp);
+        const T = S.task; T.t += dt;
+        if (T.k === 'poi') {
+          const P = T.p, at = Math.hypot(T.sx - S.x, T.sz - S.z) < 0.4;
+          if (T.phase === 0) { [gx, gz] = [T.sx, T.sz]; speed = 0.85; if (Math.hypot(P.x - S.x, P.z - S.z) < 3.5) lookAt = P; if (at) { T.phase = 1; T.dw = 0; } if (T.t > 25) T.done = true; }
+          else { hold = true; face = P; lookAt = P; T.dw += dt;
+            if (T.dw > T.tiltAt) { T.tiltAt = T.dw + rnd(3, 7); S.tiltT = Math.max(S.tiltT, rnd(1.0, 2.0)); S.side = Math.random() < 0.5 ? -1 : 1; }
+            if (!T.gest && T.dw > 2 && Math.random() < dt * 0.04) { T.gest = true; cow.waveNow(1.8); }    // a curious little hand gesture
+            if (T.dw > T.dwell) T.done = true; }
+        } else if (T.k === 'checkin') {
+          if (T.phase === 0) { const aa = Math.atan2(S.x - hx, S.z - hz); [gx, gz] = [hx + Math.sin(aa) * 2.4, hz + Math.cos(aa) * 2.4]; speed = 1.0; pl = 0.7; if (d < 2.8) { T.phase = 1; T.dw = 0; } if (T.t > 15) T.done = true; }
+          else { hold = true; face = 'player'; pl = 1; T.dw += dt; if (!T.hi) { T.hi = true; if (Math.random() < 0.5) cow.waveNow(2.0); else S.tiltT = 1.6; } if (T.dw > T.dwell) T.done = true; }
+        } else { hold = true; T.dw = (T.dw || 0) + dt; if (T.dw > T.dwell) T.done = true; }
+      }
+      // personal space: too close, or the player is walking straight at her -> sidestep to a free spot
+      const closing = S.pv > 0.4 && ((S.pvx * dx + S.pvz * dz) / Math.max(d * Math.hypot(S.pvx, S.pvz), 1e-3)) > 0.6;
+      if (d < PS || (d < PS + 0.6 && closing)) {
         S.escT -= dt;
         if (!S.esc || S.escT <= 0) {
           const away = Math.atan2(dx, dz); S.esc = null;
@@ -196,15 +261,17 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
           }
           if (!S.esc) S.esc = valid(hx + Math.sin(away) * 2.5, hz + Math.cos(away) * 2.5); S.escT = 0.7;
         }
-        [gx, gz] = S.esc; scoot = true; speed = 2.0;
-      }
-      else if ((S.esc = null), !still) { [gx, gz] = slot(S.side * 2.2, 2.5); speed = clamp(S.pv * 1.1 + 0.3, 0.9, 1.9); }
-      else if (d > 3.6) { [gx, gz] = [hx + dx / d * 2.8, hz + dz / d * 2.8]; speed = d > 6 ? 1.7 : 1.0; }
-      else if (S.unseen > 2.5) { [gx, gz] = slot(S.side * 0.75, 2.6); }
-      else hold = true;
-      if (zm !== zp) { hold = false; [gx, gz] = [hx + dx / Math.max(d, 0.1) * 2.6, hz + dz / Math.max(d, 0.1) * 2.6]; speed = d > 5 ? 1.7 : 1.1; }
-      if (!face) face = 'player';
+        [gx, gz] = S.esc; scoot = true; hold = false; speed = 2.0; pl = 0.6;
+        if (S.task && S.task.k === 'poi' && S.task.phase === 1 && Math.hypot(S.task.sx - hx, S.task.sz - hz) < PS + 0.3) S.task.done = true;   // the player took her spot
+      } else S.esc = null;
     }
+    // where she looks: what she is examining, else mostly ahead; the player only on glances / check-ins / when watched
+    if (S.reactT > 0) { lookAt = null; pl = 1; if (!S.act && hold) face = 'player'; }
+    else if (S.glanceDur > 0) { lookAt = null; pl = Math.max(pl, 0.85); }
+    S.pl += (pl - S.pl) * (1 - Math.exp(-dt * 3));
+    cow.state.lookAt = lookAt ? { x: lookAt.x, y: lookAt.y === undefined ? 1.3 : lookAt.y, z: lookAt.z } : null; cow.state.playerLook = S.pl;
+    if (cow.state.crawlPhase && cow.state.crawlPhase !== 'loop') { hold = true; scoot = false; }
+    if (cow.state.crawlPhase === 'loop') speed = Math.min(speed, 0.45);
     // keep the goal somewhere she can actually stand (in the player's zone when following)
     if (!hold) { [gx, gz] = pushOut(...clampWalk(gx, gz, zp === zm || S.act ? null : zp)); [gx, gz] = clampWalk(gx, gz); if (!reachable(gx, gz)) { const c = snapCell(gx, gz); if (c >= 0) { gx = cx(c); gz = cz(c); } } }
     // ---- steering
@@ -214,7 +281,7 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     if (!hold && ed > 0.12) { const v = speed * Math.min(1, ed / 0.8); tvx = ex / ed * v; tvz = ez / ed * v; }
     for (const o of obstacles) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz), R0 = o.r + 0.7;
       if (od < R0 && od > 1e-3 && (S.act && S.act.pod === o ? Math.hypot(gx - o.x, gz - o.z) > o.r + 0.6 : true)) { const k = (R0 - od) / R0 * 1.4; tvx += ox / od * k; tvz += oz / od * k; } }
-    if (d < 1.7 && !hold) { const k = (1.7 - d) / 1.7 * 2.0; tvx += dx / Math.max(d, 0.1) * k; tvz += dz / Math.max(d, 0.1) * k; }
+    if (d < PS + 0.1 && !hold) { const k = (PS + 0.1 - d) / (PS + 0.1) * 2.0; tvx += dx / Math.max(d, 0.1) * k; tvz += dz / Math.max(d, 0.1) * k; }
     const acc = 1 - Math.exp(-dt * 4.5); S.vx += (tvx - S.vx) * acc; S.vz += (tvz - S.vz) * acc;
     const vm = Math.hypot(S.vx, S.vz), vmax = Math.max(speed, 1.0) + 0.3; if (vm > vmax) { S.vx *= vmax / vm; S.vz *= vmax / vm; }
     let nx = S.x + S.vx * dt, nz = S.z + S.vz * dt; [nx, nz] = pushOut(...clampWalk(nx, nz)); [nx, nz] = clampWalk(nx, nz);
@@ -223,7 +290,7 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     let want = S.yaw;
     if (S.spd > 0.25 && !scoot) want = Math.atan2(S.vx, S.vz);
     else if (face === 'player' || scoot) want = Math.atan2(hx - S.x, hz - S.z);
-    else if (face) want = Math.atan2(face.x - S.x, face.z - S.z);
+    else if (face && face.x !== undefined) want = Math.atan2(face.x - S.x, face.z - S.z);
     S.yaw += wrap(want - S.yaw) * (1 - Math.exp(-dt * (scoot ? 7 : 4.5)));
     // ---- procedural layers: hop / spin / lean / tilt / flick
     let hop = 0; if (S.hopN > 0) { S.hopT += dt; const u = S.hopT / 0.42; hop = 0.16 * Math.sin(Math.PI * Math.min(1, u)); if (u >= 1) { S.hopN--; S.hopT = 0; } }
@@ -237,5 +304,5 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     S.mode = hold ? 'idle' : scoot ? 'scoot' : 'walk';
     return { x: S.x, z: S.z, speed: S.spd, moving: clamp(S.spd / 0.6, 0, 1), d, zone: zoneOf(S) };
   }
-  return { S, act: (k) => { S.forced = k; }, update, reset: () => { S.inited = false; S.act = null; }, teleportBehind, valid, reachable };
+  return { S, pois, act: (k) => { S.forced = k; }, task: () => S.task, update, reset: () => { S.inited = false; S.act = null; S.task = null; cow.state.crawl = 0; cow.state.lookAt = null; cow.state.playerLook = undefined; }, teleportBehind, valid, reachable };
 }
