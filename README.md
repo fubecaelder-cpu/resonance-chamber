@@ -114,7 +114,7 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=33` (v29). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=34` (v30). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
 
 
 ## v25: Miss Moo redesign

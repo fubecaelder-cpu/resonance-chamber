@@ -2,21 +2,21 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=33';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=34';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=33';
-import { pinkRoomCfg } from './pinkroom.js?v=33';
-import { barnRoomCfg } from './barnroom.js?v=33';
-import { buildOpRoom } from './oproom.js?v=33';
-import { buildCorridor } from './corridor.js?v=33';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=33';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=33';
-import { createScreens } from './screens.js?v=33';
-import { createPods } from './pods.js?v=33';
-import { createMoo } from './moo.js?v=33';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=33';
-import { createMissMoo } from './misscow.js?v=33';
-import { attachMooModel } from './moomodel.js?v=33';
+import { buildChamber } from './chamber.js?v=34';
+import { pinkRoomCfg } from './pinkroom.js?v=34';
+import { barnRoomCfg } from './barnroom.js?v=34';
+import { buildOpRoom } from './oproom.js?v=34';
+import { buildCorridor } from './corridor.js?v=34';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=34';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=34';
+import { createScreens } from './screens.js?v=34';
+import { createPods } from './pods.js?v=34';
+import { createMoo } from './moo.js?v=34';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=34';
+import { createMissMoo } from './misscow.js?v=34';
+import { attachMooModel } from './moomodel.js?v=34';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 

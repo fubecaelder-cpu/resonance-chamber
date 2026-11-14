@@ -1,9 +1,9 @@
-// v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
+// v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=33';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=33';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=33';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=33';
+import { THREE, clipMirror } from './shared.js?v=34';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=34';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=34';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=34';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -61,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=33'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=34'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -115,7 +115,7 @@ function install(cow, { gltf, vrmMod }) {
   if (clips.length) { mixer = new THREE.AnimationMixer(model);
     const idle = clips.find((c) => /idle|stand|breath/i.test(c.name)) || clips.find((c) => !/walk|run/i.test(c.name)) || clips[0];
     const walk = clips.find((c) => /walk/i.test(c.name));
-    idleA = mixer.clipAction(idle); idleA.play(); if (walk && walk !== idle) { walkA = mixer.clipAction(walk); walkA.play(); walkA.setEffectiveWeight(0); } }
+    idleA = mixer.clipAction(idle); idleA.play(); if (walk && walk !== idle) { walkA = mixer.clipAction(walk); walkA.timeScale = +(q.get('moowalkspeed') || 0.6); walkA.play(); walkA.setEffectiveWeight(0); } }
   if (q.get('moochoker') === '1') {
     const anchor = nb.neck || nb.head; const ch = new THREE.Group();
     ch.add(new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.007, 8, 28).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })));
@@ -136,12 +136,22 @@ function install(cow, { gltf, vrmMod }) {
   }
   cow.builtin.visible = false; cow.builtinTwin.visible = false; cow.group.add(holder);
   const tmpQ = new THREE.Quaternion(), E = new THREE.Euler();
+  const hq = new THREE.Quaternion(), hq2 = new THREE.Quaternion(), pq = new THREE.Quaternion(), pq2 = new THREE.Quaternion(), tq = new THREE.Quaternion();
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
   cow.ext = {
+    clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null }),
     tris, mirrored: !!twin, hasClips: !!mixer, rigged: Object.keys(rest).length > 0, vrm: !!vrm,
     update(dt, S, cam, t) {
       const w = S.walk, idle = 1 - w;
       if (mixer) { if (walkA) { walkA.setEffectiveWeight(w); idleA.setEffectiveWeight(1 - w); } mixer.update(dt); }
+      if (mixer && walkA) {
+        // clip-driven (Idle + Walk): layer the head/neck look-at-the-viewer on top of the animation, in world space so any bone axes work
+        holder.getWorldQuaternion(hq); const wq = tmpQ.setFromEuler(E.set(S.lookP, S.look, S.tilt * 0.6, 'YXZ'));
+        wq.premultiply(hq).multiply(hq2.copy(hq).invert());
+        for (const [k2, f] of [['neck', 0.4], ['head', 0.5]]) { const b = nb[k2]; if (!b || !b.parent) continue;
+          b.parent.getWorldQuaternion(pq); const part = tq.identity().slerp(wq, f);
+          b.quaternion.premultiply(pq2.copy(pq).invert().multiply(part).multiply(pq)); }
+      }
       if (!mixer || !walkA) {
         // procedural: breathing sway, head turned toward the viewer, gentle tilt, a little bob while gliding
         const sw = Math.sin(S.phase);
