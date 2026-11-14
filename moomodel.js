@@ -1,11 +1,12 @@
-// v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
+// v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=32';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=32';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=32';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=32';
+import { THREE, clipMirror } from './shared.js?v=33';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=33';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=33';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=33';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
+const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
 const extOf = (n) => ((/\.([a-z0-9]+)(?:[?#].*)?$/i.exec(n || '') || [])[1] || '').toLowerCase();
 const MIRROR_TRI_LIMIT = 70000;   // above this the mirror twin is hidden while the model is in use (Quest budget)
 const HEIGHT = 1.68;
@@ -44,12 +45,13 @@ async function findSources() {
   if (MOO_DEFAULTS.modelFolder && key) {
     try {
       const qq = `'${MOO_DEFAULTS.modelFolder}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-      const r = await fetch(`${API}/drive/v3/files?q=${encodeURIComponent(qq)}&fields=${encodeURIComponent('files(id,name,size,modifiedTime,md5Checksum)')}&orderBy=modifiedTime desc&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${encodeURIComponent(key)}`, { credentials: 'omit' });
-      const b = await r.json(); const all = (b.files || []).filter((f) => extOf(f.name) in EXT_RANK || extOf(f.name) === 'fbx');
-      all.sort((a, c) => (Date.parse(c.modifiedTime) - Date.parse(a.modifiedTime)) || ((EXT_RANK[extOf(a.name)] ?? 9) - (EXT_RANK[extOf(c.name)] ?? 9)));
+      const r = await fetch(`${API}/drive/v3/files?q=${encodeURIComponent(qq)}&fields=${encodeURIComponent('files(id,name,size,modifiedTime,createdTime,md5Checksum)')}&orderBy=modifiedTime desc&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${encodeURIComponent(key)}`, { credentials: 'omit' });
+      const b = await r.json(); const all = (b.files || []).filter((f) => extOf(f.name) in EXT_RANK || CONVERTED.includes(extOf(f.name)));
+      const when = (f) => Math.max(Date.parse(f.modifiedTime) || 0, Date.parse(f.createdTime) || 0);   // uploads keep the file's old modified date
+      all.sort((a, c) => (when(c) - when(a)) || ((EXT_RANK[extOf(a.name)] ?? 9) - (EXT_RANK[extOf(c.name)] ?? 9)));
       if (r.ok && !all.length) return { none: true };   // folder readable and empty: built-in figure, even if an old GCS copy exists
       const newestAny = all[0]; newest = all.find((f) => extOf(f.name) in EXT_RANK) || null;
-      // the GCS copy is current only if it was made from the newest file in the folder (FBX files only ever come via GCS, converted by sync_gcs.py)
+      // the GCS copy is current only if it was made from the newest file in the folder (FBX/STL/OBJ files only ever come via GCS, converted by sync_gcs.py)
       if (newestAny && list[0] && list[0].src && list[0].src !== newestAny.id) list.shift();
     } catch (e) { console.warn('[moomodel] Drive list failed', e.message); }
   }
@@ -59,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=32'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=33'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
