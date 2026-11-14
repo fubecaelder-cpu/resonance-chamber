@@ -1,9 +1,9 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=35';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=35';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=35';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=35';
+import { THREE, clipMirror } from './shared.js?v=36';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=36';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=36';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=36';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -61,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=35'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=36'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -113,6 +113,7 @@ function install(cow, { gltf, vrmMod }) {
   const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name); tails.push([o, m ? +m[1] : 1]); } });
   let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0;
   // walk speed match: metres travelled per Walk cycle (scaled with the fit); ?moostride= overrides (default 1.1 m at 1.68 m tall)
+  const PULSE = q.get('moopulse') !== '0';
   const STRIDE = +(q.get('moostride') || 1.1);
   const clips = gltf.animations || [];
   if (clips.length) { mixer = new THREE.AnimationMixer(model);
@@ -180,7 +181,10 @@ function install(cow, { gltf, vrmMod }) {
         vrm.update(dt);
       }
       const ch = holder.userData.choker; if (ch) { ch.userData.bell.rotation.x = S.bellE * 0.9 * Math.sin(S.ringT * 24); }
-      const f = S.flash; for (const m of mats) { if (f > 0.01) { m.emissive.copy(m.userData.e0).lerp(PINK, Math.min(1, f * 0.6)); m.emissiveIntensity = Math.max(m.userData.ei0, f); } else if (m.emissiveIntensity !== m.userData.ei0) { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; } }
+      // v36: models with an emissive map (e.g. Circuit Doll lines) get a gentle breathing pulse (?moopulse=0 turns it off)
+      const f = S.flash; for (const m of mats) { if (f > 0.01) { m.emissive.copy(m.userData.e0).lerp(PINK, Math.min(1, f * 0.6)); m.emissiveIntensity = Math.max(m.userData.ei0, f + (m.emissiveMap ? 0.4 : 0)); }
+        else if (m.emissiveMap && PULSE) { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0 * (0.8 + 0.3 * (0.5 + 0.5 * Math.sin(t * 2.2))); }
+        else if (m.emissiveIntensity !== m.userData.ei0) { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; } }
       if (twin) { for (let i = 0; i < srcNodes.length; i++) { const a = srcNodes[i], b = dstNodes[i]; if (!b) break; b.position.copy(a.position); b.quaternion.copy(a.quaternion); b.scale.copy(a.scale);
         if (a.morphTargetInfluences && b.morphTargetInfluences) b.morphTargetInfluences.splice(0, a.morphTargetInfluences.length, ...a.morphTargetInfluences); } }
     },

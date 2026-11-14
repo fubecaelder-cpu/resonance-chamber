@@ -114,7 +114,7 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=35` (v30). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is now `?v=36` (it is bumped on every release). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
 
 
 ## v25: Miss Moo redesign
@@ -159,3 +159,18 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - **Toggle**: the **FOLLOW ME: ON/OFF** button on the panel's Moo wing, the **🦊 Follow me** button in the 2D Moo box, or `?moofollow=0` / `?moofollow=1` in the URL. The panel and 2D buttons remember your choice (localStorage), and the URL parameter beats the saved setting.
 - **Test hooks**: `__moo.companion.S` (position, `info`, current `act`), `__moo.companion.act('hop'|'spin'|'tilt'|'flick'|'wave'|'peek'|'circle'|'wander'|'hide')`, `__moo.setFollow(bool)`, `__moo.cow.ext.weights()` (idle, walk, wave weights and walk time-scale).
 - Model: `Foxfire_Ahri_rigged_v2.glb` (same mesh/rig, now with Idle, Walk and Wave clips). Cache-bust `?v=35`.
+
+## v36 — Miss Moo "Circuit Doll" look
+- New model `Foxfire_Ahri_circuit.glb`, now the newest file in the Miss Moo Model folder, so it is the one used. Same mesh, rig and clips as v35 (Idle, Walk, Wave); 69,894 triangles, which is under the 70k limit, so the mirror twin still shows.
+- Look:
+  - glossy black suit and boots covering everything from the neck down, with glowing hot-pink circuit traces baked into a 2048 px emissive map (triplanar PCB pattern: traces, pads, a few diagonal jogs)
+  - a small glowing pink padlock emblem at the collar
+  - white hair with hot-pink streaks and tips
+  - white ears with pink inners
+  - glowing pink eyes
+  - tails black at the root fading to glowing hot-pink tips, with faint circuit lines
+  - gold belt, tassel and boot bows
+  - natural light skin on the face, neck and hands
+- Materials: base colours are vertex colours. A roughness/metal map makes the suit glossy and the gold metallic.
+- The pink lines breathe gently (a slow pulse on any model that has an emissive map). `?moopulse=0` turns the pulse off. When you look at her, the pink glow flash still works on top of it.
+- Build scripts (kept off the site): `work/rig/stage2c.py` (colours and masks), `stage3.py` (clips, `TAG=circuit NOEXPORT=1`) and `stage4.py` (padlock, UVs, texture bake, export). Cache-bust `?v=36`.

@@ -2,22 +2,22 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=35';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=36';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=35';
-import { pinkRoomCfg } from './pinkroom.js?v=35';
-import { barnRoomCfg } from './barnroom.js?v=35';
-import { buildOpRoom } from './oproom.js?v=35';
-import { buildCorridor } from './corridor.js?v=35';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=35';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=35';
-import { createScreens } from './screens.js?v=35';
-import { createPods } from './pods.js?v=35';
-import { createMoo } from './moo.js?v=35';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=35';
-import { createMissMoo } from './misscow.js?v=35';
-import { attachMooModel } from './moomodel.js?v=35';
-import { createCompanion } from './companion.js?v=35';
+import { buildChamber } from './chamber.js?v=36';
+import { pinkRoomCfg } from './pinkroom.js?v=36';
+import { barnRoomCfg } from './barnroom.js?v=36';
+import { buildOpRoom } from './oproom.js?v=36';
+import { buildCorridor } from './corridor.js?v=36';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=36';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=36';
+import { createScreens } from './screens.js?v=36';
+import { createPods } from './pods.js?v=36';
+import { createMoo } from './moo.js?v=36';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=36';
+import { createMissMoo } from './misscow.js?v=36';
+import { attachMooModel } from './moomodel.js?v=36';
+import { createCompanion } from './companion.js?v=36';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
