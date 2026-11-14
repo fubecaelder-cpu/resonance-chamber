@@ -1,9 +1,9 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=34';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=34';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=34';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=34';
+import { THREE, clipMirror } from './shared.js?v=35';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=35';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=35';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=35';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -61,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=34'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=35'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -110,11 +110,15 @@ function install(cow, { gltf, vrmMod }) {
   const nb = vrm && vrm.humanoid ? { hips: vrm.humanoid.getNormalizedBoneNode('hips'), spine: vrm.humanoid.getNormalizedBoneNode('spine'), neck: vrm.humanoid.getNormalizedBoneNode('neck'),
     head: vrm.humanoid.getNormalizedBoneNode('head'), lUp: vrm.humanoid.getNormalizedBoneNode('leftUpperArm'), rUp: vrm.humanoid.getNormalizedBoneNode('rightUpperArm') } : named;
   const rest = {}; for (const [k2, b] of Object.entries(nb)) if (b) rest[k2] = b.quaternion.clone();
-  let mixer = null, idleA = null, walkA = null;
+  const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name); tails.push([o, m ? +m[1] : 1]); } });
+  let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0;
+  // walk speed match: metres travelled per Walk cycle (scaled with the fit); ?moostride= overrides (default 1.1 m at 1.68 m tall)
+  const STRIDE = +(q.get('moostride') || 1.1);
   const clips = gltf.animations || [];
   if (clips.length) { mixer = new THREE.AnimationMixer(model);
     const idle = clips.find((c) => /idle|stand|breath/i.test(c.name)) || clips.find((c) => !/walk|run/i.test(c.name)) || clips[0];
     const walk = clips.find((c) => /walk/i.test(c.name));
+    const wave = clips.find((c) => /wave/i.test(c.name)); if (wave) { waveA = mixer.clipAction(wave); waveA.setLoop(THREE.LoopOnce, 1); waveA.clampWhenFinished = true; }
     idleA = mixer.clipAction(idle); idleA.play(); if (walk && walk !== idle) { walkA = mixer.clipAction(walk); walkA.timeScale = +(q.get('moowalkspeed') || 0.6); walkA.play(); walkA.setEffectiveWeight(0); } }
   if (q.get('moochoker') === '1') {
     const anchor = nb.neck || nb.head; const ch = new THREE.Group();
@@ -139,11 +143,20 @@ function install(cow, { gltf, vrmMod }) {
   const hq = new THREE.Quaternion(), hq2 = new THREE.Quaternion(), pq = new THREE.Quaternion(), pq2 = new THREE.Quaternion(), tq = new THREE.Quaternion();
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
   cow.ext = {
-    clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null }),
+    clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null, walkScale: walkA ? +walkA.timeScale.toFixed(2) : null, wave: waveA ? +waveA.getEffectiveWeight().toFixed(2) : null }),
     tris, mirrored: !!twin, hasClips: !!mixer, rigged: Object.keys(rest).length > 0, vrm: !!vrm,
     update(dt, S, cam, t) {
       const w = S.walk, idle = 1 - w;
-      if (mixer) { if (walkA) { walkA.setEffectiveWeight(w); idleA.setEffectiveWeight(1 - w); } mixer.update(dt); }
+      if (mixer) {
+        // one-shot Wave clip: restarts when S.wave is set (cow.waveNow), fades the base clips out underneath it
+        if (waveA) { if (S.wave > waveWas + 0.05) { waveA.reset(); waveA.play(); } waveWas = S.wave; }
+        const ww = waveA && waveA.isRunning() ? Math.min(1, S.waveW * 1.2) : 0; if (waveA) waveA.setEffectiveWeight(ww);
+        if (walkA) { walkA.setEffectiveWeight(w * (1 - ww)); idleA.setEffectiveWeight((1 - w) * (1 - ww));
+          walkA.timeScale = S.speed > 0.05 ? Math.min(1.9, Math.max(0.45, S.speed / (STRIDE * k / walkA.getClip().duration))) : 0.6; }
+        mixer.update(dt);
+        // tail flick (bones named *tail*): a quick ripple layered on top of the clips
+        if (S.flick > 0.01 && tails.length) for (const [b, j] of tails) { const a = S.flick * 0.22 * Math.sin(t * 16 - j * 0.9); b.rotateX(a); b.rotateZ(a * 0.6); }
+      }
       if (mixer && walkA) {
         // clip-driven (Idle + Walk): layer the head/neck look-at-the-viewer on top of the animation, in world space so any bone axes work
         holder.getWorldQuaternion(hq); const wq = tmpQ.setFromEuler(E.set(S.lookP, S.look, S.tilt * 0.6, 'YXZ'));

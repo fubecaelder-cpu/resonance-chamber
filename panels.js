@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=34';
+import { THREE, canvasTex } from './shared.js?v=35';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -51,11 +51,12 @@ const WBTN = [
   { id: 'p-toggle', x: -0.15, y: -0.335, glyph: 9, label: 'PODS' }, { id: 'p-shuffle', x: 0.15, y: -0.335, glyph: 10, label: 'SHUFFLE' },
 ];
 // Moo Track wing (v24): hinged to the right edge of the media wing (chained), curling a bit further towards you
-const MW = 0.5, MH = 0.82, MOY = -0.075;
+const MW = 0.5, MH = 0.98, MOY = -0.155;   // v31: taller (FOLLOW ME row at the bottom); content coords unchanged
 const KBTN = [
   { id: 'k-start', x: -0.15, y: 0.02, glyph: 4, label: 'START' }, { id: 'k-stop', x: 0.0, y: 0.02, glyph: 17, label: 'STOP' }, { id: 'k-restart', x: 0.15, y: 0.02, glyph: 2, label: 'RESTART' },
   { id: 'k-vol-', x: -0.15, y: -0.15, glyph: 0, label: 'VOL −' }, { id: 'k-vol+', x: 0.15, y: -0.15, glyph: 1, label: 'VOL +' },
   { id: 'k-load', x: -0.15, y: -0.31, glyph: 3, label: 'NARRATION' }, { id: 'k-cues', x: 0.0, y: -0.31, glyph: 6, label: 'CUES' }, { id: 'k-default', x: 0.15, y: -0.31, glyph: 7, label: 'DEFAULT' },
+  { id: 'k-follow', x: 0.0, y: -0.545, glyph: 9, label: '' },
 ];
 // screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
 const SW = 0.5, SH = 0.88, SOY = -0.07;   // v11: taller (OPACITY row); content coords unchanged, board offset by SOY
@@ -251,6 +252,8 @@ function drawMooWing(ct, st, v) {
   g.fillStyle = st.label; g.font = `700 22px ${F}`; g.fillText(`MISS MOO  ·  ${Math.round((v.cow || 0) * 100)}%`, W / 2, Y(-0.418));
   const bx = W * 0.14, bw = W * 0.72, by = Y(-0.44); g.fillStyle = st.socket; g.fillRect(bx, by, bw, 12); g.fillStyle = st.edge; g.fillRect(bx, by, bw * Math.max(0, Math.min(1, v.cow || 0)), 12);
   g.fillStyle = st.title; g.font = `600 19px ${F}`; g.fillText('THE TUNNEL IS BEHIND YOU AT THE BARN DOOR', W / 2, Y(-0.462));
+  // v31: companion toggle
+  g.fillStyle = st.title; g.font = `700 26px ${F}`; g.fillText(`FOLLOW ME: ${v.follow ? 'ON' : 'OFF'}`, W / 2, Y(-0.62));
   ct.t.needsUpdate = true;
 }
 
@@ -361,7 +364,8 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
   let mooExtra = () => ({});
   const redrawMoo = (only) => { if (!moo) return; const v = { ...moo.view(), ...mooExtra() }; panels.forEach((p, i) => { if (only !== undefined && only !== i) return; drawMooWing(p.mct, p.st, v);
     const by = (id) => p.mbuttons[KBTN.findIndex((b) => b.id === id)].material.uniforms;
-    by('k-start').uOn.value = v.playing ? 1 : 0; }); };
+    by('k-start').uOn.value = v.playing ? 1 : 0; by('k-follow').uOn.value = v.follow ? 1 : 0; }); };
+  let followHook = null;
   redrawMoo();
   redrawMedia();
   redraw();
@@ -372,6 +376,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     if (id.startsWith('m-')) { media.act(id); return; }
     if (id.startsWith('p-')) { if (pods) pods.act(id, room); return; }
     if (id.startsWith('s-')) { if (screens) screens.act(id, room); return; }
+    if (id === 'k-follow') { if (followHook) followHook(); return; }
     if (id.startsWith('k-')) { if (moo) moo.act(id); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);
@@ -469,5 +474,5 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
       b.position.z = B.rest - 0.009 * B.press + 0.004 * B.hover;
     }
   }
-  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, redrawMoo, setMooExtra: (f) => { mooExtra = f; }, press, act, allButtons };
+  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, redrawMoo, setMooExtra: (f) => { mooExtra = f; }, setFollowHook: (f) => { followHook = f; }, press, act, allButtons };
 }

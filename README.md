@@ -114,7 +114,7 @@ The cross-origin URL must allow CORS (Drive links and the GCS bucket already do)
 ```
 `t` = seconds into the track. `type`: `cowbell` (bell ring from direction `az` degrees, 0 = ahead, plus Miss Moo's bell), `prop` (chime from the tunnel plus the headsets and screens light up), `stepcloser` (hoofsteps and Miss Moo takes a burst of steps closer). `gain` is optional (0 to 2). `duration` only matters for the placeholder; with a narration file the audio length is used. Miss Moo's progress is 35% elapsed time plus 65% steps taken, so put your `stepcloser` cues spread across the track and she arrives at the end. `orbitSeconds` is the time for one lap of the narrator around your head.
 
-**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=34` (v30). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
+**Test hooks**: `window.__moo` (engine, cow, uniforms). Cache-bust is `?v=35` (v30). Miss Moo model uploads may also be .stl/.obj/.ply (untextured; converted to .glb by the sync, decimated to 150k tris).
 
 
 ## v25: Miss Moo redesign
@@ -149,3 +149,13 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - Mirror twin: a pose-synced clone when the model is ≤ 70k triangles, otherwise hidden for the model.
 - Walk-in / stop at 2 m / reset are unchanged (the model rides the same rig).
 - "Sync my videos" (`sync_gcs.py`) now also copies the newest model to `model/missmoo.<ext>` + `model/manifest.json` (`--model-only` for just that).
+
+## v35 — Miss Moo follows you (companion mode, on by default)
+- **Follow me**: Miss Moo now goes wherever you go: every room and corridor (the crossing diagonals too), and after a teleport. She keeps about 2–3.5 m away and gets out of your way if you come closer than about 1.5–2 m, sidestepping to a clear spot so she doesn't back into a wall. If you get more than 12 m away, or she gets stuck, she quietly turns up behind you, out of view.
+- **Getting around**: she walks on a narrower "Moo-only" floor (room discs plus the middle of each corridor). A coarse grid path-finder (built once at load, re-planned a few times a second) takes her around pods, pillars and the control panel, so she never walks through walls.
+- **Animation**: with a rigged model the Walk clip plays at a speed matched to how fast she moves (`?moostride=1.1` sets stride length), and Idle when she stops. The clips blend smoothly, and an optional **Wave** clip plays as a one-shot. She faces where she's walking and turns to face you when standing. The built-in figure gets the same behaviour from its own procedural walk.
+- **Playful bits**, one every 6–15 s: hop, twirl, head tilt, tail flick, wave, peek out from beside you, a half circle around you, wander off to look at a pod or screen and trot back, or hide behind a pod and pop out. If you look straight at her for a moment she glows pink. The longer bits stop as soon as you walk off.
+- **Moo Track** still takes over while it plays (the scripted tunnel walk), then follow mode resumes.
+- **Toggle**: the **FOLLOW ME: ON/OFF** button on the panel's Moo wing, the **🦊 Follow me** button in the 2D Moo box, or `?moofollow=0` / `?moofollow=1` in the URL. The panel and 2D buttons remember your choice (localStorage), and the URL parameter beats the saved setting.
+- **Test hooks**: `__moo.companion.S` (position, `info`, current `act`), `__moo.companion.act('hop'|'spin'|'tilt'|'flick'|'wave'|'peek'|'circle'|'wander'|'hide')`, `__moo.setFollow(bool)`, `__moo.cow.ext.weights()` (idle, walk, wave weights and walk time-scale).
+- Model: `Foxfire_Ahri_rigged_v2.glb` (same mesh/rig, now with Idle, Walk and Wave clips). Cache-bust `?v=35`.

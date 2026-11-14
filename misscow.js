@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=34';
-import { BARN_GLSL } from './barnroom.js?v=34';
+import { THREE, makeKit, clipMirror } from './shared.js?v=35';
+import { BARN_GLSL } from './barnroom.js?v=35';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -249,7 +249,7 @@ export function createMissMoo() {
   let lodHi = true;
   const rig = new THREE.Group(); rig.name = 'missMoo'; rig.add(real.root);
   const mirrorRig = new THREE.Group(); mirrorRig.name = 'missMooMirror'; mirrorRig.scale.y = -1; mirrorRig.add(twin.root); clipMirror(mirrorRig);
-  const S = { x: 0, z: 0, yaw: 0, walk: 0, phase: 0, t: 0, blink: 2.5, blinkT: 0, look: 0, lookP: 0, tilt: 0, near: 0, bellE: 0, ringT: 99, wave: 0, waveW: 0, glow: 1, flash: 0 };
+  const S = { x: 0, z: 0, yaw: 0, walk: 0, phase: 0, t: 0, blink: 2.5, blinkT: 0, look: 0, lookP: 0, tilt: 0, near: 0, bellE: 0, ringT: 99, wave: 0, waveW: 0, glow: 1, flash: 0, speed: 0, hop: 0, lean: 0, tiltAdd: 0, flick: 0 };
   const HB = 60 / 66;
 
   function apply(P, st) {
@@ -280,13 +280,18 @@ export function createMissMoo() {
   const API = {
     group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
     /** world position on the floor + heading (radians, 0 = facing +z) */
-    place(x, z, yaw) { S.x = x; S.z = z; S.yaw = yaw; for (const g of [rig, mirrorRig]) { g.position.set(x, 0, z); g.rotation.y = yaw; } },
+    /** hop: root lift (m), lean: sideways roll (rad); the mirror rig gets the reflected offsets (it is scaled y = -1) */
+    place(x, z, yaw, hop = 0, lean = 0) { S.x = x; S.z = z; S.yaw = yaw; S.hop = hop; S.lean = lean;
+      rig.position.set(x, hop, z); rig.rotation.set(0, yaw, lean); mirrorRig.position.set(x, -hop, z); mirrorRig.rotation.set(0, yaw, -lean); },
     ring(power = 1) { S.bellE = Math.min(1.4, S.bellE + power); S.ringT = 0; ringU.value = 1; },
     flash(power = 1) { S.flash = Math.min(1.5, Math.max(S.flash, power)); },     // the padlock emblem and neon lines flare (prop cues)
     waveNow(sec = 2.6) { S.wave = sec; },
     /** dt s, moving 0..1 (how fast she is walking right now), cam: THREE.Vector3 (world position of the viewer's head) */
-    update(dt, moving, cam, t) {
-      S.t = t; S.walk = ease(S.walk, moving, 1 - Math.exp(-dt * 4)); S.phase += dt * (2.0 + 3.8 * S.walk) * (S.walk > 0.02 ? 1 : 0.0);
+    update(dt, moving, cam, t, speed) {
+      S.t = t; S.walk = ease(S.walk, moving, 1 - Math.exp(-dt * 4)); S.speed = speed === undefined ? moving * 0.5 : speed;
+      // v31: when the real ground speed is known the stride rate follows it (about 1.1 m per leg cycle), so the feet do not skate
+      const rate = speed === undefined ? 2.0 + 3.8 * S.walk : 2.0 * (1 - S.walk) + S.walk * Math.min(11, Math.max(3, 5.7 * speed));
+      S.phase += dt * rate * (S.walk > 0.02 ? 1 : 0.0);
       S.ringT += dt; S.bellE *= Math.exp(-dt * 1.6); ringU.value *= Math.exp(-dt * 3.5); S.flash *= Math.exp(-dt * 1.6);
       // slow, dreamy blinks (0.45 s)
       S.blink -= dt; if (S.blink < 0) { S.blinkT = 0.45; S.blink = 3 + Math.random() * 4; } if (S.blinkT > 0) S.blinkT = Math.max(0, S.blinkT - dt);
@@ -301,7 +306,7 @@ export function createMissMoo() {
         near = clamp(1 - (d - 2) / 5, 0, 1);
       }
       S.look = ease(S.look, ty, 1 - Math.exp(-dt * 3)); S.lookP = ease(S.lookP, tp, 1 - Math.exp(-dt * 3));
-      S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)), 1 - Math.exp(-dt * 2));
+      S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)) + (S.tiltAdd || 0), 1 - Math.exp(-dt * 3));
       if (S.wave > 0) S.wave -= dt; S.waveW = ease(S.waveW, S.wave > 0 ? 1 : 0, 1 - Math.exp(-dt * 4));
       const wantHi = d < 6.5 || (lodHi && d < 7.5); if (wantHi !== lodHi) { lodHi = wantHi; for (const [o, gh, gl] of lodList) o.geometry = lodHi ? gh : gl; }
       if (API.ext) { API.ext.update(dt, S, cam, t); return; }
