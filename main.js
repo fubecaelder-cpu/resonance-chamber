@@ -2,23 +2,23 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38b';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38c';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=38b';
-import { pinkRoomCfg } from './pinkroom.js?v=38b';
-import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38b';
-import { buildOpRoom } from './oproom.js?v=38b';
-import { buildCorridor } from './corridor.js?v=38b';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=38b';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=38b';
-import { createScreens } from './screens.js?v=38b';
-import { createPods } from './pods.js?v=38b';
-import { createMoo } from './moo.js?v=38b';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38b';
-import { createMissMoo } from './misscow.js?v=38b';
-import { attachMooModel } from './moomodel.js?v=38b';
-import { createCompanion } from './companion.js?v=38b';
-import { DRIVE_DEFAULTS } from './config.js?v=38b';
+import { buildChamber } from './chamber.js?v=38c';
+import { pinkRoomCfg } from './pinkroom.js?v=38c';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38c';
+import { buildOpRoom } from './oproom.js?v=38c';
+import { buildCorridor } from './corridor.js?v=38c';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=38c';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=38c';
+import { createScreens } from './screens.js?v=38c';
+import { createPods } from './pods.js?v=38c';
+import { createMoo } from './moo.js?v=38c';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38c';
+import { createMissMoo } from './misscow.js?v=38c';
+import { attachMooModel } from './moomodel.js?v=38c';
+import { createCompanion } from './companion.js?v=38c';
+import { DRIVE_DEFAULTS } from './config.js?v=38c';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -720,8 +720,8 @@ function castAct(id) {
   else if (id === 'c-skin-' || id === 'c-skin+') cycleSkin(c, id === 'c-skin+' ? 1 : -1);
   else if (id === 'c-crawl') { wake(c); c.comp.crawlNow(); castMsg = `${c.name} drops to all fours`; }
   else if (id === 'c-crawlhold') { wake(c); c.comp.setCrawlHold(!c.comp.crawlHold()); castMsg = `Crawl: ${c.comp.crawlHold() ? 'ON' : 'OFF'}`; }
-  else if (id === 'c-sit') { wake(c); if (c.cow.ext && c.cow.ext.canSit) { c.comp.sitNow(); castMsg = `${c.name} sits down`; } else castMsg = `${c.name} has no sitting clip`; }
-  else if (id === 'c-sniff') { wake(c); if (c.cow.ext && c.cow.ext.canSniff) { c.comp.sniffNow(); castMsg = `${c.name} sniffs around`; } else castMsg = `${c.name} has no sniff clip`; }
+  else if (id === 'c-sit') { wake(c); if (c.cow.ext && c.cow.ext.canSit) { const on = !c.comp.sitHold(); c.comp.setSitHold(on); castMsg = on ? `Sit: ON · ${c.name} sits and stays` : `Sit: OFF · ${c.name} stands up`; } else castMsg = `${c.name} has no sitting clip`; }
+  else if (id === 'c-sniff') { wake(c); if (c.cow.ext && c.cow.ext.canSniff) { const on = !c.comp.sniffHold(); c.comp.setSniffHold(on); castMsg = on ? `Sniff: ON · ${c.name} sniffs around` : `Sniff: OFF · ${c.name} stands up`; } else castMsg = `${c.name} has no sniff clip`; }
   else if (id.startsWith('x-stall-')) { const i = +id.slice(8), o = CAST.find((k) => k.stall === i);
     if (o) { castSel = CAST.indexOf(o); castMsg = `${o.name}'s stall (${i + 1})`; } else { c.stall = i; castSave(c); castMsg = `${c.name}'s home: stall ${i + 1}`; } }
   else if (id.startsWith('x-skin-')) { const [, , i, d] = id.split('-'); const o = CAST.find((k) => k.stall === +i); if (o) { castSel = CAST.indexOf(o); cycleSkin(o, d === 'next' ? 1 : -1); } }
@@ -737,12 +737,12 @@ function setHome(c, on) {
 }
 function castView() { const c = CAST[castSel] || ari, h = c.comp.home ? c.comp.home() : null;
   const state = h ? (h.phase === 'in' ? `IN STALL · ${(h.sub || 'idle').toUpperCase()}` : h.phase === 'goto' ? 'WALKING TO STALL' : h.phase === 'exit' ? 'COMING OUT' : 'GOING IN') : c.home ? 'HOME (WAITING)' : c.isAri && !mooFollow.on ? 'OUT · COMPANION OFF' : 'OUT · FOLLOWING';
-  return { who: c.name.toUpperCase(), stall: c.stall === null ? '–' : c.stall + 1, home: c.home, state, skin: (skinFits(c) ? skinOf(c) : c.skins[0]).name, crawlHold: c.comp.crawlHold && c.comp.crawlHold(), nOut: nOut(), msg: castMsg }; }
+  return { who: c.name.toUpperCase(), stall: c.stall === null ? '–' : c.stall + 1, home: c.home, state, skin: (skinFits(c) ? skinOf(c) : c.skins[0]).name, crawlHold: c.comp.crawlHold && c.comp.crawlHold(), sitHold: !!(c.comp.sitHold && c.comp.sitHold()), sniffHold: !!(c.comp.sniffHold && c.comp.sniffHold()), nOut: nOut(), msg: castMsg }; }
 let castDrawn = '';
 function castRedraw() { const v = castView(), k = JSON.stringify(v); if (k === castDrawn) return; castDrawn = k; panelSys.redrawCast();
   const set = (id, t) => { const e = document.getElementById(id); if (e && e.textContent !== t) e.textContent = t; };
   set('castWho', '🦊 ' + (CAST[castSel] || ari).name); set('castStall', `Stall ${v.stall}`); set('castHome', v.home ? '🚪 Let out' : '🏠 Send to stall'); set('castSkin', v.skin);
-  set('castCrawlHold', `Crawl: ${v.crawlHold ? 'ON' : 'OFF'}`); set('castStatus', `${v.state.toLowerCase()}${v.msg ? ' · ' + v.msg : ''}`); }
+  set('castCrawlHold', `Crawl: ${v.crawlHold ? 'ON' : 'OFF'}`); set('castSit', `🧘 Sit: ${v.sitHold ? 'ON' : 'OFF'}`); set('castSniff', `👃 Sniff: ${v.sniffHold ? 'ON' : 'OFF'}`); set('castStatus', `${v.state.toLowerCase()}${v.msg ? ' · ' + v.msg : ''}`); }
 panelSys.setCastHook((id) => castAct(id)); panelSys.setCastView(castView);
 for (const [el, id] of [['castWho', 'c-who'], ['castStallP', 'c-stall-'], ['castStallN', 'c-stall+'], ['castHome', 'c-home'], ['castAll', 'c-allhome'], ['castSkinP', 'c-skin-'], ['castSkinN', 'c-skin+'],
   ['castCrawl', 'c-crawl'], ['castCrawlHold', 'c-crawlhold'], ['castSit', 'c-sit'], ['castSniff', 'c-sniff']]) { const e = document.getElementById(el); if (e) e.addEventListener('click', () => castAct(id)); }

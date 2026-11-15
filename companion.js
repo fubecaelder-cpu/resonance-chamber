@@ -211,12 +211,13 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     S.glanceT -= dt; if (S.glanceT <= 0) { S.glanceT = rnd(9, 22); S.glanceDur = rnd(1.2, 2.2); } S.glanceDur = Math.max(0, S.glanceDur - dt);
     const sameZone = zm === zp, inRoom = zp[0] === 'r';
     // choose a playful act (less often than before; mixed into the exploring)
+    if (!S.act && !S.forced && (S.sitHold || S.sniffHold)) { S.forced = S.sitHold ? 'sit' : 'sniff'; S.forcedDur = 1e9; }   // v38c toggles: keep sitting / sniffing until turned off
     if (!S.act && (now > S.next || S.forced) && sameZone && d < 8 && !(S.task && S.task.k === 'poi' && S.task.phase === 1 && !S.forced)) { const k = S.forced || pickAct(still, inView, hx, hz); S.forced = null; startAct(k, hx, hz, fx, fz, now); }
     // ---- goal
     const base = Math.atan2(fx, fz); let gx = S.x, gz = S.z, speed = 0.9, face = null, scoot = false, hold = false, lookAt = null, pl = 0.15;
     const slot = (ang, r) => [hx + Math.sin(base + ang) * r, hz + Math.cos(base + ang) * r];
     // long acts give way as soon as the player leaves her zone or gets far
-    if (S.act && ['peek', 'circle', 'hide', 'crawl', 'sniff', 'sit'].includes(S.act.k) && !S.act.end && (zm !== zp || d > 9 || (!['crawl', 'sniff', 'sit'].includes(S.act.k) && S.pv > 0.6))) {
+    if (S.act && ['peek', 'circle', 'hide', 'crawl', 'sniff', 'sit'].includes(S.act.k) && !S.act.end && !(S.act.k === 'sit' && S.sitHold) && !(S.act.k === 'sniff' && S.sniffHold) && (zm !== zp || d > 9 || (!['crawl', 'sniff', 'sit'].includes(S.act.k) && S.pv > 0.6))) {
       if (['crawl', 'sniff', 'sit'].includes(S.act.k)) S.act.end = true; else { S.act = null; S.leanTo = 0; S.next = now + rnd(15, 35); } }
     const want = { crawl: false, sit: false, sniff: false, nap: false };
     const a = S.act;
@@ -232,15 +233,15 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
           a.pop = (a.pop || 0) + dt; if (a.pop > 1.2) { cow.waveNow(2.0); a.t = a.dur; } }
       }
       else if (a.k === 'crawl' || a.k === 'sniff') {   // v38e: crawl for ~6-10 s (or as long as forced), sniff = slow arcs around a pod, nose down
-        const cp = cow.state.crawlPhase; if (a.t > 40) a.end = true; if (!a.end) { want.crawl = true; want.sniff = a.k === 'sniff'; }
+        const cp = cow.state.crawlPhase; if (a.t > 40 && !(a.k === 'sniff' && S.sniffHold)) a.end = true; if (!a.end) { want.crawl = true; want.sniff = a.k === 'sniff'; }
         if (!a.end && cp === 'loop') { [gx, gz] = [a.tg.x, a.tg.z]; speed = a.k === 'sniff' ? 0.14 : 0.42; pl = a.k === 'sniff' ? 0.1 : 0.5;
           if (a.k === 'sniff' && a.pod) lookAt = { x: a.pod.x, y: 0.25, z: a.pod.z };
-          if (Math.hypot(a.tg.x - S.x, a.tg.z - S.z) < 0.4) { if (now < a.until) a.tg = crawlTarget(a, hx, hz); else a.end = true; }
-          if (now > a.until + 4) a.end = true; }
+          if (Math.hypot(a.tg.x - S.x, a.tg.z - S.z) < 0.4) { if (now < a.until || (a.k === 'sniff' && S.sniffHold)) a.tg = crawlTarget(a, hx, hz); else a.end = true; }
+          if (now > a.until + 4 && !(a.k === 'sniff' && S.sniffHold)) a.end = true; }
         else { hold = true; if (a.end && !cp) { a.t = a.dur; if (a.k === 'crawl') { S.hopT = 0; S.hopN = 1; } } if (!a.end && !cp && a.t > 2.5) { a.end = true; a.t = a.dur; } }
       }
       else if (a.k === 'sit') { hold = true; want.sit = !a.end; face = a.face || null; if (a.lookAt) lookAt = a.lookAt; pl = 0.3;
-        if (!a.end && (a.t > a.sitFor || d < PS - 0.25)) a.end = true;
+        if (!a.end && !S.sitHold && (a.t > a.sitFor || d < PS - 0.25)) a.end = true;
         if (a.end) { if (!cow.state.sitPhase) a.t = a.dur; else a.t = Math.min(a.t, a.dur - 0.1); } }
       if (a.t >= a.dur) { S.act = null; S.leanTo = 0; cow.state.crawl = 0; S.next = now + rnd(15, 35); }
     }
@@ -386,6 +387,8 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
       let sb = H.sub;
       if (S.homeForce) { const f0 = S.homeForce; S.homeForce = null; sb = H.sub = { k: f0.k, t: 0, dur: f0.dur }; }
       if (!sb || sb.t >= sb.dur) {
+        if (S.sitHold || S.sniffHold) { sb = H.sub = { k: S.sitHold ? 'sit' : 'sniff', t: 0, dur: 1e9 }; } }
+      if (!sb || sb.t >= sb.dur) {
         const X = cow.ext || {}, opts = [['idle', 3], ['wander', 3], ['sit', X.canSit ? 1.2 : 0], ['sniff', X.canSniff ? 1 : 0], ['nap', X.canNap && !pNear ? 1.3 : 0]];
         if (pNear && (H.peekCool || 0) < now) sb = { k: 'peek' };
         else { let r = Math.random() * opts.reduce((a, o) => a + o[1], 0); sb = { k: 'idle' }; for (const [k, w] of opts) { r -= w; if (r <= 0) { sb = { k }; break; } } }
@@ -421,13 +424,22 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     return finish(now, dt, hold, false, dP);
   }
 
+  // v38c: cleanly end a Sit / Sniff toggle (she stands up through SitUp / CrawlUp); keep = the one being switched on
+  function holdsOff(keep) {
+    if (keep !== 'sit' && S.sitHold) { S.sitHold = false; if (S.forced === 'sit') S.forced = null; if (S.act && S.act.k === 'sit') S.act.end = true; if (S.homeOn && S.home && S.home.sub && S.home.sub.k === 'sit') S.home.sub.dur = S.home.sub.t + 1.9; if (S.homeForce && S.homeForce.k === 'sit') S.homeForce = null; }
+    if (keep !== 'sniff' && S.sniffHold) { S.sniffHold = false; if (S.forced === 'sniff') S.forced = null; if (S.act && S.act.k === 'sniff') S.act.end = true; if (S.homeOn && S.home && S.home.sub && S.home.sub.k === 'sniff') S.home.sub.dur = S.home.sub.t + 1.4; if (S.homeForce && S.homeForce.k === 'sniff') S.homeForce = null; }
+  }
   return { S, pois, act: (k) => { S.forced = k; }, task: () => S.task, update, reset: () => { S.inited = false; S.act = null; S.task = null; if (S.home) S.home.phase = null; cow.state.crawl = 0; cow.state.sit = 0; cow.state.sniff = 0; cow.state.nap = 0; cow.state.lookAt = null; cow.state.playerLook = undefined; }, teleportBehind, valid, reachable,
     // v38e controls
-    crawlNow: (dur = rnd(6, 10)) => { S.crawlUntil = 0; if (S.homeOn) S.homeForce = { k: 'crawl', dur }; else { S.forcedDur = dur; S.forced = 'crawl'; S.crawlUntil = (S.now || 0) + dur; } },
+    crawlNow: (dur = rnd(6, 10)) => { holdsOff(); S.crawlUntil = 0; if (S.homeOn) S.homeForce = { k: 'crawl', dur }; else { S.forcedDur = dur; S.forced = 'crawl'; if (!(S.act && S.act.k === 'sit')) S.crawlUntil = (S.now || 0) + dur; } },
+    // v38c: Sit / Sniff are real toggles - ON keeps her seated (SitDown -> SitIdle loop) or sniffing until turned OFF (SitUp / CrawlUp)
+    setSitHold: (on) => { on = !!on; if (on) { holdsOff('sit'); S.sitHold = true; if (S.homeOn) S.homeForce = { k: 'sit', dur: 1e9 }; else { S.forcedDur = 1e9; S.forced = 'sit'; if (S.act && S.act.k !== 'sit') S.act.end = true; } } else holdsOff(); },
+    setSniffHold: (on) => { on = !!on; if (on) { holdsOff('sniff'); S.sniffHold = true; if (S.homeOn) S.homeForce = { k: 'sniff', dur: 1e9 }; else { S.forcedDur = 1e9; S.forced = 'sniff'; if (S.act && S.act.k !== 'sniff') S.act.end = true; } } else holdsOff(); },
+    sitHold: () => !!S.sitHold, sniffHold: () => !!S.sniffHold,
     sitNow: (dur = rnd(12, 22)) => { if (S.homeOn) S.homeForce = { k: 'sit', dur }; else { S.forcedDur = dur; S.forced = 'sit'; if (S.act && !['sit'].includes(S.act.k)) S.act.end = true; } },
     sniffNow: (dur = rnd(7, 11)) => { if (S.homeOn) S.homeForce = { k: 'sniff', dur }; else { S.forcedDur = dur; S.forced = 'sniff'; } },
-    setCrawlHold: (on) => { S.crawlHold = !!on; }, crawlHold: () => S.crawlHold,
-    setHome: (stall) => { if (stall) { if (S.homeOn && S.home && S.home.stall.i === stall.i && S.home.phase !== 'exit') return; S.homeOn = true; S.home = { stall, phase: null }; S.act = null; S.task = null; }
+    setCrawlHold: (on) => { if (on) holdsOff(); S.crawlHold = !!on; }, crawlHold: () => S.crawlHold,
+    setHome: (stall) => { if (stall && !(S.homeOn && S.home && S.home.stall.i === stall.i)) holdsOff(); if (stall) { if (S.homeOn && S.home && S.home.stall.i === stall.i && S.home.phase !== 'exit') return; S.homeOn = true; S.home = { stall, phase: null }; S.act = null; S.task = null; }
       else if (S.homeOn) { if (S.home && (S.home.phase === 'in' || S.home.phase === 'enter')) { S.home.phase = 'exit'; S.home.sub = null; } else { S.homeOn = false; S.home = null; S.gate = 0; } } },
     home: () => (S.homeOn ? { stall: S.home.stall.i, phase: S.home.phase, sub: S.home.sub && S.home.sub.k } : null),
     hvStats: () => ({ samples: S.hv.n, mean: S.hv.n ? +(S.hv.sum / S.hv.n).toFixed(2) : 0, max: +S.hv.max.toFixed(2), over25: S.hv.over }), resetHv: () => { S.hv = { n: 0, sum: 0, max: 0, over: 0 }; } };

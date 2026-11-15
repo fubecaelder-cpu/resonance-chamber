@@ -186,7 +186,7 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 ## v38 — Ari: stalls, friends, skins, crawl controls, natural movement
 **Name.** Miss Moo is now **Ari** in every visible label (panel, 2D box, nameplates, messages). Internal ids, `?moo*` URL parameters, file names, the GCS paths and the **Moo Track** name are unchanged, and the Drive folder is still called **Miss Moo Model** (https://drive.google.com/drive/folders/1B6yh_ZRRGWyTYIFNGlokrdnZKKnFZ4fT).
 
-**Model** `Foxfire_Ahri_circuit_v4.glb` (69,894 tris, under the 70k mirror-twin limit). Clips: Idle, IdleShift, IdleStretch, IdleHairTouch, IdleHipHand, IdleYawn, Walk, Wave, Crawl, CrawlDown, CrawlUp, Sniff, SitDown, SitIdle (cross-legged), SitUp, Nap. Scale **1.21** (about 2.03 m), still fitting doors, corridors, pods and stalls. `?mooscale=` still overrides.
+**Model** `Foxfire_Ahri_circuit_v5.glb` (69,894 tris, under the 70k mirror-twin limit). Clips: Idle, IdleShift, IdleStretch, IdleHairTouch, IdleHipHand, IdleYawn, Walk, Wave, Crawl, CrawlDown, CrawlUp, Sniff, SitDown, SitIdle (cross-legged), SitUp, Nap. Scale **1.21** (about 2.03 m), still fitting doors, corridors, pods and stalls. `?mooscale=` still overrides.
 
 **Body / arms / walk (feedback pass).**
 - Applied rest pose (`work/rig/rest.py`): pelvis and chest square, straight legs under the hips (no bow legs), knees and feet forward.
@@ -216,6 +216,31 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
   - Tails swing independently with damping.
 - Idle: neutral stance plus varied one-shot gestures (shift, stretch, hair tuck, hand on hip, yawn).
 - **Crawl**: smooth feline gait (1.6 s cycle, dense eased keys; hip-height wobble std 2.1 mm vs 8.4 mm before), tails relaxed and trailing.
+
+**v38c — crawl arms and Sit/Sniff toggles.**
+- **Crawl left arm fix:** her left arm folded and twisted under the chest when she crawled or sniffed. Three things caused it:
+  - The crawl arm IK picked its elbow direction in 90° steps from bones whose rolls differ left vs right, so the left elbow pointed about 77° differently.
+  - The sculpt's chest is twisted about 12°, so on all fours the left shoulder sat 5 cm higher. The left arm was pulled straighter (bend 30° vs 60°).
+  - The hand was only turned about one bone axis, which could not lay the left palm flat.
+- **The fix:**
+  - The arms now use an analytic, mirrored two-bone solve (shoulder over the hand, slight elbow bend, elbows pointing back and out).
+  - The chest is untwisted by 12.45° on all fours so both shoulders are level.
+  - The hand plant gives both arms the same reach.
+  - Each palm is laid flat from the hand's own thumb and palm features (fingers forward, thumb in), with about half of the pronation carried by the forearm so the wrist doesn't twist like a candy wrapper.
+- **Measured left vs right over the whole crawl cycle:**
+
+  | | Crawl | Sniff |
+  |---|---|---|
+  | Elbow direction | within 6° | within 5° |
+  | Elbow bend | within 10° | within 4° |
+  | Hand plant (relative to each shoulder) | within 4 cm | within 4 cm |
+  | Palm and fingers | identical | identical |
+
+- **Sitting:** the hands now rest palm-down on the knees, mirrored.
+- **Sit / Sniff are toggles** (2D box and VR panel; the button reads ON/OFF and glows when on).
+  - **Sit: ON:** she sits (SitDown, then a SitIdle loop) and stays seated, with no auto-stand. **Sit: OFF:** SitUp, then normal companion behaviour.
+  - **Sniff: ON:** she keeps sniffing around until it is turned OFF.
+  - Pressing Crawl or Crawl: ON, switching to the other toggle, or sending her to a stall turns the active toggle OFF first.
 
 **Crawl / sit / sniff controls.**
 - **Crawl** button (6–10 s), **C** key (Shift+C = hold), and a **Crawl: ON** toggle that keeps her crawling.
@@ -257,4 +282,4 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - crawl palms sit slightly into the floor;
 - the padlock emblem can look slightly offset in some poses.
 
-**Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `stage4.py` (`work/rig/pipe.sh`). Cache-bust `?v=38b` (second v38 deploy).
+**Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `stage4.py` (`work/rig/pipe.sh`). Cache-bust `?v=38c` (third v38 deploy).

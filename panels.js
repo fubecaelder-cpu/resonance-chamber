@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=38b';
+import { THREE, canvasTex } from './shared.js?v=38c';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -278,7 +278,7 @@ function drawCastWing(ct, st, v) {
   g.fillStyle = st.value; g.font = `800 34px ${F}`; g.fillText(`${v.who || 'Ari'}  ·  STALL ${v.stall || '–'}`, W / 2, Y(0.243));
   g.fillStyle = st.label; g.font = `600 23px ${F}`; g.fillText(v.state || '', W / 2, Y(0.205));
   for (const b of CBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR * (b.sx || 1) + 0.012) * S, 0, Math.PI * 2); g.fill();
-    g.fillStyle = st.label; g.font = `600 ${b.sx ? 19 : 22}px ${F}`; g.fillText(b.label, X(b.x), Y(b.y - 0.07)); }
+    g.fillStyle = st.label; g.font = `600 ${b.sx ? 19 : 22}px ${F}`; g.fillText(b.id === 'c-sit' ? `SIT: ${v.sitHold ? 'ON' : 'OFF'}` : b.id === 'c-sniff' ? `SNIFF: ${v.sniffHold ? 'ON' : 'OFF'}` : b.label, X(b.x), Y(b.y - 0.07)); }
   g.fillStyle = st.title; g.font = `700 25px ${F}`; g.fillText(`SKIN: ${v.skin || 'Circuit Doll'}`, W / 2, Y(-0.145));
   g.fillStyle = st.label; g.font = `500 19px ${F}`; g.fillText(v.msg || 'Point at a stall\'s number plaque to choose it', W / 2, Y(-0.38));
   g.fillText(`${v.nOut ?? 1} of 3 out  ·  key C = crawl`, W / 2, Y(-0.41));
@@ -410,7 +410,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
   let followHook = null, castHook = null, castView = () => ({});
   const redrawCast = (only) => { const v = castView(); panels.forEach((p, i) => { if (only !== undefined && only !== i) return; drawCastWing(p.cct, p.st, v);
     const by = (id) => p.cbuttons[CBTN.findIndex((b) => b.id === id)].material.uniforms;
-    by('c-home').uOn.value = v.home ? 1 : 0; by('c-crawlhold').uOn.value = v.crawlHold ? 1 : 0; }); };
+    by('c-home').uOn.value = v.home ? 1 : 0; by('c-crawlhold').uOn.value = v.crawlHold ? 1 : 0; by('c-sit').uOn.value = v.sitHold ? 1 : 0; by('c-sniff').uOn.value = v.sniffHold ? 1 : 0; }); };
   redrawCast();
   redrawMoo();
   redrawMedia();

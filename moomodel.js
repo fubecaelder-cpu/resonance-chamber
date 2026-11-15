@@ -1,9 +1,9 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=38b';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=38b';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38b';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38b';
+import { THREE, clipMirror } from './shared.js?v=38c';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=38c';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38c';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38c';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -61,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38b'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38c'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };

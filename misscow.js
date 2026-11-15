@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=38b';
-import { BARN_GLSL } from './barnroom.js?v=38b';
+import { THREE, makeKit, clipMirror } from './shared.js?v=38c';
+import { BARN_GLSL } from './barnroom.js?v=38c';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
