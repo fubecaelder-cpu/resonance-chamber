@@ -1,9 +1,9 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=38c';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=38c';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38c';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38c';
+import { THREE, clipMirror } from './shared.js?v=38d';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=38d';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38d';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38d';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -82,7 +82,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38c'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38d'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -117,7 +117,11 @@ function install(cow, { gltf, vrmMod }) {
   model.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(model, true), size = box.getSize(new THREE.Vector3());
   const k = HEIGHT / Math.max(1e-4, size.y), fit = new THREE.Group(), holder = new THREE.Group(); holder.name = 'mooModel';
-  fit.scale.setScalar(k); fit.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
+  // v38d: centre x/z on the hips, not the bounding box (the box includes the nine tails, so her body sat ~0.5 m in front of her pivot
+  // and stood through the stall's front rail when she peeked out)
+  let hipsB = null; model.traverse((o) => { if (!hipsB && o.isBone && BONES.hips.test(o.name || '')) hipsB = o; });
+  const cxz = hipsB ? hipsB.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+  fit.scale.setScalar(k); fit.position.set(-cxz.x * k, -box.min.y * k, -cxz.z * k);
   fit.add(model); holder.add(fit);
   // the rooms are mostly unlit shader materials, so the model brings its own soft light rig (moves with her)
   const hemi = new THREE.HemisphereLight(0xfff0f6, 0x3a1830, 1.6); holder.add(hemi);
@@ -282,7 +286,7 @@ function install(cow, { gltf, vrmMod }) {
         if (tails.length && nb.hips && TAILFX) {
           nb.hips.updateWorldMatrix(true, false); nb.hips.getWorldQuaternion(hq); if (!TL.init) { TL.init = true; TL.hf.copy(hq); TL.prevHq.copy(hq); }
           TL.hf.slerp(hq, 1 - Math.exp(-dt / 0.25)); TL.D.copy(TL.hf).multiply(hq2.copy(hq).invert());
-          if (!TL.shape) { TL.shape = tailShape(tails, nb.hips, model); TL.shape.setLead(TAIL); cow.ext && (cow.ext.tailInfo = () => ({ clipSpread: TL.shape.clipSpread, mom: TL.mom })); }
+          if (!TL.shape) { TL.shape = tailShape(tails, nb.hips, model); TL.shape.setLead(TAIL); cow.ext && (cow.ext.tailInfo = () => ({ clipSpread: TL.shape.clipSpread, mom: TL.mom, clampW: TL.cw || 0, nClamp: TL.nClamp || 0 })); }
           const SH = TL.shape, V = SH.v, Qv = SH.q, fw2 = S.famW || 0, sw = (1 - fw2) * (1 - nw);
           const turn = dt > 0 ? 2 * Math.acos(Math.min(1, Math.abs(TL.prevHq.dot(hq)))) / dt : 0; TL.prevHq.copy(hq);
           const mt = Math.min(1, Math.max((S.speed || 0) / TAIL.MOM_SPEED, turn / TAIL.MOM_TURN));
@@ -293,7 +297,13 @@ function install(cow, { gltf, vrmMod }) {
           // cluster centre in world space (hips space -> world), swung back by momentum
           const cW = V.c.copy(SH.mean).lerp(SH.back, TAIL.FLATTEN * mom).normalize().applyQuaternion(hq), up = V.up.set(0, 1, 0);
           nb.hips.parent ? nb.hips.parent.getWorldQuaternion(pq) : pq.identity();
-          for (const ch of SH.chains) { const Pq = Qv.P.copy(hq);
+          // v38d stall clamp: segment ends are walked down each chain in world space; one that would leave the stall (dividers, front rail,
+          // trough) is turned toward its clamped point. Applied after the follow-through filter (the filter state stays unclamped) and
+          // blended in/out over ~0.4 s so entering / leaving never snaps.
+          const tcf = S.tailClamp || null; if (tcf) TL.cf = tcf; TL.cw = (TL.cw || 0) + ((tcf ? 1 : 0) - (TL.cw || 0)) * (1 - Math.exp(-dt / 0.4));
+          const CL = TL.cw > 0.002 && TL.cf ? TL.cf : null; if (CL) { nb.hips.getWorldScale(V.ws || (V.ws = new THREE.Vector3())); TL.nClamp = 0; }
+          for (const ch of SH.chains) { const Pq = Qv.P.copy(hq); let cp = null;
+            if (CL) { const rp = ch.bones[0].parent; rp.updateWorldMatrix(true, false); cp = (TL.cp || (TL.cp = new THREE.Vector3())).copy(ch.bones[0].position); rp.localToWorld(cp); }
             for (let jj = 0; jj < ch.bones.length; jj++) { const b = ch.bones[jj], j = jj + 1, L = TL.tmp.copy(b.quaternion);
               if (j === 1) L.premultiply(pq2.copy(Pq).invert().multiply(TL.D).multiply(Pq));   // root lags the hips' rotation (low-pass)
               if (sw > 0.001) {
@@ -312,7 +322,16 @@ function install(cow, { gltf, vrmMod }) {
               L.multiply(TL.w.setFromAxisAngle(R.curlAx, g * TAIL.LIFT * Math.PI / 180 * Math.sin(ph - Math.PI / 2)));
               if (S.flick > 0.01) L.multiply(TL.w.setFromAxisAngle(R.swayAx, S.flick * TAIL.FLICK * Math.PI / 180 * (j / SH.nseg) * Math.sin(2 * Math.PI * TAIL.FLICK_HZ * t - j * 0.5 + ch.lead * 4)));
               let F = TL.f.get(b); if (!F) { F = L.clone(); TL.f.set(b, F); } else F.slerp(L, 1 - Math.exp(-dt / (TAIL.TAU0 + TAIL.TAU_SEG * j)));
-              b.quaternion.copy(F); Pq.multiply(F); } }
+              b.quaternion.copy(F);
+              if (CL) { const nx = ch.bones[jj + 1], len = (nx ? nx.position.length() : (TL.lastLen || 0.1)) * V.ws.x; if (nx) TL.lastLen = nx.position.length();
+                const Wq = Qv.W.copy(Pq).multiply(F), d = (V.cd || (V.cd = new THREE.Vector3())).set(0, 1, 0).applyQuaternion(Wq);
+                const ex = cp.x + d.x * len, ez = cp.z + d.z * len, c = CL(ex, ez);
+                if (c) { let hx = c[0] - cp.x, hz = c[1] - cp.z; const hl = Math.hypot(hx, hz); if (hl > len * 0.999) { hx *= len * 0.999 / hl; hz *= len * 0.999 / hl; }   // end exactly at the clamped point, length kept (vertical takes the rest)
+                  const nd = (V.cn || (V.cn = new THREE.Vector3())).set(hx, (d.y < -0.05 ? -1 : 1) * Math.sqrt(Math.max(0, len * len - hx * hx - hz * hz)), hz);
+                  if (nd.lengthSq() > 1e-8) { nd.normalize(); Qv.a.setFromUnitVectors(d, nd); Qv.b.identity().slerp(Qv.a, TL.cw); Wq.premultiply(Qv.b);
+                    b.quaternion.copy(pq2.copy(Pq).invert().multiply(Wq)); d.set(0, 1, 0).applyQuaternion(Wq); TL.nClamp++; } }
+                cp.addScaledVector(d, len); }
+              Pq.multiply(b.quaternion); } }
         }
         // tail flick (bones named *tail*): a quick ripple layered on top of the clips (only with ?mootailfx=0; v38c folds a slow swish into the damped tails)
         if (S.flick > 0.01 && tails.length && !TAILFX) for (const [b, j] of tails) { const a = S.flick * 0.22 * Math.sin(t * 16 - j * 0.9); b.rotateX(a); b.rotateZ(a * 0.6); }

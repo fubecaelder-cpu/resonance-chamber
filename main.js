@@ -2,23 +2,23 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38c';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38d';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=38c';
-import { pinkRoomCfg } from './pinkroom.js?v=38c';
-import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38c';
-import { buildOpRoom } from './oproom.js?v=38c';
-import { buildCorridor } from './corridor.js?v=38c';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=38c';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=38c';
-import { createScreens } from './screens.js?v=38c';
-import { createPods } from './pods.js?v=38c';
-import { createMoo } from './moo.js?v=38c';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38c';
-import { createMissMoo } from './misscow.js?v=38c';
-import { attachMooModel } from './moomodel.js?v=38c';
-import { createCompanion } from './companion.js?v=38c';
-import { DRIVE_DEFAULTS } from './config.js?v=38c';
+import { buildChamber } from './chamber.js?v=38d';
+import { pinkRoomCfg } from './pinkroom.js?v=38d';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38d';
+import { buildOpRoom } from './oproom.js?v=38d';
+import { buildCorridor } from './corridor.js?v=38d';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=38d';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=38d';
+import { createScreens } from './screens.js?v=38d';
+import { createPods } from './pods.js?v=38d';
+import { createMoo } from './moo.js?v=38d';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38d';
+import { createMissMoo } from './misscow.js?v=38d';
+import { attachMooModel } from './moomodel.js?v=38d';
+import { createCompanion } from './companion.js?v=38d';
+import { DRIVE_DEFAULTS } from './config.js?v=38d';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -602,7 +602,7 @@ window.__plan = (cx, cz, half, px = 1024) => {
   renderer.setSize(sz.x, sz.y, false); renderer.setPixelRatio(pr); Object.values(SPACES).forEach((o, i) => { o.visible = vis[i]; });
   return url; };
 window.__moo = { sim: (sec, step) => mooSim(sec, step), get poi() { return MOO_POI; }, get obst() { return MOO_OBST; }, moo, cow, mooModel, cowRun, get companion() { return companion; }, mooFollow, setFollow, MOO_U, cfAt, pathAt, get tun() { return MOO_TUN; }, A }; window.__isXR = () => renderer.xr.isPresenting; window.__floorBase = () => floorBase; window.__refType = () => renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace() ? "ok" : "none"; window.__rig = rig; window.__spaces = () => Object.entries(SPACES).filter(([, s]) => s.visible).map(([k]) => k).join(',');
-window.__view = (y, p, z = START_Z, x = 0) => { yaw = y; pitch = p; rig.position.set(x, 0, z); applyLook(); };
+window.__view = (y, p, z = START_Z, x = 0, h = 0) => { yaw = y; pitch = p; window.__camH = h; rig.position.set(x, h, z); applyLook(); };   // h: debug camera lift (screenshots)
 window.__freeze = (t) => { frozenT = t; };
 window.__thetaGain = () => A.theta ? +A.theta.gain.value.toFixed(4) : null; window.__pods = pods; window.__zone = () => zone; window.__scene = scene; window.__media = media; window.__roomMedia = roomMedia;
 window.__settings = () => ({ speed: settings.speed, bright: settings.bright, vt });
@@ -650,8 +650,12 @@ const STALLS = (() => { const r4 = room4.root, v3 = new THREE.Vector3(), HALF = 
     const clampBox = (x, z) => { let [r, a] = polar(x, z); r = Math.min(R1, Math.max(R0, r)); const l = lim(r); a = Math.min(l, Math.max(-l, a)); const p = back(r, a); return [p.x, p.z]; };
     const inBox = (x, z) => { const [r, a] = polar(x, z); return r > 5.2 && r < 6.45 && Math.abs(a) < HALF; };
     const clampPath = (x, z) => { let [r, a] = polar(x, z); if (r > 5.0) { r = Math.min(R1, r); const l = lim(Math.max(r, 5.2)); a = Math.min(l, Math.max(-l, a)); } const p = back(r, a); return [p.x, p.z]; };
+    // v38d: tail points are kept this far inside the stall (front rail inner face 5.24, divider half-thickness 0.045, trough face 6.33)
+    const TM = 0.05, TR0 = 5.24 + TM, TR1 = 6.33 - TM;
+    const tailClamp = (x, z) => { let [r, a] = polar(x, z); const r2 = Math.min(TR1, Math.max(TR0, r)), l = HALF - (0.045 + TM) / r2, a2 = Math.min(l, Math.max(-l, a));
+      if (r2 === r && a2 === a) return null; const p = back(r2, a2); return [p.x, p.z]; };
     const randIn = () => { const r = R0 + Math.random() * (R1 - R0), l = lim(r), p = back(r, (Math.random() * 2 - 1) * l); return [p.x, p.z]; };
-    return { i: b.i, C, F, front, yaw: Math.atan2(F.x - C.x, F.z - C.z), inBox, clampBox, clampPath, randIn, polar };
+    return { i: b.i, C, F, front, yaw: Math.atan2(F.x - C.x, F.z - C.z), inBox, clampBox, clampPath, randIn, polar, tailClamp };
   }); })();
 panelSys.addTargets(BARN_STALLS.targets());
 const BUILTIN_SKIN = { id: 'circuit-doll', name: 'Circuit Doll', builtin: true };
@@ -874,7 +878,7 @@ function updateMoo(dt, now) {
 renderer.setAnimationLoop(() => {
   const nowMs = performance.now(); const dt = Math.min((nowMs - prev) / 1000, 0.1); prev = nowMs;
   if (renderer.xr.isPresenting) { xrLocomotion(dt); perf.sample(dt); rig.position.y = floorBase + settings.height; }
-  else { desktopMove(dt); rig.position.y = 0; camera.position.y = 1.6 + settings.height; }
+  else { desktopMove(dt); rig.position.y = window.__camH || 0; camera.position.y = 1.6 + settings.height; }
   camera.updateMatrixWorld(true);
   // v15: the head is the user camera under the rig. In XR three.js copies the headset pose onto it each frame, so its
   // world position includes rig movement. (renderer.xr.getCamera() has no parent, so its getWorldPosition() was the

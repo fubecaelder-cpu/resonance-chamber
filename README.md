@@ -288,4 +288,12 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - crawl palms sit slightly into the floor;
 - the padlock emblem can look slightly offset in some poses.
 
-**Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `stage4.py` (`work/rig/pipe.sh`). Cache-bust `?v=38c` (third v38 deploy).
+**v38d — polish pass (model v6).**
+- **Belt tassel:** it was rigid to the hips, so it went about 26 cm through the floor when she sat. It now has a 3-bone chain. A drape pass bends any segment that would go under the floor so it lies on the floor instead. Lowest point above the floor: SitDown 8 mm, SitIdle 2 mm, SitUp 5 mm, Nap 22 mm, CrawlUp 11 mm (was −255 to −263 mm in Sit, −26 mm in Nap, −7 mm in CrawlUp).
+- **Crawl palms:** an old reach clamp lifted the hand target off the floor along the reach line, so after each step the palm hovered for about 12 frames. It is removed, and the arm solve now keeps the wrist height when it has to pull the hand in. A floor lock plus per-side wrist height and hand pitch keep the palm 0.5–1.0 mm above the floor for the whole stance (about 75% of the cycle, never below the floor) in Crawl and Sniff.
+- **Padlock:** it was skinned rigidly to Spine2 while the collar is a Spine2/Neck blend, so it slid up to 5.7 mm off the collar on all fours. It now uses weights fitted to the collar (Spine2 0.62, Neck 0.32, LeftShoulder 0.04, Spine1 0.02). Its largest offset from the collar is 1.3 mm.
+- **Standing arms:** the rest pose was re-solved with a collision-checked arm search, and the right clavicle was raised 10° (it also levels the shoulders). Upper arm from vertical: left 15.0° → 9.2°, right 17.1° → 13.6°. The right arm can't go lower without the forearm hitting the hip flare.
+- **Walk:** each frame, a counter-roll at the spine/chest and neck/head cancels the sideways sway. Chest and head sway went from 0.75–0.78 cm to 0.0–0.03 cm (hips, legs and tails still sway).
+- **Tails in stalls:** each tail segment is kept inside the stall (front rail, dividers, trough, 5 cm margin) while she is home. The constraint is applied after the follow-through filter and blends in and out over 0.4 s. Her model is also centred on her hips now, not on the bounding box: the box includes the tails, so her body sat about 0.5 m in front of her position and went through the front rail when she peeked out.
+
+**Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `tassel_rig.py`, `tassel.py`, `padfit.py`, `stage4.py` (`work/rig/pipe.sh`). Cache-bust `?v=38d` (fourth v38 deploy).

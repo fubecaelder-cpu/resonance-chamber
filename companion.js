@@ -185,7 +185,9 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
   // ---- per frame
   function update(dt, now, hx, hz, fx, fz) {
     const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
-    S.now = now; if (S.homeOn) return homeUpdate(dt, now, hx, hz, fx, fz);
+    S.now = now;
+    { const st = S.homeOn && S.home && S.home.stall; cow.state.tailClamp = st && st.tailClamp && S.home.phase && S.home.phase !== 'goto' && st.inBox(S.x, S.z) ? st.tailClamp : null; }   // v38d: keep the tails inside the stall
+    if (S.homeOn) return homeUpdate(dt, now, hx, hz, fx, fz);
     if (!S.inited) { S.inited = true; S.next = now + rnd(4, 8); S.x = cow.state.x; S.z = cow.state.z; S.yaw = cow.state.yaw;
       if (!(Math.hypot(S.x - hx, S.z - hz) < 12) || Math.hypot(S.x - hx, S.z - hz) < 1.7 || !reachable(S.x, S.z) || zoneOf(S) !== zoneOf({ x: hx, z: hz })) teleportBehind(hx, hz, fx, fz, 'start'); }
     // player motion (teleports show up as jumps)
