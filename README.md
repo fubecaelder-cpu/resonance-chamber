@@ -183,7 +183,78 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - **Moo Track hallway decluttered**: hanging headsets and all cables removed; arches, sign, spiral end, floor arrows and wall screens kept (prop cues now just light the wall screens).
 - Model: `Foxfire_Ahri_circuit_v2.glb` (69.9k tris). Test hook `__moo.sim(seconds)` fast-forwards her behaviour. Cache-bust `?v=37`.
 
-## v38 — relaxed arms, straight legs (Miss Moo body pass)
-- **New applied rest pose** (`work/rig/rest.py`, run between `stage2c.py` and `stage3.py`): the sculpt's ~42° pelvis/torso twist is undone (pelvis square to the walking direction, chest mostly square, head and eyes exactly as before), the arms hang relaxed at her sides with a soft elbow bend (upper arms ~18–20° from vertical; her hips and belt stop them going closer without the forearms touching), the legs stand straight under the hips with the knees pointing forward and the feet forward (7° natural turn-out) instead of the sculpt's right leg ~30° forward and both feet turned out. The knee and left-elbow joints were moved to where the mesh actually bends, the right leg (≈8 cm longer in the sculpt) was shortened and the left thigh lengthened slightly so both legs match, and the shoulder/armpit/neck/hip blend zones were cleaned with a corrective smooth before the pose was applied as the new rest.
-- **Clips re-authored on the new rest**: Idle has relaxed arms with a soft breathing sway; Walk has a natural opposite arm swing (±22°, elbows bending a little more on the forward swing), legs swinging straight with a narrow step that crosses slightly toward the centre line (no more bow legs); Wave still raises the right arm beside her face; Crawl (rebuilt with IK) keeps the hands planted, both knees now reach the floor evenly and the two low tails are lifted clear of the floor.
-- Everything else from v37 is unchanged (Circuit Doll look, spiral eyes, 1.85 m scale, crawl, curious companion). Model: `Foxfire_Ahri_circuit_v3.glb` (69.9k tris). Cache-bust `?v=38`.
+## v38 — Ari: stalls, friends, skins, crawl controls, natural movement
+**Name.** Miss Moo is now **Ari** in every visible label (panel, 2D box, nameplates, messages). Internal ids, `?moo*` URL parameters, file names, the GCS paths and the **Moo Track** name are unchanged, and the Drive folder is still called **Miss Moo Model** (https://drive.google.com/drive/folders/1B6yh_ZRRGWyTYIFNGlokrdnZKKnFZ4fT).
+
+**Model** `Foxfire_Ahri_circuit_v4.glb` (69,894 tris, under the 70k mirror-twin limit). Clips: Idle, IdleShift, IdleStretch, IdleHairTouch, IdleHipHand, IdleYawn, Walk, Wave, Crawl, CrawlDown, CrawlUp, Sniff, SitDown, SitIdle (cross-legged), SitUp, Nap. Scale **1.21** (about 2.03 m), still fitting doors, corridors, pods and stalls. `?mooscale=` still overrides.
+
+**Body / arms / walk (feedback pass).**
+- Applied rest pose (`work/rig/rest.py`): pelvis and chest square, straight legs under the hips (no bow legs), knees and feet forward.
+- Arms hang relaxed, palms facing the thighs, thumbs forward, soft elbow bend.
+  - Limit: the upper arms sit about **15–18° from vertical**. Her hips and belt stop them going closer without the forearms cutting into the body (the earlier note said 18–20°; the hinge/twist fix gained a few degrees).
+- **Left arm fix (v38 live feedback "looks broken, bent weird").**
+  - Cause: the rest pass had moved the left elbow joint 5.7 cm down the forearm, so the arm bent mid-forearm.
+  - Fix: the joint was put back, and the upper-arm roll was aligned to the elbow hinge.
+  - The large forearm pronation (left −162°, right −90°) is now spread smoothly along the forearm skin instead of twisting at the wrist.
+  - Both arms are now mirror images: palm-to-thigh 0.89/0.88, thumb-forward 0.89/0.89.
+  - Quaternion check over every clip: 0 sign flips.
+  - The fast arm snaps in IdleStretch/IdleHairTouch are gone: the hand now travels on an arc around the shoulder.
+  - The crawl/sniff elbow no longer slams into full extension (soft IK). The largest single-key arm jumps went from 46° to under 16°; the worst crawl forearm speed went from 965°/s to 460°/s.
+- **Walk.**
+  - Hips, legs and tails keep their sway, roll and twist.
+  - The spine counter-rotates, so the chest, shoulders, neck and head stay level. There is a tiny shoulder counter-twist, no side lean and no root side-sway, and the arm swing stays.
+  - Measured lateral wobble over a cycle: chest 0.75 cm, neck 0.77 cm, head 0.78 cm (was 1.5 / 2.1 / 2.4 cm); chest roll 0.16° (was 3.1°).
+  - Neutral step width; she always faces where she is walking (heading-vs-velocity 0° max over 1,300+ samples) and retreats by turning away, not walking backwards.
+  - Hip twist is clamped.
+  - **Turn rate halved:**
+
+    | | Gain | Cap | Notes |
+    |---|---|---|---|
+    | Old | 4.5/s (7/s when scooting) | about 7 rad/s peak | |
+    | New | 2.25/s | 1.75 rad/s | acceleration 5 rad/s²; walks at half speed through sharp turns |
+
+  - Tails swing independently with damping.
+- Idle: neutral stance plus varied one-shot gestures (shift, stretch, hair tuck, hand on hip, yawn).
+- **Crawl**: smooth feline gait (1.6 s cycle, dense eased keys; hip-height wobble std 2.1 mm vs 8.4 mm before), tails relaxed and trailing.
+
+**Crawl / sit / sniff controls.**
+- **Crawl** button (6–10 s), **C** key (Shift+C = hold), and a **Crawl: ON** toggle that keeps her crawling.
+- She also crawls naturally for 6–10 s about every 60–90 s of moving.
+- **Sit** (cross-legged) and **Sniff** buttons in the 2D "Ari & friends · stalls" box and on the panel's cast wing.
+
+**Stalls (barn).**
+- Pick a home stall on the stall plaques (VR) or with the prev/next buttons. Stalls 1–6 are on the right side, 7–12 on the left.
+- The chosen stall glows and gets a nameplate. **Send to stall / Let out** toggles her.
+  - When sent, she walks there, or turns up there if you are not looking.
+  - Inside she idles, wanders, naps (lying sideways) and peeks over the gate; she does not follow you.
+- The stall gate swings open as she goes in or out.
+- The Moo Track still overrides; she returns to her stall afterwards.
+- Saved in localStorage. URL: `?moostall=N`, `?moohome=1|0`, `?moostalls=id:N,...`.
+
+**Skins.**
+- Built-in **Circuit Doll** (default) plus **Crimson Fox**, switchable at runtime: the wardrobe mirror in her stall (prev/next), the panel or the 2D box, with a sparkle when it changes.
+- Saved per character. URL: `?ariskin=crimson-fox` (or `?mooskin=`).
+- Adding a skin: upload `<model file name without .glb>__<Skin Name>__base.png` (plus optional `__emissive.png`, `__orm.png`; jpg/webp also fine) into the same Drive folder as the model, then Sync.
+  - Skins are tied to the exact model file name and its UVs; a rebuilt model needs its skin PNGs re-uploaded.
+  - The newest upload of a name wins.
+
+**Friends (multi-character roster).**
+- Each subfolder of **Miss Moo Model** is a character.
+- **To add a friend:**
+  1. In Drive, open Resonance Chamber Videos → Miss Moo Model and create a folder named after the friend (e.g. `Luna`).
+  2. Upload one `.glb`/`.vrm` (rigged with Idle/Walk clips is best; an unrigged model just glides; auto-rigging is done only when you ask for it).
+  3. Optional `settings.json`: `{"name":"Luna","scale":1.0,"rigged":true,"color":"#ff66cc","defaultSkinName":"Original"}`.
+  4. Optional skins named as above.
+  5. Run Sync.
+- Sync writes `model/<slug>/model.glb`, `manifest.json`, `skins.json`, and `model/roster.json`.
+- Each character gets a stall, Send/Let out and skins. **All to stalls** sends everyone home. At most **3** can be out at once.
+- Characters keep apart and pick different points of interest. Characters in stalls far from you animate at a reduced rate (LOD).
+- `?moofriend=1` adds a placeholder friend for testing.
+
+**Known artifacts:**
+- the tassel dips through the floor when she sits;
+- tails can clip the stall dividers and rails (the stalls are about 1.1 m deep);
+- crawl palms sit slightly into the floor;
+- the padlock emblem can look slightly offset in some poses.
+
+**Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `stage4.py` (`work/rig/pipe.sh`). Cache-bust `?v=38b` (second v38 deploy).

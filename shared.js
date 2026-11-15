@@ -1,5 +1,5 @@
 // Shared helpers for the Resonance Chamber (v3). three.js r169, no build step.
-import * as THREE from './lib/three.module.min.js?v=38';
+import * as THREE from './lib/three.module.min.js?v=38b';
 export { THREE };
 
 export const Q = new URLSearchParams(location.search);
@@ -303,7 +303,9 @@ export function clipMirror(mirror) {
     o.material = Array.isArray(orig) ? orig.map(mirrorMat) : mirrorMat(orig);
     if (!Array.isArray(orig)) {        // follow runtime opacity / visibility changes made on the original material
       const c = o.material;
-      o.onBeforeRender = () => { c.opacity = orig.opacity; c.visible = orig.visible; if (orig.color && c.color) c.color.copy(orig.color); if (orig.map !== c.map) c.map = orig.map; };
+      o.onBeforeRender = () => { c.opacity = orig.opacity; c.visible = orig.visible; if (orig.color && c.color) c.color.copy(orig.color); if (orig.map !== c.map) c.map = orig.map;
+        if ('emissiveMap' in orig && (orig.emissiveMap !== c.emissiveMap || orig.vertexColors !== c.vertexColors || orig.roughnessMap !== c.roughnessMap)) { c.emissiveMap = orig.emissiveMap; c.roughnessMap = orig.roughnessMap; c.metalnessMap = orig.metalnessMap; c.vertexColors = orig.vertexColors; c.needsUpdate = true; }   // v38: skins
+        if (orig.emissive && c.emissive) { c.emissive.copy(orig.emissive); c.emissiveIntensity = orig.emissiveIntensity; c.roughness = orig.roughness; c.metalness = orig.metalness; } };
     }
   });
 }

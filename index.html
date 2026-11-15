@@ -35,6 +35,9 @@
   #moo .body { display: none; } #moo.open .body { display: block; }
   #moo #mooToggle { width: 100%; text-align: left; }
   #moo small { display: block; margin-top: 6px; color: #e8be90; line-height: 1.35; }
+  #moo .sect { margin-top: 9px; color: #ffb3d6; font: 600 12px system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+  #moo .val { flex: 1; text-align: center; align-self: center; color: #ffe2b0; font: 13px system-ui, sans-serif; }
+  #castStatus { margin-top: 5px; color: #ffd6ec; font: 12px system-ui, sans-serif; min-height: 1.2em; }
   #mooStatus { margin-top: 7px; min-height: 1.3em; color: #ffe2b0; word-break: break-word; white-space: pre-line; } #mooStatus.err { color: #ffd27a; }
 </style>
 </head>
@@ -64,17 +67,23 @@ Four rooms on the corners of a square: the three glowing doorways behind you lea
   </div>
 </div>
 <div id="moo">
-  <button id="mooToggle">🐄 Moo Track · Miss Moo</button>
+  <button id="mooToggle">🐄 Moo Track · Ari</button>
   <div class="body">
     <div class="row"><button id="mooStart">▶ Start</button><button id="mooStop">■ Stop</button><button id="mooRestart">↻ Restart</button><button id="mooVm">Vol −</button><button id="mooVp">Vol +</button></div>
     <div class="row"><button id="mooFollow">🦊 Companion: ON</button></div>
+    <div class="sect">Ari &amp; friends · stalls</div>
+    <div class="row"><button id="castWho" title="Which character the buttons below control">Ari</button><button id="castStallP" title="Previous home stall">◀</button><span id="castStall" class="val">Stall 1</span><button id="castStallN" title="Next home stall">▶</button></div>
+    <div class="row"><button id="castHome" title="Send her to her home stall, or let her out to follow you">🏠 Send to stall</button><button id="castAll">All to stalls</button></div>
+    <div class="row"><button id="castSkinP" title="Previous skin">◀</button><span id="castSkin" class="val">Circuit Doll</span><button id="castSkinN" title="Next skin">▶</button></div>
+    <div class="row"><button id="castCrawl" title="Crawl for a few seconds (key C)">🐾 Crawl</button><button id="castCrawlHold" title="Keep crawling until turned off">Crawl: OFF</button><button id="castSit">🧘 Sit</button><button id="castSniff">👃 Sniff</button></div>
+    <div id="castStatus"></div>
     <div class="row"><button id="mooFile">Choose narration</button><button id="mooCuesBtn">Choose cues JSON</button><button id="mooDefault">Default</button></div>
     <div class="row"><input id="mooUrl" type="url" placeholder="Narration URL / Drive link / gcs:moo/file.mp3"><button id="mooUrlGo">Load</button></div>
     <div class="row"><input id="mooCueUrl" type="url" placeholder="Cue list URL (moo_cues.json)"><button id="mooCueUrlGo">Load</button></div>
     <div id="mooStatus"></div>
-    <small>Wear headphones. Start inside Little Moo Barn, facing the focal point: the tunnel and Miss Moo are behind you. A placeholder voice plays until you add your narration file (it stays on this device when picked here).</small>
+    <small>Wear headphones. Start inside Little Moo Barn, facing the focal point: the tunnel and Ari are behind you. A placeholder voice plays until you add your narration file (it stays on this device when picked here).</small>
   </div>
 </div>
-<script type="module" src="./main.js?v=38"></script>
+<script type="module" src="./main.js?v=38b"></script>
 </body>
 </html>

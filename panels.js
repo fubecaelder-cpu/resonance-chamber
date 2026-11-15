@@ -1,7 +1,7 @@
 // VR-friendly control panels (one per room) + global settings (animation speed, brightness), persisted in localStorage.
 // Input: laser ray from each Quest controller (hover highlight, trigger to press, haptic pulse), direct poke with the
 // controller tip or an index fingertip, and the desktop mouse (hover + click).
-import { THREE, canvasTex } from './shared.js?v=38';
+import { THREE, canvasTex } from './shared.js?v=38b';
 
 // ---------- settings ----------
 export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -57,6 +57,15 @@ const KBTN = [
   { id: 'k-vol-', x: -0.15, y: -0.15, glyph: 0, label: 'VOL −' }, { id: 'k-vol+', x: 0.15, y: -0.15, glyph: 1, label: 'VOL +' },
   { id: 'k-load', x: -0.15, y: -0.31, glyph: 3, label: 'NARRATION' }, { id: 'k-cues', x: 0.0, y: -0.31, glyph: 6, label: 'CUES' }, { id: 'k-default', x: 0.15, y: -0.31, glyph: 7, label: 'DEFAULT' },
   { id: 'k-follow', x: 0.0, y: -0.545, glyph: 9, label: '' },
+];
+// v38: cast wing (Ari & friends): chained to the right edge of the Moo Track wing. Home stalls, who the buttons control, skins, poses.
+const CW = 0.5, CH = 0.81, COY = -0.07;
+const CBTN = [
+  { id: 'c-stall-', x: -0.15, y: 0.13, glyph: 0, label: '◀ STALL' }, { id: 'c-who', x: 0.0, y: 0.13, glyph: 10, label: 'WHO' }, { id: 'c-stall+', x: 0.15, y: 0.13, glyph: 1, label: 'STALL ▶' },
+  { id: 'c-home', x: -0.18, y: -0.03, glyph: 9, label: 'STALL/OUT', sx: 0.85 }, { id: 'c-allhome', x: -0.06, y: -0.03, glyph: 7, label: 'ALL IN', sx: 0.85 },
+  { id: 'c-skin-', x: 0.06, y: -0.03, glyph: 0, label: '◀ SKIN', sx: 0.85 }, { id: 'c-skin+', x: 0.18, y: -0.03, glyph: 1, label: 'SKIN ▶', sx: 0.85 },
+  { id: 'c-crawl', x: -0.18, y: -0.24, glyph: 4, label: 'CRAWL', sx: 0.85 }, { id: 'c-crawlhold', x: -0.06, y: -0.24, glyph: 9, label: 'CRAWL ON', sx: 0.85 },
+  { id: 'c-sit', x: 0.06, y: -0.24, glyph: 12, label: 'SIT', sx: 0.85 }, { id: 'c-sniff', x: 0.18, y: -0.24, glyph: 6, label: 'SNIFF', sx: 0.85 },
 ];
 // screen wing (v9): hinged to the left of the main board, mirroring the media wing; moves this room's main monitor
 const SW = 0.5, SH = 0.88, SOY = -0.07;   // v11: taller (OPACITY row); content coords unchanged, board offset by SOY
@@ -237,7 +246,7 @@ function drawMooWing(ct, st, v) {
   if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6; for (let r = 20; r < W * 1.6; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
   g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = st.title; g.font = `700 46px ${F}`; g.fillText('MOO TRACK', W / 2, Y(0.288));
+  g.fillStyle = st.title; g.font = `700 42px ${F}`; g.fillText('MOO TRACK · ARI', W / 2, Y(0.288));
   g.font = `500 24px ${F}`; g.fillStyle = v.error ? '#ffd27a' : st.label;
   const words = String(v.status || '').split(' '); const lines = ['']; for (const w of words) { const t = (lines[lines.length - 1] + ' ' + w).trim();
     if (g.measureText(t).width > W - 70 && lines[lines.length - 1]) { if (lines.length === 3) { lines[2] += '…'; break; } lines.push(w); } else lines[lines.length - 1] = t; }
@@ -249,11 +258,30 @@ function drawMooWing(ct, st, v) {
   g.fillStyle = st.label; g.font = `600 24px ${F}`; g.fillText('VOLUME', W / 2, Y(-0.09));
   g.fillStyle = st.value; g.font = `800 50px ${F}`; g.fillText(v.volume <= 0 ? 'MUTE' : `${Math.round(v.volume * 100)}%`, W / 2, Y(-0.15));
   // Miss Moo progress
-  g.fillStyle = st.label; g.font = `700 22px ${F}`; g.fillText(`MISS MOO  ·  ${Math.round((v.cow || 0) * 100)}%`, W / 2, Y(-0.418));
+  g.fillStyle = st.label; g.font = `700 22px ${F}`; g.fillText(`ARI  ·  ${Math.round((v.cow || 0) * 100)}%`, W / 2, Y(-0.418));
   const bx = W * 0.14, bw = W * 0.72, by = Y(-0.44); g.fillStyle = st.socket; g.fillRect(bx, by, bw, 12); g.fillStyle = st.edge; g.fillRect(bx, by, bw * Math.max(0, Math.min(1, v.cow || 0)), 12);
   g.fillStyle = st.title; g.font = `600 19px ${F}`; g.fillText('THE TUNNEL IS BEHIND YOU AT THE BARN DOOR', W / 2, Y(-0.462));
   // v31: companion toggle
-  g.fillStyle = st.title; g.font = `700 26px ${F}`; g.fillText(`COMPANION: ${v.follow ? 'ON' : 'OFF'}`, W / 2, Y(-0.62));
+  g.fillStyle = st.title; g.font = `700 26px ${F}`; g.fillText(`ARI COMPANION: ${v.follow ? 'ON' : 'OFF'}`, W / 2, Y(-0.62));
+  ct.t.needsUpdate = true;
+}
+
+function drawCastWing(ct, st, v) {
+  const { c, g } = ct, W = c.width, H = c.height;
+  const X = (x) => (x / CW + 0.5) * W, Y = (y) => (0.5 - (y - COY) / CH) * H, S = W / CW, F = 'system-ui, Segoe UI, Roboto, sans-serif';
+  const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, st.bg0); grd.addColorStop(1, st.bg1);
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  if (st.stripes) { g.save(); g.globalAlpha = 0.09; g.strokeStyle = '#ffffff'; g.lineWidth = 6; for (let r = 20; r < W * 1.6; r += 26) { g.beginPath(); g.arc(W / 2, H * 1.1, r, Math.PI, 2 * Math.PI); g.stroke(); } g.restore(); }
+  g.strokeStyle = st.edge; g.lineWidth = 6; g.globalAlpha = 0.85; g.strokeRect(14, 14, W - 28, H - 28); g.globalAlpha = 1;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = st.title; g.font = `700 40px ${F}`; g.fillText('ARI & FRIENDS', W / 2, Y(0.29));
+  g.fillStyle = st.value; g.font = `800 34px ${F}`; g.fillText(`${v.who || 'Ari'}  ·  STALL ${v.stall || '–'}`, W / 2, Y(0.243));
+  g.fillStyle = st.label; g.font = `600 23px ${F}`; g.fillText(v.state || '', W / 2, Y(0.205));
+  for (const b of CBTN) { g.fillStyle = st.socket; g.beginPath(); g.arc(X(b.x), Y(b.y), (BR * (b.sx || 1) + 0.012) * S, 0, Math.PI * 2); g.fill();
+    g.fillStyle = st.label; g.font = `600 ${b.sx ? 19 : 22}px ${F}`; g.fillText(b.label, X(b.x), Y(b.y - 0.07)); }
+  g.fillStyle = st.title; g.font = `700 25px ${F}`; g.fillText(`SKIN: ${v.skin || 'Circuit Doll'}`, W / 2, Y(-0.145));
+  g.fillStyle = st.label; g.font = `500 19px ${F}`; g.fillText(v.msg || 'Point at a stall\'s number plaque to choose it', W / 2, Y(-0.38));
+  g.fillText(`${v.nOut ?? 1} of 3 out  ·  key C = crawl`, W / 2, Y(-0.41));
   ct.t.needsUpdate = true;
 }
 
@@ -328,6 +356,20 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     mwing.add(m); return m;
   });
+  // v38: cast wing chained to the right edge of the Moo Track wing
+  const chinge = new THREE.Group(); chinge.position.set(MW / 2 + 0.05, 0, -0.005); chinge.rotation.y = -0.34; mwing.add(chinge);
+  const cwing = new THREE.Group(); cwing.position.set(CW / 2 + 0.04, 0, 0); chinge.add(cwing);
+  const cfm = frameMat(st, CW / 2, CH / 2);
+  const cframe = new THREE.Mesh(new THREE.BoxGeometry(CW + 0.07, CH + 0.07, 0.035), cfm); cframe.position.set(0, COY, -0.02); cwing.add(cframe);
+  const cknuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, BH * 0.8, 12), fm); chinge.add(cknuckle);
+  const cct = canvasTex(1024, Math.round(1024 * CH / CW));
+  const cboard = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), boardMat(cct.t)); cboard.position.y = COY; cwing.add(cboard);
+  const cbuttons = CBTN.map((b) => {
+    const m = new THREE.Mesh(geo, buttonMat(st, b.glyph)); m.rotation.x = Math.PI / 2; m.position.set(b.x, b.y, 0.014);
+    if (b.sx) m.scale.set(b.sx, 1, b.sx);
+    m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
+    cwing.add(m); return m;
+  });
   // screen wing on a hinge at the left edge, swung 24° towards the user (mirror of the media wing)
   const shinge = new THREE.Group(); shinge.position.set(-BW / 2 - 0.05, 0, -0.005); shinge.rotation.y = 0.42; head.add(shinge);
   const swing = new THREE.Group(); swing.position.set(-SW / 2 - 0.04, -(0.74 - BH) / 2, 0); shinge.add(swing);
@@ -342,7 +384,7 @@ function buildPanel(style, parent, pos, faceTo) {
     m.userData.btn = { id: b.id, hover: 0, hoverT: 0, press: 0, rest: 0.014, pokeArmed: true };
     swing.add(m); return m;
   });
-  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons, ...sbuttons, ...mbuttons], mfm, mboard, mframe, mct, mbuttons, frameMat: fm, wfm, wboard, wframe, wct, wbuttons, sfm, sboard, sframe, sct, sbuttons };
+  return { group: g, head, board, frame, ct, st, buttons: [...buttons, ...wbuttons, ...sbuttons, ...mbuttons, ...cbuttons], mfm, mboard, mframe, mct, mbuttons, cfm, cboard, cframe, cct, cbuttons, frameMat: fm, wfm, wboard, wframe, wct, wbuttons, sfm, sboard, sframe, sct, sbuttons };
 }
 
 // ---------- system ----------
@@ -365,18 +407,23 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
   const redrawMoo = (only) => { if (!moo) return; const v = { ...moo.view(), ...mooExtra() }; panels.forEach((p, i) => { if (only !== undefined && only !== i) return; drawMooWing(p.mct, p.st, v);
     const by = (id) => p.mbuttons[KBTN.findIndex((b) => b.id === id)].material.uniforms;
     by('k-start').uOn.value = v.playing ? 1 : 0; by('k-follow').uOn.value = v.follow ? 1 : 0; }); };
-  let followHook = null;
+  let followHook = null, castHook = null, castView = () => ({});
+  const redrawCast = (only) => { const v = castView(); panels.forEach((p, i) => { if (only !== undefined && only !== i) return; drawCastWing(p.cct, p.st, v);
+    const by = (id) => p.cbuttons[CBTN.findIndex((b) => b.id === id)].material.uniforms;
+    by('c-home').uOn.value = v.home ? 1 : 0; by('c-crawlhold').uOn.value = v.crawlHold ? 1 : 0; }); };
+  redrawCast();
   redrawMoo();
   redrawMedia();
   redraw();
   const allButtons = panels.flatMap((p) => p.buttons);
-  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe, p.sboard, p.sframe, p.mboard, p.mframe]);
+  const hitTargets = panels.flatMap((p) => [...p.buttons, p.board, p.frame, p.wboard, p.wframe, p.sboard, p.sframe, p.mboard, p.mframe, p.cboard, p.cframe]);
 
   function act(id, room = 0) {
     if (id.startsWith('m-')) { media.act(id); return; }
     if (id.startsWith('p-')) { if (pods) pods.act(id, room); return; }
     if (id.startsWith('s-')) { if (screens) screens.act(id, room); return; }
     if (id === 'k-follow') { if (followHook) followHook(); return; }
+    if (id.startsWith('c-') || id.startsWith('x-')) { if (castHook) castHook(id, room); return; }
     if (id.startsWith('k-')) { if (moo) moo.act(id); return; }
     if (id === 'speed-') settings.speedI = Math.max(0, settings.speedI - 1);
     else if (id === 'speed+') settings.speedI = Math.min(SPEEDS.length - 1, settings.speedI + 1);
@@ -401,7 +448,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
   }
 
   // ---------- XR controllers: laser + cursor ----------
-  const ray = new THREE.Raycaster(); ray.far = 6;
+  const ray = new THREE.Raycaster(); ray.far = 9;   // v38: far enough for the barn's stall plaques
   const laserGeo = new THREE.BoxGeometry(0.0035, 0.0035, 1); laserGeo.translate(0, 0, -0.5);
   const laserMat = new THREE.ShaderMaterial({ uniforms: { uHit: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying float vZ; void main(){ vZ = -position.z; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -444,7 +491,7 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
     }
   }
   function update(dt, time) {
-    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; p.sfm.uniforms.uTime.value = time; p.mfm.uniforms.uTime.value = time; });
+    panels.forEach((p) => { p.frameMat.uniforms.uTime.value = time; p.wfm.uniforms.uTime.value = time; p.sfm.uniforms.uTime.value = time; p.mfm.uniforms.uTime.value = time; p.cfm.uniforms.uTime.value = time; });
     const xr = renderer.xr.isPresenting;
     if (xr && !cursorParentSet) { ctrls.forEach((s) => rig.parent.add(s.cursor)); cursorParentSet = true; }
     const targets = visibleTargets();
@@ -474,5 +521,6 @@ export function createPanels({ renderer, rig, camera, rooms, onChange, media, sc
       b.position.z = B.rest - 0.009 * B.press + 0.004 * B.hover;
     }
   }
-  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, redrawMoo, setMooExtra: (f) => { mooExtra = f; }, setFollowHook: (f) => { followHook = f; }, press, act, allButtons };
+  return { hovering: (i) => !!(ctrls[i] && ctrls[i].hover), update, mouseDown, mouseMove, panels, redraw, redrawMedia, redrawScreen, redrawMoo, setMooExtra: (f) => { mooExtra = f; }, setFollowHook: (f) => { followHook = f; }, setCastHook: (f) => { castHook = f; }, setCastView: (f) => { castView = f; redrawCast(); }, redrawCast,
+    addTargets: (list) => { for (const o of list) if (!hitTargets.includes(o)) hitTargets.push(o); }, press, act, allButtons };
 }

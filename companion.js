@@ -11,12 +11,14 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR, obstacles, lookTargets, pois = [] }) {
+export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR, obstacles, lookTargets, pois = [], peers = () => [], id = 'ari' }) {
   const ROOM_R = roomR;                       // per room: her disc radius (narrower than the player's 6.1 m)
   const HALF = 0.38, EXT = 2.4;               // corridor strip for her: centre line ±0.38 m (her tails are wide), overlapping into rooms
   const S = { x: 0, z: 0, yaw: 0, vx: 0, vz: 0, spd: 0, inited: false, act: null, actT: 0, next: 0, side: Math.random() < 0.5 ? -1 : 1,
     unseen: 0, pvx: 0, pvz: 0, esc: null, escT: 0, gaze: 0, gazeCool: 0, stuck: 0, lastD: 0, hop: 0, hopT: 0, hopN: 0, lean: 0, leanTo: 0, spin: 0, spinT: 0,
-    tiltT: 0, flickT: 0, task: null, checkinAt: 0, glanceT: 6, glanceDur: 0, reactT: 0, pl: 0.15, recent: [], mode: 'idle', prevHx: null, prevHz: null, pv: 0, faceTo: null, info: '' };
+    tiltT: 0, flickT: 0, task: null, checkinAt: 0, glanceT: 6, glanceDur: 0, reactT: 0, pl: 0.15, recent: [], mode: 'idle', prevHx: null, prevHz: null, pv: 0, faceTo: null, info: '',
+    fwd: 0, turnW: 0, hv: { n: 0, sum: 0, max: 0, over: 0 }, crawlUntil: 0, crawlHold: false, moveT: 0, crawlEvery: rnd(60, 90), travelUntil: 0, forcedDur: 0,
+    homeOn: false, home: null, homeForce: null, gate: 0, id };
   const corr = Object.fromEntries(CORRS.map((c) => [c.k, c]));
   const corrPt = (c, al, la = 0) => [c.S[0] + al * c.D[0] + la * c.D[1], c.S[1] + al * c.D[1] - la * c.D[0]];
   const corrBetween = (i, j) => CORRS.find((c) => (c.beds[0] === i && c.beds[1] === j) || (c.beds[0] === j && c.beds[1] === i));
@@ -109,7 +111,7 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     const [x, z] = valid(hx - fx * 2.4, hz - fz * 2.4); S.x = x; S.z = z; S.vx = S.vz = 0; S.info = 'reappeared* (' + why + ')'; return false;
   }
   // ---- playful acts
-  const ACTS = { hop: 2, spin: 1.2, tilt: 1.5, flick: 1.5, wave: 1.2, peek: 1.2, circle: 1, hide: 1.3, crawl: 1.6 };   // crawl ≈ 13 % of playful moves
+  const ACTS = { hop: 2, spin: 1.2, tilt: 1.5, flick: 1.5, wave: 1.2, peek: 1.2, circle: 1, hide: 1.3, crawl: 1.0, sit: 0.9, sniff: 1.0 };   // v38c: + sit crisscross, sniff on all fours
   function pickAct(still, inView, hx, hz) {
     const zp = zoneOf({ x: hx, z: hz }); const opts = [];
     for (const [k, w] of Object.entries(ACTS)) {
@@ -117,13 +119,24 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
       if (k === 'wave' && !inView) continue;
       if (k === 'hide' && !nearPod(hx, hz, zp)) continue;
       if (k === 'crawl' && !(cow.ext && cow.ext.canCrawl)) continue;
+      if (k === 'sit' && !(cow.ext && cow.ext.canSit && zp[0] === 'r')) continue;
+      if (k === 'sniff' && !(cow.ext && cow.ext.canSniff && nearPod(hx, hz, zp))) continue;
       opts.push([k, w]);
     }
     let r = Math.random() * opts.reduce((a, [, w]) => a + w, 0); for (const [k, w] of opts) { r -= w; if (r <= 0) return k; } return opts.length ? opts[0][0] : 'hop';
   }
+  // v38e: where to crawl next: prowl around the player (crawl), or nose around a pod / stall / bale in slow small arcs (sniff)
+  function crawlTarget(a, hx, hz) {
+    if (a.k === 'sniff') { a.ang = (a.ang || 0) + rnd(0.35, 0.7) * S.side; const p = a.pod, r = p ? p.r + 0.55 : 0.8, ox = p ? p.x : S.x, oz = p ? p.z : S.z;
+      let x = ox + Math.sin(a.ang) * r, z = oz + Math.cos(a.ang) * r; if (!reachable(x, z)) { const c = snapCell(x, z); if (c >= 0) { x = cx(c); z = cz(c); } } return { x, z }; }
+    const cur = Math.atan2(S.x - hx, S.z - hz);
+    for (const da of [0.9, -0.9, 0.5, -0.5, 1.4, -1.4]) { const aa = cur + da * S.side, tx = hx + Math.sin(aa) * 2.4, tz = hz + Math.cos(aa) * 2.4, dd = Math.hypot(tx - S.x, tz - S.z);
+      if (dd > 1.6 && dd < 5 && reachable(tx, tz) && lineFree(S.x, S.z, tx, tz)) return { x: tx, z: tz }; }
+    const dd = Math.max(0.1, Math.hypot(S.x - hx, S.z - hz)); return { x: hx + (S.x - hx) / dd * 2.4, z: hz + (S.z - hz) / dd * 2.4 };
+  }
   const nearPod = (hx, hz, zp) => obstacles.filter((o) => o.pillar && zoneOf(o) === zp && Math.hypot(o.x - hx, o.z - hz) < 6.5 && Math.hypot(o.x - hx, o.z - hz) > 2.2).sort((a, b) => Math.hypot(a.x - S.x, a.z - S.z) - Math.hypot(b.x - S.x, b.z - S.z))[0];
   const lookPick = (hx, hz, zp, test) => { const L = lookTargets.filter((o) => zoneOf(o) === zp && Math.hypot(o.x - hx, o.z - hz) < 8); return L.length ? (test ? true : L[Math.floor(Math.random() * L.length)]) : null; };
-  function startAct(k, hx, hz, fx, fz) {
+  function startAct(k, hx, hz, fx, fz, now = 0) {
     const a = { k, t: 0, phase: 0 }; S.act = a; S.side = Math.random() < 0.5 ? -1 : 1;
     if (k === 'hop') { S.hopT = 0; S.hopN = 2; S.flickT = 1.0; a.dur = 1.2; }
     else if (k === 'spin') { S.spinT = 0.0001; S.hopT = 0; S.hopN = 1; a.dur = 1.1; }
@@ -135,11 +148,11 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     else if (k === 'wander') { a.tg = lookPick(hx, hz, zoneOf({ x: hx, z: hz })); a.dur = 11; }
     else if (k === 'hide') { a.pod = nearPod(hx, hz, zoneOf({ x: hx, z: hz })); a.dur = 10; }
     else if (k === 'crawl') {   // prowl a few metres toward / around the player on all fours, then stand back up
-      const cur = Math.atan2(S.x - hx, S.z - hz); a.tg = null;
-      for (const da of [0.9, -0.9, 0.5, -0.5, 1.4, -1.4]) { const aa = cur + da * S.side, tx = hx + Math.sin(aa) * 2.4, tz = hz + Math.cos(aa) * 2.4, dd = Math.hypot(tx - S.x, tz - S.z);
-        if (dd > 1.6 && dd < 5 && reachable(tx, tz) && lineFree(S.x, S.z, tx, tz)) { a.tg = { x: tx, z: tz }; break; } }
-      if (!a.tg) { const dd = Math.max(0.1, Math.hypot(S.x - hx, S.z - hz)); a.tg = { x: hx + (S.x - hx) / dd * 2.4, z: hz + (S.z - hz) / dd * 2.4 }; }
-      a.dur = 16; cow.state.crawl = 1; }
+      a.tg = crawlTarget(a, hx, hz); a.dur = 60; a.until = now + (S.forcedDur || rnd(6, 10)); S.forcedDur = 0; }
+    else if (k === 'sniff') { a.pod = nearPod(hx, hz, zoneOf({ x: hx, z: hz })) || obstacles.filter((o) => Math.hypot(o.x - S.x, o.z - S.z) < 4).sort((p, q) => Math.hypot(p.x - S.x, p.z - S.z) - Math.hypot(q.x - S.x, q.z - S.z))[0] || null;
+      a.ang = a.pod ? Math.atan2(S.x - a.pod.x, S.z - a.pod.z) : 0; a.tg = crawlTarget(a, hx, hz); a.dur = 60; a.until = now + (S.forcedDur || rnd(7, 11)); S.forcedDur = 0; }
+    else if (k === 'sit') { a.dur = 999; a.sitFor = S.forcedDur || rnd(12, 22); S.forcedDur = 0;
+      const mon = pois.find((p) => p.kind === 'monitor' && p.zone === zoneOf(S)); if (mon) { const M = mon.get ? { ...mon, ...mon.get() } : mon; if (Math.hypot(M.x - S.x, M.z - S.z) < 7) { a.lookAt = M; a.face = M; } } }
     S.info = 'act: ' + k;
   }
   // ---- curious exploring: points of interest per room ({x, y, z, stand, dwell:[a,b], kind, get?}), viewing spot validated once per visit
@@ -157,7 +170,8 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
   function nextTask(now, hx, hz, zp) {
     if (now > S.checkinAt && S.checkinAt > 0) { S.checkinAt = now + rnd(30, 60); return { k: 'checkin', zone: zp, t: 0, phase: 0, dwell: rnd(3, 5) }; }
     if (!S.checkinAt) S.checkinAt = now + rnd(25, 45);
-    const list = pois.filter((p) => p.zone === zp && !S.recent.includes(p));
+    const taken = peers().map((o) => o.task && o.task.p).filter(Boolean);   // v38g: characters pick different points of interest
+    const list = pois.filter((p) => p.zone === zp && !S.recent.includes(p) && !taken.some((t) => t === p || (Math.hypot(t.x - p.x, t.z - p.z) < 1.2)));
     let tot = 0; const w = list.map((p) => { const v = (p.kind === 'monitor' ? 2.5 : p.kind === 'door' ? 0.6 : 1) * (Math.hypot(p.x - S.x, p.z - S.z) < 1 ? 0.2 : 1); tot += v; return v; });
     for (let tries = 0; tries < 6 && list.length; tries++) {
       let r = Math.random() * tot, i = 0; for (; i < list.length - 1; i++) { r -= w[i]; if (r <= 0) break; }
@@ -171,6 +185,7 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
   // ---- per frame
   function update(dt, now, hx, hz, fx, fz) {
     const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+    S.now = now; if (S.homeOn) return homeUpdate(dt, now, hx, hz, fx, fz);
     if (!S.inited) { S.inited = true; S.next = now + rnd(4, 8); S.x = cow.state.x; S.z = cow.state.z; S.yaw = cow.state.yaw;
       if (!(Math.hypot(S.x - hx, S.z - hz) < 12) || Math.hypot(S.x - hx, S.z - hz) < 1.7 || !reachable(S.x, S.z) || zoneOf(S) !== zoneOf({ x: hx, z: hz })) teleportBehind(hx, hz, fx, fz, 'start'); }
     // player motion (teleports show up as jumps)
@@ -196,13 +211,14 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     S.glanceT -= dt; if (S.glanceT <= 0) { S.glanceT = rnd(9, 22); S.glanceDur = rnd(1.2, 2.2); } S.glanceDur = Math.max(0, S.glanceDur - dt);
     const sameZone = zm === zp, inRoom = zp[0] === 'r';
     // choose a playful act (less often than before; mixed into the exploring)
-    if (!S.act && (now > S.next || S.forced) && sameZone && d < 8 && !(S.task && S.task.k === 'poi' && S.task.phase === 1 && !S.forced)) { const k = S.forced || pickAct(still, inView, hx, hz); S.forced = null; startAct(k, hx, hz, fx, fz); }
+    if (!S.act && (now > S.next || S.forced) && sameZone && d < 8 && !(S.task && S.task.k === 'poi' && S.task.phase === 1 && !S.forced)) { const k = S.forced || pickAct(still, inView, hx, hz); S.forced = null; startAct(k, hx, hz, fx, fz, now); }
     // ---- goal
     const base = Math.atan2(fx, fz); let gx = S.x, gz = S.z, speed = 0.9, face = null, scoot = false, hold = false, lookAt = null, pl = 0.15;
     const slot = (ang, r) => [hx + Math.sin(base + ang) * r, hz + Math.cos(base + ang) * r];
     // long acts give way as soon as the player leaves her zone or gets far
-    if (S.act && ['peek', 'circle', 'hide', 'crawl'].includes(S.act.k) && (zm !== zp || d > 9 || (S.act.k !== 'crawl' && S.pv > 0.6))) { S.act = null; S.leanTo = 0; S.next = now + rnd(15, 35); }
-    if (!S.act || S.act.k !== 'crawl') cow.state.crawl = 0;
+    if (S.act && ['peek', 'circle', 'hide', 'crawl', 'sniff', 'sit'].includes(S.act.k) && !S.act.end && (zm !== zp || d > 9 || (!['crawl', 'sniff', 'sit'].includes(S.act.k) && S.pv > 0.6))) {
+      if (['crawl', 'sniff', 'sit'].includes(S.act.k)) S.act.end = true; else { S.act = null; S.leanTo = 0; S.next = now + rnd(15, 35); } }
+    const want = { crawl: false, sit: false, sniff: false, nap: false };
     const a = S.act;
     if (a) {
       a.t += dt;
@@ -215,12 +231,17 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
         else { [gx, gz] = [p.x + (-oz / od) * S.side * (p.r + 0.5), p.z + (ox / od) * S.side * (p.r + 0.5)]; face = 'player'; pl = 1; speed = 1.4; S.leanTo = S.side * 0.18;
           a.pop = (a.pop || 0) + dt; if (a.pop > 1.2) { cow.waveNow(2.0); a.t = a.dur; } }
       }
-      else if (a.k === 'crawl') {
-        const cp = cow.state.crawlPhase;
-        if (!a.end && cp === 'loop') { [gx, gz] = [a.tg.x, a.tg.z]; speed = 0.42; pl = 0.5; if (Math.hypot(a.tg.x - S.x, a.tg.z - S.z) < 0.4 || a.t > 10) { a.end = true; cow.state.crawl = 0; } }
-        else { hold = true; if (a.end && !cp) { a.t = a.dur; S.hopT = 0; S.hopN = 1; } if (!a.end && !cp && a.t > 2.5) { a.end = true; a.t = a.dur; } }
-        if (a.t > 14) cow.state.crawl = 0;
+      else if (a.k === 'crawl' || a.k === 'sniff') {   // v38e: crawl for ~6-10 s (or as long as forced), sniff = slow arcs around a pod, nose down
+        const cp = cow.state.crawlPhase; if (a.t > 40) a.end = true; if (!a.end) { want.crawl = true; want.sniff = a.k === 'sniff'; }
+        if (!a.end && cp === 'loop') { [gx, gz] = [a.tg.x, a.tg.z]; speed = a.k === 'sniff' ? 0.14 : 0.42; pl = a.k === 'sniff' ? 0.1 : 0.5;
+          if (a.k === 'sniff' && a.pod) lookAt = { x: a.pod.x, y: 0.25, z: a.pod.z };
+          if (Math.hypot(a.tg.x - S.x, a.tg.z - S.z) < 0.4) { if (now < a.until) a.tg = crawlTarget(a, hx, hz); else a.end = true; }
+          if (now > a.until + 4) a.end = true; }
+        else { hold = true; if (a.end && !cp) { a.t = a.dur; if (a.k === 'crawl') { S.hopT = 0; S.hopN = 1; } } if (!a.end && !cp && a.t > 2.5) { a.end = true; a.t = a.dur; } }
       }
+      else if (a.k === 'sit') { hold = true; want.sit = !a.end; face = a.face || null; if (a.lookAt) lookAt = a.lookAt; pl = 0.3;
+        if (!a.end && (a.t > a.sitFor || d < PS - 0.25)) a.end = true;
+        if (a.end) { if (!cow.state.sitPhase) a.t = a.dur; else a.t = Math.min(a.t, a.dur - 0.1); } }
       if (a.t >= a.dur) { S.act = null; S.leanTo = 0; cow.state.crawl = 0; S.next = now + rnd(15, 35); }
     }
     if (!S.act || ['hop', 'spin', 'tilt', 'flick', 'wave'].includes(S.act.k)) {
@@ -238,11 +259,19 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
         const T = S.task; T.t += dt;
         if (T.k === 'poi') {
           const P = T.p, at = Math.hypot(T.sx - S.x, T.sz - S.z) < 0.4;
-          if (T.phase === 0) { [gx, gz] = [T.sx, T.sz]; speed = 0.85; if (Math.hypot(P.x - S.x, P.z - S.z) < 3.5) lookAt = P; if (at) { T.phase = 1; T.dw = 0; } if (T.t > 25) T.done = true; }
+          if (T.phase === 0) { [gx, gz] = [T.sx, T.sz]; speed = 0.85; if (Math.hypot(P.x - S.x, P.z - S.z) < 3.5) lookAt = P;
+            if (at) { T.phase = 1; T.dw = 0; const X = cow.ext || {};   // v38c: sometimes sit crisscross to watch the monitor, or sniff around pods / stalls / bales
+              if (P.kind === 'monitor' && X.canSit && Math.random() < 0.4) { T.sit = true; T.dwell *= 1.8; }
+              else if (['pod', 'bottle', 'stall', 'hay'].includes(P.kind) && X.canSniff && Math.random() < 0.35) { T.sniff = true; T.dwell = Math.max(T.dwell, rnd(8, 12)); } }
+            if (T.t > 25) T.done = true; }
           else { hold = true; face = P; lookAt = P; T.dw += dt;
             if (T.dw > T.tiltAt) { T.tiltAt = T.dw + rnd(3, 7); S.tiltT = Math.max(S.tiltT, rnd(1.0, 2.0)); S.side = Math.random() < 0.5 ? -1 : 1; }
-            if (!T.gest && T.dw > 2 && Math.random() < dt * 0.04) { T.gest = true; cow.waveNow(1.8); }    // a curious little hand gesture
-            if (T.dw > T.dwell) T.done = true; }
+            if (!T.gest && !T.sit && !T.sniff && T.dw > 2 && Math.random() < dt * 0.04) { T.gest = true; cow.waveNow(1.8); }    // a curious little hand gesture
+            if (T.sit) want.sit = T.dw < T.dwell - 2;
+            if (T.sniff) { const left = T.dwell - T.dw; if (left > 1.5) { want.crawl = want.sniff = true; lookAt = { x: P.x, y: 0.25, z: P.z }; }
+              if (cow.state.crawlPhase === 'loop' && left > 1.5) { hold = false; T.a0 = T.a0 === undefined ? Math.atan2(S.x - P.x, S.z - P.z) : T.a0 + dt * 0.12 * S.side;
+                const rr = Math.max(1.0, P.stand - 0.45); gx = P.x + Math.sin(T.a0) * rr; gz = P.z + Math.cos(T.a0) * rr; speed = 0.14; face = null; } }
+            if (T.dw > T.dwell) { if (cow.state.crawlPhase || cow.state.sitPhase) T.dw = T.dwell; else T.done = true; } }
         } else if (T.k === 'checkin') {
           if (T.phase === 0) { const aa = Math.atan2(S.x - hx, S.z - hz); [gx, gz] = [hx + Math.sin(aa) * 2.4, hz + Math.cos(aa) * 2.4]; speed = 1.0; pl = 0.7; if (d < 2.8) { T.phase = 1; T.dw = 0; } if (T.t > 15) T.done = true; }
           else { hold = true; face = 'player'; pl = 1; T.dw += dt; if (!T.hi) { T.hi = true; if (Math.random() < 0.5) cow.waveNow(2.0); else S.tiltT = 1.6; } if (T.dw > T.dwell) T.done = true; }
@@ -261,7 +290,8 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
           }
           if (!S.esc) S.esc = valid(hx + Math.sin(away) * 2.5, hz + Math.cos(away) * 2.5); S.escT = 0.7;
         }
-        [gx, gz] = S.esc; scoot = true; hold = false; speed = 2.0; pl = 0.6;
+        [gx, gz] = S.esc; scoot = true; hold = false; speed = 1.3; pl = 0.5;   // v38e: turn and walk away (no backward / sideways scoot)
+        if (S.task) { S.task.sit = false; if (S.task.sniff) S.task.dw = S.task.dwell; }
         if (S.task && S.task.k === 'poi' && S.task.phase === 1 && Math.hypot(S.task.sx - hx, S.task.sz - hz) < PS + 0.3) S.task.done = true;   // the player took her spot
       } else S.esc = null;
     }
@@ -270,8 +300,16 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     else if (S.glanceDur > 0) { lookAt = null; pl = Math.max(pl, 0.85); }
     S.pl += (pl - S.pl) * (1 - Math.exp(-dt * 3));
     cow.state.lookAt = lookAt ? { x: lookAt.x, y: lookAt.y === undefined ? 1.3 : lookAt.y, z: lookAt.z } : null; cow.state.playerLook = S.pl;
+    // ---- v38c/e poses: forced crawl / Crawl ON toggle / a natural travel crawl every ~60-90 s of moving; sit and sniff come from acts / POIs
+    if (now < S.crawlUntil || S.crawlHold) want.crawl = true;
+    if (!hold && S.spd > 0.3) { S.moveT += dt;
+      if (S.moveT > S.crawlEvery && !want.sit && (!S.act || ['hop', 'tilt', 'flick'].includes(S.act.k)) && cow.ext && cow.ext.canCrawl) { S.moveT = 0; S.crawlEvery = rnd(60, 90); S.travelUntil = now + rnd(6, 10); S.info = 'travel crawl'; } }
+    if (now < S.travelUntil) want.crawl = true;
+    if (scoot) { want.sit = false; }
+    applyPose(want);
+    if (want.sit || cow.state.sitPhase) { hold = true; scoot = false; }
     if (cow.state.crawlPhase && cow.state.crawlPhase !== 'loop') { hold = true; scoot = false; }
-    if (cow.state.crawlPhase === 'loop') speed = Math.min(speed, 0.45);
+    if (cow.state.crawlPhase === 'loop') speed = Math.min(speed, want.sniff ? 0.16 : 0.45);
     // keep the goal somewhere she can actually stand (in the player's zone when following)
     if (!hold) { [gx, gz] = pushOut(...clampWalk(gx, gz, zp === zm || S.act ? null : zp)); [gx, gz] = clampWalk(gx, gz); if (!reachable(gx, gz)) { const c = snapCell(gx, gz); if (c >= 0) { gx = cx(c); gz = cz(c); } } }
     // ---- steering
@@ -280,29 +318,118 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     let tvx = 0, tvz = 0;
     if (!hold && ed > 0.12) { const v = speed * Math.min(1, ed / 0.8); tvx = ex / ed * v; tvz = ez / ed * v; }
     for (const o of obstacles) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz), R0 = o.r + 0.7;
-      if (od < R0 && od > 1e-3 && (S.act && S.act.pod === o ? Math.hypot(gx - o.x, gz - o.z) > o.r + 0.6 : true)) { const k = (R0 - od) / R0 * 1.4; tvx += ox / od * k; tvz += oz / od * k; } }
+      if (od < R0 && od > 1e-3 && (S.act && S.act.pod === o ? Math.hypot(gx - o.x, gz - o.z) > o.r + 0.6 : true) && !(S.task && S.task.sniff)) { const k = (R0 - od) / R0 * 1.4; tvx += ox / od * k; tvz += oz / od * k; } }
     if (d < PS + 0.1 && !hold) { const k = (PS + 0.1 - d) / (PS + 0.1) * 2.0; tvx += dx / Math.max(d, 0.1) * k; tvz += dz / Math.max(d, 0.1) * k; }
-    const acc = 1 - Math.exp(-dt * 4.5); S.vx += (tvx - S.vx) * acc; S.vz += (tvz - S.vz) * acc;
-    const vm = Math.hypot(S.vx, S.vz), vmax = Math.max(speed, 1.0) + 0.3; if (vm > vmax) { S.vx *= vmax / vm; S.vz *= vmax / vm; }
-    let nx = S.x + S.vx * dt, nz = S.z + S.vz * dt; [nx, nz] = pushOut(...clampWalk(nx, nz)); [nx, nz] = clampWalk(nx, nz);
-    const moved = Math.hypot(nx - S.x, nz - S.z); S.spd += (moved / Math.max(dt, 1e-3) - S.spd) * (1 - Math.exp(-dt * 8)); S.x = nx; S.z = nz;
-    // ---- heading: walk where she is going; when standing (or scooting back) face the player / what she is looking at
-    let want = S.yaw;
-    if (S.spd > 0.25 && !scoot) want = Math.atan2(S.vx, S.vz);
-    else if (face === 'player' || scoot) want = Math.atan2(hx - S.x, hz - S.z);
-    else if (face && face.x !== undefined) want = Math.atan2(face.x - S.x, face.z - S.z);
-    S.yaw += wrap(want - S.yaw) * (1 - Math.exp(-dt * (scoot ? 7 : 4.5)));
-    // ---- procedural layers: hop / spin / lean / tilt / flick
+    for (const o of peers()) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz); if (od < 1.6 && od > 1e-3) { const k = (1.6 - od) / 1.6 * 1.2; tvx += ox / od * k; tvz += oz / od * k; } }   // v38g: friends keep apart
+    locomote(dt, tvx, tvz, speed, hold, faceYaw(face, hx, hz), (x, z) => { const p = pushOut(...clampWalk(x, z)); return clampWalk(p[0], p[1]); });
+    return finish(now, dt, hold, scoot, d);
+  }
+  function applyPose(w) { cow.state.crawl = w.crawl ? 1 : 0; cow.state.sniff = w.sniff ? 1 : 0; cow.state.sit = w.sit ? 1 : 0; cow.state.nap = w.nap ? 1 : 0; }
+  const faceYaw = (face, hx, hz) => face === 'player' ? Math.atan2(hx - S.x, hz - S.z) : face && face.x !== undefined ? Math.atan2(face.x - S.x, face.z - S.z) : null;
+  // v38e: heading-first locomotion. She turns toward where she is going (smooth ease in / out: gain 2.25 /s, max 1.75 rad/s, angular
+  // acceleration 5 rad/s^2 - half the old 4.5 /s exponential turn, which peaked at ~7 rad/s on a 90 deg turn), only ever moves along her
+  // heading (no sideways / backward sliding while Walk plays), slows to ~50 % on sharp turns and turns in place beyond ~80 deg.
+  const TURN_GAIN = 2.25, TURN_MAX = 1.75, TURN_ACC = 5.0;
+  const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  function locomote(dt, tvx, tvz, speed, hold, faceY, clampFn) {
+    const tv = Math.hypot(tvx, tvz); let wantY = S.yaw, mv = 0;
+    if (!hold && tv > 0.08) { wantY = Math.atan2(tvx, tvz); mv = tv; } else if (faceY !== null && faceY !== undefined) wantY = faceY;
+    const err = wrap(wantY - S.yaw), wcmd = clamp(err * TURN_GAIN, -TURN_MAX, TURN_MAX);
+    S.turnW += clamp(wcmd - S.turnW, -TURN_ACC * dt, TURN_ACC * dt); S.yaw = wrap(S.yaw + S.turnW * dt);
+    const ae = Math.abs(err), f = (1 - 0.5 * smooth(0.3, 0.6, ae)) * (1 - smooth(0.95, 1.4, ae));
+    const target = Math.min(mv, Math.max(speed, 1.0) + 0.3) * f;
+    S.fwd += (target - S.fwd) * (1 - Math.exp(-dt * (target > S.fwd ? 3.5 : 6)));
+    S.vx = Math.sin(S.yaw) * S.fwd; S.vz = Math.cos(S.yaw) * S.fwd;
+    let nx = S.x + S.vx * dt, nz = S.z + S.vz * dt; [nx, nz] = clampFn(nx, nz);
+    const mx = nx - S.x, mz = nz - S.z, mvd = Math.hypot(mx, mz), sp = mvd / Math.max(dt, 1e-3);
+    S.spd += (sp - S.spd) * (1 - Math.exp(-dt * 8)); S.x = nx; S.z = nz;
+    if (sp > 0.3) { const a = Math.abs(wrap(Math.atan2(mx, mz) - S.yaw)) * 180 / Math.PI, H = S.hv; H.n++; H.sum += a; H.max = Math.max(H.max, a); if (a > 25) H.over++; }
+  }
+  function finish(now, dt, hold, scoot, d) {
     let hop = 0; if (S.hopN > 0) { S.hopT += dt; const u = S.hopT / 0.42; hop = 0.16 * Math.sin(Math.PI * Math.min(1, u)); if (u >= 1) { S.hopN--; S.hopT = 0; } }
-    if (scoot && S.spd > 0.4) hop = Math.max(hop, 0.03 * Math.abs(Math.sin(now * 12)));
+    if (cow.state.crawlPhase || cow.state.sitPhase || (cow.state.napW || 0) > 0.1) { hop = 0; S.hopN = 0; }
     let spin = 0; if (S.spinT > 0) { S.spinT += dt; const u = Math.min(1, S.spinT / 0.8); spin = TAU * u * u * (3 - 2 * u); if (u >= 1) S.spinT = 0; }
     S.lean += (S.leanTo - S.lean) * (1 - Math.exp(-dt * 6));
     S.tiltT = Math.max(0, S.tiltT - dt); S.flickT = Math.max(0, S.flickT - dt);
     cow.state.tiltAdd = S.tiltT > 0 ? 0.28 * Math.min(1, S.tiltT / 0.3) * S.side : 0;
     cow.state.flick = S.flickT > 0 ? Math.min(1, S.flickT / 0.3) : 0;
     cow.place(S.x, S.z, S.yaw + spin, hop, S.lean);
-    S.mode = hold ? 'idle' : scoot ? 'scoot' : 'walk';
+    S.mode = hold ? 'idle' : scoot ? 'away' : 'walk';
     return { x: S.x, z: S.z, speed: S.spd, moving: clamp(S.spd / 0.6, 0, 1), d, zone: zoneOf(S) };
   }
-  return { S, pois, act: (k) => { S.forced = k; }, task: () => S.task, update, reset: () => { S.inited = false; S.act = null; S.task = null; cow.state.crawl = 0; cow.state.lookAt = null; cow.state.playerLook = undefined; }, teleportBehind, valid, reachable };
+  // ---- v38b home stall: walk (or quietly reappear) into her stall, live there (idle, small wanders, naps, sitting, sniffing,
+  // peeking over the rail at a nearby player), never follow the player out; 'Let out' walks back out through the gate.
+  // stall = { C, F, front, yaw, inBox(x, z), clampBox(x, z), clampPath(x, z), randIn() } in world metres (from barnroom via main)
+  function homeUpdate(dt, now, hx, hz, fx, fz) {
+    const H = S.home, st = H.stall, C = st.C, F = st.F, want = { crawl: false, sit: false, sniff: false, nap: false };
+    const pzone = zoneOf({ x: hx, z: hz }), dP = Math.hypot(S.x - hx, S.z - hz);
+    const seen = (x, z) => { const ddx = x - hx, ddz = z - hz, dd = Math.hypot(ddx, ddz); return dd < 16 && Math.acos(clamp((ddx * fx + ddz * fz) / Math.max(dd, 0.1), -1, 1)) < 1.05; };
+    if (!H.phase) {
+      const far = Math.hypot(S.x - F.x, S.z - F.z) > 12, here = st.inBox(S.x, S.z);
+      if (here || !S.inited || ((pzone !== 'r4' || zoneOf(S) !== 'r4' || far) && !(pzone === 'r4' && seen(S.x, S.z) && !far))) {
+        S.x = C.x; S.z = C.z; S.yaw = st.yaw; S.vx = S.vz = S.fwd = S.turnW = 0; H.phase = 'in'; H.sub = null; S.info = 'home: reappeared in stall ' + (st.i + 1);
+      } else { H.phase = 'goto'; S.info = 'home: walking to stall ' + (st.i + 1); }
+      S.inited = true; S.act = null; S.task = null;
+    }
+    let gx = S.x, gz = S.z, speed = 0.9, hold = true, face = null, lookAt = null, pl = 0.15, clampFn = st.clampBox;
+    const busy = cow.state.sitPhase || (cow.state.crawlPhase && cow.state.crawlPhase !== 'loop') || (cow.state.napW || 0) > 0.15;
+    if (H.phase === 'goto') {
+      gx = F.x; gz = F.z; hold = false; clampFn = (x, z) => { const p = pushOut(...clampWalk(x, z)); return clampWalk(p[0], p[1]); };
+      H.t = (H.t || 0) + dt; if (Math.hypot(F.x - S.x, F.z - S.z) < 0.3) { H.phase = 'enter'; H.t = 0; }
+      if (H.t > 40 && !seen(C.x, C.z)) { S.x = C.x; S.z = C.z; S.yaw = st.yaw; H.phase = 'in'; }
+    } else if (H.phase === 'enter') { gx = C.x; gz = C.z; hold = false; speed = 0.55; clampFn = st.clampPath; if (Math.hypot(C.x - S.x, C.z - S.z) < 0.25) { H.phase = 'in'; H.sub = null; } }
+    else if (H.phase === 'exit') {
+      if (busy) hold = true; else { gx = F.x; gz = F.z; hold = false; speed = 0.55; clampFn = st.inBox(S.x, S.z) || Math.hypot(S.x - F.x, S.z - F.z) > 0.3 ? st.clampPath : clampFn; }
+      if (!busy && Math.hypot(F.x - S.x, F.z - S.z) < 0.3) { S.homeOn = false; S.home = null; S.gate = 0; S.task = null; S.act = null; S.info = 'let out'; applyPose(want); return finish(now, dt, true, false, dP); }
+    } else {   // in the stall
+      const pNear = pzone === 'r4' && Math.hypot(hx - st.front.x, hz - st.front.z) < 4.2;
+      let sb = H.sub;
+      if (S.homeForce) { const f0 = S.homeForce; S.homeForce = null; sb = H.sub = { k: f0.k, t: 0, dur: f0.dur }; }
+      if (!sb || sb.t >= sb.dur) {
+        const X = cow.ext || {}, opts = [['idle', 3], ['wander', 3], ['sit', X.canSit ? 1.2 : 0], ['sniff', X.canSniff ? 1 : 0], ['nap', X.canNap && !pNear ? 1.3 : 0]];
+        if (pNear && (H.peekCool || 0) < now) sb = { k: 'peek' };
+        else { let r = Math.random() * opts.reduce((a, o) => a + o[1], 0); sb = { k: 'idle' }; for (const [k, w] of opts) { r -= w; if (r <= 0) { sb = { k }; break; } } }
+        sb.t = 0; H.faceY = null; sb.dur = { idle: rnd(4, 9), wander: rnd(5, 10), sit: rnd(12, 25), sniff: rnd(6, 10), nap: rnd(20, 45), peek: rnd(6, 12), crawl: 8 }[sb.k] || 6; H.sub = sb; S.info = 'stall: ' + sb.k;
+      }
+      sb.t += dt; const left = sb.dur - sb.t;
+      if (sb.k === 'peek') { gx = st.front.x; gz = st.front.z; hold = Math.hypot(gx - S.x, gz - S.z) < 0.15; speed = 0.45; face = 'player'; pl = 1;
+        if (hold && !sb.hi) { sb.hi = true; if (Math.random() < 0.4) cow.waveNow(2.0); else S.tiltT = 1.6; }
+        if (!pNear) sb.t = sb.dur; if (sb.t >= sb.dur) H.peekCool = now + 10; }
+      else if (sb.k === 'wander') { if (!sb.tg || Math.hypot(sb.tg[0] - S.x, sb.tg[1] - S.z) < 0.15) sb.tg = st.randIn(); [gx, gz] = sb.tg; hold = false; speed = 0.32; }
+      else if (sb.k === 'nap') {   // v38: settle in the middle of the stall, lying across it (the long axis), then nap
+        if (sb.ny === undefined) sb.ny = st.yaw + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2;
+        const dc = Math.hypot(C.x - S.x, C.z - S.z); if (!sb.set && dc > 0.12) { gx = C.x; gz = C.z; hold = false; speed = 0.3; } else { sb.set = true; H.faceY = sb.ny; }
+        want.nap = left > 2 && sb.set && Math.abs(wrap(sb.ny - S.yaw)) < 0.25 || (cow.state.napW || 0) > 0.15 && left > 2; if (pNear && dP < 2.6 && !sb.woke) { sb.woke = true; if (Math.random() < 0.5) sb.t = Math.max(sb.t, sb.dur - 2); } }
+      else if (sb.k === 'sit') want.sit = left > 2;
+      else if (sb.k === 'sniff' || sb.k === 'crawl') { want.crawl = left > 1.5; want.sniff = sb.k === 'sniff';
+        if (cow.state.crawlPhase === 'loop' && want.crawl) { if (!sb.tg || Math.hypot(sb.tg[0] - S.x, sb.tg[1] - S.z) < 0.15) sb.tg = st.randIn(); [gx, gz] = sb.tg; hold = false; speed = sb.k === 'sniff' ? 0.14 : 0.38; } }
+      if (sb.t >= sb.dur && busy) sb.t = sb.dur - 0.01;
+    }
+    if (S.crawlHold || now < S.crawlUntil) want.crawl = !want.sit && !want.nap;
+    if (H.phase !== 'in') { want.sit = want.nap = false; }
+    if (S.reactT > 0) pl = Math.max(pl, 0.8);
+    S.pl += (pl - S.pl) * (1 - Math.exp(-dt * 3));
+    cow.state.lookAt = lookAt; cow.state.playerLook = S.pl;
+    applyPose(want);
+    if (want.sit || cow.state.sitPhase || want.nap || (cow.state.napW || 0) > 0.15 || (cow.state.crawlPhase && cow.state.crawlPhase !== 'loop')) hold = true;
+    if (cow.state.crawlPhase === 'loop') speed = Math.min(speed, want.sniff ? 0.16 : 0.4);
+    S.gate = H.phase === 'enter' || H.phase === 'exit' || (H.phase === 'goto' && Math.hypot(S.x - F.x, S.z - F.z) < 1.8) ? 1 : 0;
+    let tvx = 0, tvz = 0;
+    if (!hold) { let wx = gx, wz = gz; if (H.phase === 'goto') [wx, wz] = navigate(S.x, S.z, gx, gz, dt); const ex = wx - S.x, ez = wz - S.z, ed = Math.hypot(ex, ez);
+      if (ed > 0.08) { const v = speed * Math.min(1, ed / 0.5); tvx = ex / ed * v; tvz = ez / ed * v; } }
+    locomote(dt, tvx, tvz, speed, hold, faceYaw(face, hx, hz) ?? (H.phase === 'in' && hold && !lookAt && Math.random() < 0.002 ? S.yaw + rnd(-1, 1) : (H.faceY ?? null)), clampFn);
+    return finish(now, dt, hold, false, dP);
+  }
+
+  return { S, pois, act: (k) => { S.forced = k; }, task: () => S.task, update, reset: () => { S.inited = false; S.act = null; S.task = null; if (S.home) S.home.phase = null; cow.state.crawl = 0; cow.state.sit = 0; cow.state.sniff = 0; cow.state.nap = 0; cow.state.lookAt = null; cow.state.playerLook = undefined; }, teleportBehind, valid, reachable,
+    // v38e controls
+    crawlNow: (dur = rnd(6, 10)) => { S.crawlUntil = 0; if (S.homeOn) S.homeForce = { k: 'crawl', dur }; else { S.forcedDur = dur; S.forced = 'crawl'; S.crawlUntil = (S.now || 0) + dur; } },
+    sitNow: (dur = rnd(12, 22)) => { if (S.homeOn) S.homeForce = { k: 'sit', dur }; else { S.forcedDur = dur; S.forced = 'sit'; if (S.act && !['sit'].includes(S.act.k)) S.act.end = true; } },
+    sniffNow: (dur = rnd(7, 11)) => { if (S.homeOn) S.homeForce = { k: 'sniff', dur }; else { S.forcedDur = dur; S.forced = 'sniff'; } },
+    setCrawlHold: (on) => { S.crawlHold = !!on; }, crawlHold: () => S.crawlHold,
+    setHome: (stall) => { if (stall) { if (S.homeOn && S.home && S.home.stall.i === stall.i && S.home.phase !== 'exit') return; S.homeOn = true; S.home = { stall, phase: null }; S.act = null; S.task = null; }
+      else if (S.homeOn) { if (S.home && (S.home.phase === 'in' || S.home.phase === 'enter')) { S.home.phase = 'exit'; S.home.sub = null; } else { S.homeOn = false; S.home = null; S.gate = 0; } } },
+    home: () => (S.homeOn ? { stall: S.home.stall.i, phase: S.home.phase, sub: S.home.sub && S.home.sub.k } : null),
+    hvStats: () => ({ samples: S.hv.n, mean: S.hv.n ? +(S.hv.sum / S.hv.n).toFixed(2) : 0, max: +S.hv.max.toFixed(2), over25: S.hv.over }), resetHv: () => { S.hv = { n: 0, sum: 0, max: 0, over: 0 }; } };
+
 }

@@ -2,22 +2,23 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38b';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=38';
-import { pinkRoomCfg } from './pinkroom.js?v=38';
-import { barnRoomCfg } from './barnroom.js?v=38';
-import { buildOpRoom } from './oproom.js?v=38';
-import { buildCorridor } from './corridor.js?v=38';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=38';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=38';
-import { createScreens } from './screens.js?v=38';
-import { createPods } from './pods.js?v=38';
-import { createMoo } from './moo.js?v=38';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38';
-import { createMissMoo } from './misscow.js?v=38';
-import { attachMooModel } from './moomodel.js?v=38';
-import { createCompanion } from './companion.js?v=38';
+import { buildChamber } from './chamber.js?v=38b';
+import { pinkRoomCfg } from './pinkroom.js?v=38b';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38b';
+import { buildOpRoom } from './oproom.js?v=38b';
+import { buildCorridor } from './corridor.js?v=38b';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=38b';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=38b';
+import { createScreens } from './screens.js?v=38b';
+import { createPods } from './pods.js?v=38b';
+import { createMoo } from './moo.js?v=38b';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38b';
+import { createMissMoo } from './misscow.js?v=38b';
+import { attachMooModel } from './moomodel.js?v=38b';
+import { createCompanion } from './companion.js?v=38b';
+import { DRIVE_DEFAULTS } from './config.js?v=38b';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -632,8 +633,141 @@ const MOO_POI = []; const zr = (x, z) => zoneOf({ x, z });
   // barn stalls: 6 a side along the walls (barnroom.js: 60°..150° from the arrival axis, radius 5.25)
   for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) { const a = (60 + 7.5 + k * 15) * Math.PI / 180, p = room4.root.localToWorld(new THREE.Vector3(sd * Math.sin(a) * 5.25, 0, Math.cos(a) * 5.25));
     if (k % 2 === 0) MOO_POI.push({ kind: 'stall', zone: 'r4', x: p.x, y: 0.9, z: p.z, stand: 1.4, dwell: [5, 12] }); } }
-const companion = createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR: [5.3, 5.3, 5.0, 4.6], obstacles: MOO_OBST, lookTargets: MOO_LOOK, pois: MOO_POI });
+const companion = createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR: [5.3, 5.3, 5.0, 4.6], obstacles: MOO_OBST, lookTargets: MOO_LOOK, pois: MOO_POI, peers: () => (typeof CAST === 'undefined' ? [] : CAST.filter((c) => !c.isAri && c.active).map((c) => c.comp.S)), id: 'ari' });
 if (document.getElementById('mooFollow')) { document.getElementById('mooFollow').addEventListener('click', () => setFollow(!mooFollow.on)); setFollow(mooFollow.on); }
+
+// ---------- v38: Ari's home stall, friends from the Drive roster, skins and pose controls ----------
+// Stalls come from barnroom.js (12, mirrored 6 + 6, room-local) and are wrapped here in world metres for the companion.
+const LSX = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
+const STALLS = (() => { const r4 = room4.root, v3 = new THREE.Vector3(), HALF = 7.5 * Math.PI / 180, BODY = 0.3;
+  return BARN_STALLS.list.map((b) => {
+    const W = (p) => { r4.localToWorld(v3.set(p[0], 0, p[1])); return { x: v3.x, z: v3.z }; };
+    const C = W(b.local.C), F = W(b.local.F), front = W(b.local.front);
+    const polar = (x, z) => { r4.worldToLocal(v3.set(x, 0, z)); return [Math.hypot(v3.x, v3.z), Math.atan2(b.s * v3.x, v3.z) - b.ac]; };
+    const back = (r, da) => W([b.s * Math.sin(b.ac + da) * r, Math.cos(b.ac + da) * r]);
+    const lim = (r) => Math.max(0.004, HALF - (BODY + 0.06) / r);           // keep her body clear of the dividers
+    const R0 = 5.24 + BODY, R1 = 6.33 - BODY;                               // inside the front rail .. in front of the feed trough
+    const clampBox = (x, z) => { let [r, a] = polar(x, z); r = Math.min(R1, Math.max(R0, r)); const l = lim(r); a = Math.min(l, Math.max(-l, a)); const p = back(r, a); return [p.x, p.z]; };
+    const inBox = (x, z) => { const [r, a] = polar(x, z); return r > 5.2 && r < 6.45 && Math.abs(a) < HALF; };
+    const clampPath = (x, z) => { let [r, a] = polar(x, z); if (r > 5.0) { r = Math.min(R1, r); const l = lim(Math.max(r, 5.2)); a = Math.min(l, Math.max(-l, a)); } const p = back(r, a); return [p.x, p.z]; };
+    const randIn = () => { const r = R0 + Math.random() * (R1 - R0), l = lim(r), p = back(r, (Math.random() * 2 - 1) * l); return [p.x, p.z]; };
+    return { i: b.i, C, F, front, yaw: Math.atan2(F.x - C.x, F.z - C.z), inBox, clampBox, clampPath, randIn, polar };
+  }); })();
+panelSys.addTargets(BARN_STALLS.targets());
+const BUILTIN_SKIN = { id: 'circuit-doll', name: 'Circuit Doll', builtin: true };
+const CAST = [], CAST_MAX_OUT = 3;
+const castCommon = { RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R, roomR: [5.3, 5.3, 5.0, 4.6], obstacles: MOO_OBST, lookTargets: MOO_LOOK, pois: MOO_POI };
+const peersOf = (id) => () => CAST.filter((c) => c.id !== id && c.comp && c.active).map((c) => c.comp.S);
+const stallParam = (id) => { const all = Q.get('moostalls'); if (all) for (const kv of all.split(',')) { const [k, v] = kv.split(':'); if (k && k.toLowerCase() === id && +v >= 1 && +v <= 12) return +v - 1; }
+  if (id === 'ari' && Q.has('moostall') && +Q.get('moostall') >= 1 && +Q.get('moostall') <= 12) return +Q.get('moostall') - 1; return null; };
+function castMember(id, name, cw, model, comp, extra = {}) {
+  const saved = LSX.get('ariStall:' + id, null), p = stallParam(id);
+  const c = { id, name, cow: cw, model, comp, isAri: id === 'ari', skins: [extra.builtinSkin || BUILTIN_SKIN], skin: null, skinBusy: false, active: true, acc: 0, ...extra };
+  c.stall = p ?? (saved !== null && saved !== '' ? +saved : null);
+  const hp = id === 'ari' ? Q.get('moohome') : null;
+  c.home = hp !== null ? hp === '1' || hp === 'stall' : LSX.get('ariHome:' + id, id === 'ari' ? '0' : '1') === '1';
+  CAST.push(c); return c;
+}
+const ari = castMember('ari', 'Ari', cow, mooModel, companion);
+let castSel = 0, castMsg = '';
+// free stall for a character: keeps its own, otherwise the first one nobody lives in (Ari defaults to stall 1)
+function freeStall(c, from = 0, dir = 1) { for (let k = 0; k < 12; k++) { const i = (from + dir * k + 120) % 12; if (!CAST.some((o) => o !== c && o.stall === i)) return i; } return null; }
+for (const c of CAST) if (c.stall === null || CAST.some((o) => o !== c && o.stall === c.stall && CAST.indexOf(o) < CAST.indexOf(c))) c.stall = freeStall(c, c.isAri ? 0 : 1);
+function castSave(c) { LSX.set('ariStall:' + c.id, c.stall === null ? '' : String(c.stall)); LSX.set('ariHome:' + c.id, c.home ? '1' : '0'); }
+function castOccupancy() { for (let i = 0; i < 12; i++) { const o = CAST.find((c) => c.stall === i); const st = BARN_STALLS.list[i]; const nm = o ? o.name : null;
+  if ((st.occupant && st.occupant.name) !== nm) BARN_STALLS.setOccupant(i, o ? { name: o.name, id: o.id } : null);
+  if (o) BARN_STALLS.setSkinLabel(i, skinOf(o).name, o.skins.length); } BARN_STALLS.select(CAST[castSel] ? CAST[castSel].stall : null); }
+const skinOf = (c) => c.skins.find((s) => s.id === c.skin) || c.skins[0];
+const nOut = () => CAST.filter((c) => !c.home).length;
+// skins: <character>/skins.json from sync_gcs.py (Ari: model/ari/skins.json). ?ariskin= / ?mooskin= picks one by id or name.
+async function loadSkins(c, url) {
+  try { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { credentials: 'omit', cache: 'no-store' }); if (!r.ok) return; const j = await r.json();
+    c.skinsFor = j.model || null; c.skins = (j.skins || []).filter((s) => s.builtin || s.base); if (!c.skins.length || !c.skins[0].builtin) c.skins.unshift(c.builtinSkin || BUILTIN_SKIN);
+    const want = (c.isAri ? Q.get('ariskin') || Q.get('mooskin') : null) || LSX.get('ariSkin:' + c.id, null);
+    const f = want && c.skins.find((s) => s.id === want.toLowerCase() || s.name.toLowerCase() === want.toLowerCase().replace(/[-_+]/g, ' '));
+    c.skin = f ? f.id : c.skins[0].id; castOccupancy(); castRedraw();
+  } catch (e) { console.warn('[cast] skins', c.id, e.message); } }
+const MOO_GCS = DRIVE_DEFAULTS.gcs;
+loadSkins(ari, Q.get('mooskins') || `${MOO_GCS}/model/ari/skins.json`);
+// skins only fit the model file they were painted for (same UVs): offer just the built-in look otherwise
+const skinFits = (c) => { if (!c.skinsFor) return true; const n = (c.model && c.model.name) || c.modelName || ''; return !n || n.split('/').pop().split('?')[0] === c.skinsFor; };
+function cycleSkin(c, d) { const list = skinFits(c) ? c.skins : c.skins.filter((s) => s.builtin); if (list.length < 2) { castMsg = `${c.name} has one skin`; castRedraw(); return; }
+  const i = Math.max(0, list.findIndex((s) => s.id === c.skin)); c.skin = list[(i + d + list.length) % list.length].id; c.skinQuiet = false; LSX.set('ariSkin:' + c.id, c.skin); castMsg = `${c.name}: ${skinOf(c).name}`; castOccupancy(); castRedraw(); }
+function applySkins() { for (const c of CAST) { const X = c.cow.ext; if (!X || !X.setSkin || c.skinBusy || !c.skin) continue;
+  const want = skinFits(c) ? skinOf(c) : c.skins[0], cur = X.skin() || c.skins[0].id; if (cur === want.id) continue;
+  c.skinBusy = true; X.setSkin(want, c.skinQuiet !== false).then((ok) => { c.skinBusy = false; c.skinQuiet = true; if (!ok) { castMsg = `${want.name}: textures failed to load`; c.skin = c.skins[0].id; castRedraw(); } }); } }
+// friends: model/roster.json (Drive subfolders of "Miss Moo Model"); ?moofriend=1 adds a placeholder friend (built-in figure) for testing
+function addFriend(e, placeholder = false) {
+  const fc = createMissMoo({ scale: e.scale || undefined }); scene.add(fc.group, fc.mirror); fc.mirror.visible = false; fc.group.visible = false;
+  const fm = placeholder || !e.model ? null : attachMooModel(fc, (st) => console.log('[moomodel:' + e.id + ']', st.state, st.name, st.error || ''), { name: e.file || e.name, ext: e.ext || 'glb', urls: [e.model + (e.md5 ? '?h=' + encodeURIComponent(e.md5) : '')] });
+  const comp = createCompanion({ cow: fc, ...castCommon, peers: peersOf(e.id), id: e.id });
+  const sp = STALLS[0]; fc.place(sp.C.x, sp.C.z, sp.yaw);
+  const c = castMember(e.id, e.name, fc, fm, comp, { friend: true, placeholder, modelName: e.file, builtinSkin: { id: 'original', name: 'Original', builtin: true } });
+  if (c.stall === null || CAST.some((o) => o !== c && o.stall === c.stall)) c.stall = freeStall(c, 1);
+  if (!c.home && nOut() > CAST_MAX_OUT) c.home = true;
+  if (e.skins) loadSkins(c, e.skins); castOccupancy(); castRedraw(); return c;
+}
+(async () => { try { const url = Q.get('mooroster') || `${MOO_GCS}/model/roster.json`; const r = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { credentials: 'omit', cache: 'no-store' });
+  if (r.ok) { const j = await r.json(); for (const e of j.characters || []) { if (e.id === 'ari') { if (e.skins && Q.get('mooskins') === null && !e.skins.endsWith('/model/ari/skins.json')) loadSkins(ari, e.skins); continue; } if (!CAST.some((c) => c.id === e.id)) addFriend(e); } } } catch (e) { console.warn('[cast] roster', e.message); }
+  if (Q.get('moofriend') === '1' && !CAST.some((c) => c.id === 'friend')) addFriend({ id: 'friend', name: 'Friend' }, true); })();
+// actions on the selected character (panel cast wing, 2D box, stall plaques, wardrobe mirrors, key C)
+function castAct(id) {
+  const c = CAST[castSel] || ari; castMsg = '';
+  if (id === 'c-who') castSel = (castSel + 1) % CAST.length;
+  else if (id === 'c-stall-' || id === 'c-stall+') { const d = id === 'c-stall+' ? 1 : -1; const n = freeStall(c, (c.stall ?? 0) + d, d); if (n !== null) { c.stall = n; castSave(c); castMsg = `${c.name}'s home: stall ${n + 1}`; } }
+  else if (id === 'c-home') setHome(c, !c.home);
+  else if (id === 'c-allhome') { for (const o of CAST) if (!o.home) setHome(o, true); castMsg = 'Everyone is heading to their stalls'; }
+  else if (id === 'c-skin-' || id === 'c-skin+') cycleSkin(c, id === 'c-skin+' ? 1 : -1);
+  else if (id === 'c-crawl') { wake(c); c.comp.crawlNow(); castMsg = `${c.name} drops to all fours`; }
+  else if (id === 'c-crawlhold') { wake(c); c.comp.setCrawlHold(!c.comp.crawlHold()); castMsg = `Crawl: ${c.comp.crawlHold() ? 'ON' : 'OFF'}`; }
+  else if (id === 'c-sit') { wake(c); if (c.cow.ext && c.cow.ext.canSit) { c.comp.sitNow(); castMsg = `${c.name} sits down`; } else castMsg = `${c.name} has no sitting clip`; }
+  else if (id === 'c-sniff') { wake(c); if (c.cow.ext && c.cow.ext.canSniff) { c.comp.sniffNow(); castMsg = `${c.name} sniffs around`; } else castMsg = `${c.name} has no sniff clip`; }
+  else if (id.startsWith('x-stall-')) { const i = +id.slice(8), o = CAST.find((k) => k.stall === i);
+    if (o) { castSel = CAST.indexOf(o); castMsg = `${o.name}'s stall (${i + 1})`; } else { c.stall = i; castSave(c); castMsg = `${c.name}'s home: stall ${i + 1}`; } }
+  else if (id.startsWith('x-skin-')) { const [, , i, d] = id.split('-'); const o = CAST.find((k) => k.stall === +i); if (o) { castSel = CAST.indexOf(o); cycleSkin(o, d === 'next' ? 1 : -1); } }
+  castOccupancy(); castRedraw();
+}
+// make sure the character's companion brain is running (Ari: companion mode) before a pose command
+function wake(c) { if (c.isAri && !c.home && !mooFollow.on) setFollow(true); }
+function setHome(c, on) {
+  if (!on && c.home && nOut() >= CAST_MAX_OUT) { castMsg = `Only ${CAST_MAX_OUT} can be out at once - send someone to a stall first`; return; }
+  if (on && c.stall === null) c.stall = freeStall(c, 0);
+  c.home = on; castSave(c); castMsg = on ? `${c.name} is going to stall ${c.stall + 1}` : `${c.name} is out`;
+  if (!on && c.isAri && !mooFollow.on) setFollow(true);
+}
+function castView() { const c = CAST[castSel] || ari, h = c.comp.home ? c.comp.home() : null;
+  const state = h ? (h.phase === 'in' ? `IN STALL · ${(h.sub || 'idle').toUpperCase()}` : h.phase === 'goto' ? 'WALKING TO STALL' : h.phase === 'exit' ? 'COMING OUT' : 'GOING IN') : c.home ? 'HOME (WAITING)' : c.isAri && !mooFollow.on ? 'OUT · COMPANION OFF' : 'OUT · FOLLOWING';
+  return { who: c.name.toUpperCase(), stall: c.stall === null ? '–' : c.stall + 1, home: c.home, state, skin: (skinFits(c) ? skinOf(c) : c.skins[0]).name, crawlHold: c.comp.crawlHold && c.comp.crawlHold(), nOut: nOut(), msg: castMsg }; }
+let castDrawn = '';
+function castRedraw() { const v = castView(), k = JSON.stringify(v); if (k === castDrawn) return; castDrawn = k; panelSys.redrawCast();
+  const set = (id, t) => { const e = document.getElementById(id); if (e && e.textContent !== t) e.textContent = t; };
+  set('castWho', '🦊 ' + (CAST[castSel] || ari).name); set('castStall', `Stall ${v.stall}`); set('castHome', v.home ? '🚪 Let out' : '🏠 Send to stall'); set('castSkin', v.skin);
+  set('castCrawlHold', `Crawl: ${v.crawlHold ? 'ON' : 'OFF'}`); set('castStatus', `${v.state.toLowerCase()}${v.msg ? ' · ' + v.msg : ''}`); }
+panelSys.setCastHook((id) => castAct(id)); panelSys.setCastView(castView);
+for (const [el, id] of [['castWho', 'c-who'], ['castStallP', 'c-stall-'], ['castStallN', 'c-stall+'], ['castHome', 'c-home'], ['castAll', 'c-allhome'], ['castSkinP', 'c-skin-'], ['castSkinN', 'c-skin+'],
+  ['castCrawl', 'c-crawl'], ['castCrawlHold', 'c-crawlhold'], ['castSit', 'c-sit'], ['castSniff', 'c-sniff']]) { const e = document.getElementById(el); if (e) e.addEventListener('click', () => castAct(id)); }
+window.addEventListener('keydown', (e) => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.code === 'KeyC' && !e.repeat && !e.ctrlKey && !e.metaKey) castAct(e.shiftKey ? 'c-crawlhold' : 'c-crawl'); });
+castOccupancy(); castRedraw();
+window.__panels = panelSys;
+window.__cast = { act: castAct, CAST, STALLS, view: castView, setHome, BARN_STALLS, sel: (i) => { castSel = i; castRedraw(); } };
+// per frame: friends (companion brains + LOD), stall gates, skins
+function updateCast(dt, now, e) {
+  for (const c of CAST) {
+    if (c.isAri) continue;
+    c.comp.setHome(c.home ? STALLS[c.stall] : null);
+    const r = c.comp.update(dt, now, headP.x, headP.z, -e[8], -e[10]);
+    const show = !!(SPACES[r.zone] && SPACES[r.zone].visible); c.cow.group.visible = show; c.active = !c.comp.S.homeOn;
+    if (!show) { c.acc = 0; continue; }
+    if (!c.lightsTrimmed && c.model && c.model.state === 'model') { c.lightsTrimmed = true; c.cow.group.traverse((o) => { if (o.isDirectionalLight) o.visible = false; }); }   // friends keep only a soft hemisphere light (Quest budget)
+    // LOD: someone settled in a stall far from you animates at ~12 fps
+    const far = c.comp.S.homeOn && c.comp.home().phase === 'in' && Math.hypot(r.x - headP.x, r.z - headP.z) > 7;
+    c.acc += dt; if (!far || c.acc >= 1 / 12) { c.cow.update(c.acc, r.moving, headP, now, r.speed); c.acc = 0; }
+  }
+  ari.active = !companion.S.homeOn;
+  for (const st of BARN_STALLS.list) { const o = CAST.find((c) => c.stall === st.i); const H = o && o.comp.S.homeOn && o.comp.S.home && o.comp.S.home.stall.i === st.i; st.gateT = H ? o.comp.S.gate : 0; }
+  BARN_STALLS.update(dt, now); applySkins();
+  if ((castRedraw.t = (castRedraw.t || 0) + dt) > 0.5) { castRedraw.t = 0; castRedraw(); }
+}
 
 // ---------- precompile every room's shaders up front (avoids a hitch on first entering a room) ----------
 scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(patchBright); });
@@ -704,7 +838,7 @@ let mooPrev = 'idle', mooSec = -1, mooRoomDrawn = -1;
 // test hook: fast-forward Miss Moo's behaviour (no rendering) by `sec` seconds in `step` slices
 const MOO_SIM = { off: 0 };
 function mooSim(sec, step = 0.05) { camera.updateMatrixWorld(true); camera.getWorldPosition(headP); const t0 = performance.now() / 1000 + MOO_SIM.off; let t = 0;
-  const log = []; while (t < sec) { t += step; updateMoo(step, t0 + t); if (Math.round(t / step) % 20 === 0) { const S = companion.S, T = S.task;
+  const log = []; while (t < sec) { t += step; updateMoo(step, t0 + t); updateCast(step, t0 + t, camera.matrixWorld.elements); if (Math.round(t / step) % 20 === 0) { const S = companion.S, T = S.task;
     log.push([+t.toFixed(1), +S.x.toFixed(2), +S.z.toFixed(2), zoneOf(S), T ? T.k + (T.p ? ':' + T.p.kind : '') + (T.phase ? '*' : '') : '-', S.act ? S.act.k : '', cow.state.crawlPhase || '', +Math.hypot(S.x - headP.x, S.z - headP.z).toFixed(2)]); } }
   MOO_SIM.off += sec; return log; }
 function updateMoo(dt, now) {
@@ -714,7 +848,9 @@ function updateMoo(dt, now) {
   const st = moo.S.state;
   if (st !== mooPrev) { if ((st === 'starting' || st === 'playing') && (mooPrev === 'idle' || mooPrev === 'done')) mooBuildPath(headP.x, headP.z); else if (st === 'idle') mooBuildPath(...toWorld(3, SPAWN[0], SPAWN[1])); mooPrev = st; }
   const forced = cowRun.force !== undefined && cowRun.force !== null;
-  if (mooFollow.on && !forced && st !== 'starting' && st !== 'playing') {   // v31: companion mode (the Moo Track overrides it while it plays)
+  const trackOn = st === 'starting' || st === 'playing';
+  if (!trackOn && !forced) companion.setHome(ari.home && ari.stall !== null ? STALLS[ari.stall] : null);   // v38: home stall (the Moo Track overrides it; she goes back afterwards)
+  if ((mooFollow.on || companion.S.homeOn) && !forced && !trackOn) {   // v31: companion mode (the Moo Track overrides it while it plays)
     const r = companion.update(dt, now, headP.x, headP.z, -e[8], -e[10]); cowRun.mode = 'follow';
     const show = !!(SPACES[r.zone] && SPACES[r.zone].visible); cow.group.visible = show; cow.mirror.visible = show && quality.mirror;
     if (show) cow.update(dt, r.moving, headP, now, r.speed);
@@ -767,7 +903,7 @@ renderer.setAnimationLoop(() => {
   const tick = Math.floor(t * 2);
   if (zone === 'r1' && room1.hud && tick !== lastHud && roomMedia[0].uMediaOn.value < 1) { lastHud = tick; room1.hud.draw(t, I); }
   const zi = { r1: 0, r2: 1, r3: 2, r4: 3 }[zone]; if (zi !== undefined) lastRoom = zi;
-  media.update(dt, lastRoom); pods.update(dt, lastRoom); updateMoo(dt, nowMs / 1000 + MOO_SIM.off);
+  media.update(dt, lastRoom); pods.update(dt, lastRoom); updateMoo(dt, nowMs / 1000 + MOO_SIM.off); updateCast(dt, nowMs / 1000 + MOO_SIM.off, camera.matrixWorld.elements);
   renderer.render(scene, camera);
   if (++frames === 3) window.__ready = true;
 });

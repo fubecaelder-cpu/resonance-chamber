@@ -4,8 +4,8 @@
 // She walks toward the listener during the Moo Track, then stands in a relaxed contrapposto (breathing, slow sway, head tilt, slow blinks, glow pulsing like a heartbeat),
 // flashes the emblem on 'prop' cues and rings the bell on cowbell cues. Built from merged three.js primitives with the kit's shaders (face paint, neon lines and hair gradient are
 // fragment shaders), twice: the figure and a y-flipped twin for the glossy mirrors. About 18 meshes per figure.
-import { THREE, makeKit, clipMirror } from './shared.js?v=38';
-import { BARN_GLSL } from './barnroom.js?v=38';
+import { THREE, makeKit, clipMirror } from './shared.js?v=38b';
+import { BARN_GLSL } from './barnroom.js?v=38b';
 
 const PI = Math.PI;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -50,7 +50,7 @@ const LEG_L = [
 ];
 const lineGLSL = (L) => L.map((pl) => pl.slice(1).map((q, i) => `d = min(d, sdl(p, vec2(${f3(pl[i][0])}, ${f3(pl[i][1])}), vec2(${f3(q[0])}, ${f3(q[1])})));`).join(' ')).join('\n');
 
-export function createMissMoo() {
+export function createMissMoo(opts = {}) {   // v38: opts = { scale, spiral, name } per character
   const K = makeKit('barn', new THREE.Matrix4());
   const mat = (fs, o = {}) => K.mat('uniform float uGlow; uniform float uFlash; uniform float uBlink;\n' + fs, o);   // identity: "room" coords = world coords (she walks through the corridor and the barn)
   const UG = { uGlow: { value: 1 }, uFlash: { value: 0 }, uBlink: { value: 0 } };   // shared by every material (and by the mirror twin)
@@ -249,7 +249,8 @@ export function createMissMoo() {
   let lodHi = true;
   const rig = new THREE.Group(); rig.name = 'missMoo'; rig.add(real.root);
   // v37: overall size (default 1.1 = 10 % taller, ~1.85 m); scales from her feet so floor contact and the mirror stay right
-  const SCALE = Math.min(1.6, Math.max(0.6, +(new URLSearchParams(location.search).get('mooscale') || 1.1)));
+  // v38: default 1.21 (1.68 m sculpt height x 1.1 x 1.1 = ~2.03 m); ?mooscale= overrides Ari, roster characters bring their own scale
+  const SCALE = Math.min(1.8, Math.max(0.5, +(opts.scale || new URLSearchParams(location.search).get('mooscale') || 1.21)));
   rig.scale.setScalar(SCALE);
   const mirrorRig = new THREE.Group(); mirrorRig.name = 'missMooMirror'; mirrorRig.scale.set(SCALE, -SCALE, SCALE); mirrorRig.add(twin.root); clipMirror(mirrorRig);
   const S = { x: 0, z: 0, yaw: 0, walk: 0, phase: 0, t: 0, blink: 2.5, blinkT: 0, look: 0, lookP: 0, tilt: 0, near: 0, bellE: 0, ringT: 99, wave: 0, waveW: 0, glow: 1, flash: 0, speed: 0, hop: 0, lean: 0, tiltAdd: 0, flick: 0 };
@@ -281,7 +282,7 @@ export function createMissMoo() {
     P.bell.rotation.x = 0.06 * Math.sin(ph * 2 + 1.0) * w + st.bellE * 0.9 * Math.sin(st.ringT * 24); P.bell.rotation.z = st.bellE * 0.45 * Math.sin(st.ringT * 19 + 1);
   }
   const API = {
-    scale: SCALE, group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
+    scale: SCALE, opts, group: rig, builtin: real.root, builtinTwin: twin.root, ext: null, tris: () => ({ hi: triOf(GH), lo: triOf(GL) }), mirror: mirrorRig, state: S,
     /** world position on the floor + heading (radians, 0 = facing +z) */
     /** hop: root lift (m), lean: sideways roll (rad); the mirror rig gets the reflected offsets (it is scaled y = -1) */
     place(x, z, yaw, hop = 0, lean = 0) { S.x = x; S.z = z; S.yaw = yaw; S.hop = hop; S.lean = lean;
@@ -311,7 +312,17 @@ export function createMissMoo() {
         if (ed < (L ? 12 : 7)) { const a = wrap(Math.atan2(ex, ez) - S.yaw); ty = clamp(a, -1.0, 1.0) * w; tp = clamp(-Math.atan2(tyy - EYE, Math.max(ed, 0.5)) * 0.9, -0.3, 0.3) * w; }
         near = clamp(1 - (d - 2) / 5, 0, 1) * (L ? 0.3 : 1);
       }
+      // v38c: her own gaze - when she isn't attending to the viewer or examining something she looks around as she pleases:
+      // saccade-like jumps (eyes first, the head follows more slowly), holds of 0.5-3.5 s, now and then a quick glance back
+      if (!S.lookAt) { S.gzT = (S.gzT || 0) - dt;
+        if (S.gzT <= 0) { const r = Math.random(); S.gzT = r < 0.18 ? 0.35 + Math.random() * 0.4 : 0.8 + Math.random() * 2.7;
+          S.gzY = r < 0.12 ? 0 : (Math.random() * 2 - 1) * (Math.random() < 0.3 ? 1.0 : 0.55); S.gzP = (Math.random() * 2 - 1) * 0.2 + (S.crawlLow ? 0.1 : 0); }
+        const fw = 1 - (S.lookAt ? 1 : (S.playerLook === undefined ? 1 : S.playerLook)) * (d < 7 ? 1 : 0);
+        ty += (S.gzY || 0) * fw; tp += (S.gzP || 0) * fw; }
+      ty = clamp(ty, -1.05, 1.05);
       S.look = ease(S.look, ty, 1 - Math.exp(-dt * 3)); S.lookP = ease(S.lookP, tp, 1 - Math.exp(-dt * 3));
+      // eyes lead the head (fast), then re-centre as the head catches up
+      S.eyeY = ease(S.eyeY || 0, clamp(ty - S.look, -0.6, 0.6), 1 - Math.exp(-dt * 20)); S.eyeP = ease(S.eyeP || 0, clamp(tp - S.lookP, -0.4, 0.4), 1 - Math.exp(-dt * 20));
       S.near = ease(S.near, near, 1 - Math.exp(-dt * 2)); S.tilt = ease(S.tilt, 0.17 * S.near * (0.75 + 0.25 * Math.sin(t * 0.5)) + (S.tiltAdd || 0), 1 - Math.exp(-dt * 3));
       if (S.wave > 0) S.wave -= dt; S.waveW = ease(S.waveW, S.wave > 0 ? 1 : 0, 1 - Math.exp(-dt * 4));
       const wantHi = d < 6.5 || (lodHi && d < 7.5); if (wantHi !== lodHi) { lodHi = wantHi; for (const [o, gh, gl] of lodList) o.geometry = lodHi ? gh : gl; }

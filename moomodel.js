@@ -1,9 +1,9 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=38';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=38';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38';
+import { THREE, clipMirror } from './shared.js?v=38b';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=38b';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38b';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38b';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -61,7 +61,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38b'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -70,10 +70,10 @@ async function parse(buf, ext, url) {
 const BONES = { hips: /(^|[^a-z])(hips?|pelvis)$/i, spine: /spine$|spine1$|chest$/i, neck: /neck$|neck1$/i, head: /head$/i,
   lUp: /(left|^l[._ ]|[._]l$).*(upperarm|arm)$|leftarm$|upperarm[._]?l$/i, rUp: /(right|^r[._ ]|[._]r$).*(upperarm|arm)$|rightarm$|upperarm[._]?r$/i };
 
-export function attachMooModel(cow, onStatus = () => {}) {
+export function attachMooModel(cow, onStatus = () => {}, explicit = null) {   // v38: explicit = { name, ext, urls } (roster characters)
   const status = { state: 'looking', name: '', error: '' }; const say = () => onStatus(status);
   (async () => {
-    let src = null; try { src = await findSources(); } catch (e) { console.warn(e); }
+    let src = null; try { src = explicit || await findSources(); } catch (e) { console.warn(e); }
     if (!src || src.none) { status.state = 'builtin'; say(); return; }
     const cands = src.multi || [src]; let done = null;
     for (const c of cands) {
@@ -110,20 +110,28 @@ function install(cow, { gltf, vrmMod }) {
   const nb = vrm && vrm.humanoid ? { hips: vrm.humanoid.getNormalizedBoneNode('hips'), spine: vrm.humanoid.getNormalizedBoneNode('spine'), neck: vrm.humanoid.getNormalizedBoneNode('neck'),
     head: vrm.humanoid.getNormalizedBoneNode('head'), lUp: vrm.humanoid.getNormalizedBoneNode('leftUpperArm'), rUp: vrm.humanoid.getNormalizedBoneNode('rightUpperArm') } : named;
   const rest = {}; for (const [k2, b] of Object.entries(nb)) if (b) rest[k2] = b.quaternion.clone();
-  const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name); tails.push([o, m ? +m[1] : 1]); } });
-  let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0;
-  const crawl = {}; let cphase = null, cT = 0, cw = 0; const cwts = { down: 0, loop: 0, up: 0 };
+  const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name), m2 = /tail\D*(\d+)\D+(\d+)/i.exec(o.name); tails.push([o, m ? +m[1] : 1, m2 ? +m2[1] : 1]); } });
+  let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0, napA = null, nw = 0;
+  let crawlF = null, sitF = null, sniffA = null, snw = 0; const gests = []; let gest = null, gw = 0, gestLast = null, gestT = 6 + Math.random() * 6;
   // walk speed match: metres travelled per Walk cycle (scaled with the fit); ?moostride= overrides (default 1.1 m at 1.68 m tall)
-  const PULSE = q.get('moopulse') !== '0';
-  const STRIDE = +(q.get('moostride') || 1.1), CSTRIDE = +(q.get('moocrawlstride') || 0.26);
+  const PULSE = q.get('moopulse') !== '0', TAILFX = q.get('mootailfx') !== '0';   // ?mootailfx=0: clip-only tails (debug)
+  // v38d: Crawl loop = 2 lateral-sequence stride cycles of 0.34 m at 70 % stance -> 0.97 m per loop; Sniff: 4 cycles of 0.136 m -> 0.78 m
+  const STRIDE = +(q.get('moostride') || 1.1), CSTRIDE = +(q.get('moocrawlstride') || 0.97), SSTRIDE = +(q.get('moosniffstride') || 0.78);
   const clips = gltf.animations || [];
   if (clips.length) { mixer = new THREE.AnimationMixer(model);
     const idle = clips.find((c) => /idle|stand|breath/i.test(c.name)) || clips.find((c) => !/walk|run/i.test(c.name)) || clips[0];
     const walk = clips.find((c) => /walk/i.test(c.name));
+    const nap = clips.find((c) => /^(nap|sleep|curl)/i.test(c.name)); if (nap) { napA = mixer.clipAction(nap); napA.setEffectiveWeight(0); napA.play(); }   // v38: curled-up nap loop
     const wave = clips.find((c) => /wave/i.test(c.name)); if (wave) { waveA = mixer.clipAction(wave); waveA.setLoop(THREE.LoopOnce, 1); waveA.clampWhenFinished = true; }
     // v37: optional crawl family (CrawlDown -> Crawl loop -> CrawlUp); the companion asks via S.crawl, and reads S.crawlPhase back
-    for (const [key, re, once] of [['down', /^crawl.?down$/i, true], ['loop', /^crawl$/i, false], ['up', /^crawl.?up$/i, true]]) { const c = clips.find((cl) => re.test(cl.name));
-      if (c) { const a = mixer.clipAction(c); if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; } a.setEffectiveWeight(0); crawl[key] = a; } }
+    // v38c: pose families (down -> loop -> up): crawl (+ Sniff as an alternative loop) and sit crisscross; one-shot idle variants
+    const family = (reDown, reLoop, reUp) => { const f = { acts: {}, phase: null, T: 0, w: 0, wts: { down: 0, loop: 0, up: 0 } };
+      for (const [key, re, once] of [['down', reDown, true], ['loop', reLoop, false], ['up', reUp, true]]) { const c = clips.find((cl) => re.test(cl.name));
+        if (c) { const a = mixer.clipAction(c); if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; } a.setEffectiveWeight(0); f.acts[key] = a; } }
+      return f.acts.loop ? f : null; };
+    crawlF = family(/^crawl.?down$/i, /^crawl$/i, /^crawl.?up$/i); sitF = family(/^sit.?down$/i, /^sit.?idle$/i, /^sit.?up$/i);
+    const sn = clips.find((c) => /^sniff/i.test(c.name)); if (sn && crawlF) { sniffA = mixer.clipAction(sn); sniffA.setEffectiveWeight(0); }
+    for (const c of clips) if (/^idle[A-Z_]/.test(c.name)) { const a = mixer.clipAction(c); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.setEffectiveWeight(0); gests.push(a); }
     idleA = mixer.clipAction(idle); idleA.play(); if (walk && walk !== idle) { walkA = mixer.clipAction(walk); walkA.timeScale = +(q.get('moowalkspeed') || 0.6); walkA.play(); walkA.setEffectiveWeight(0); } }
   if (q.get('moochoker') === '1') {
     const anchor = nb.neck || nb.head; const ch = new THREE.Group();
@@ -136,11 +144,12 @@ function install(cow, { gltf, vrmMod }) {
   // v37: spiral hypnosis eyes. A model material named *eye* (with front-planar UVs, iris = 0..1) gets a slowly turning
   // hot-pink / black spiral as colour + emissive map. ?moospiral=0 keeps the model's own eyes. Shared by the mirror twin.
   let spiral = null;
-  if (q.get('moospiral') !== '0') {
+  const CO = cow.opts || {};
+  if (q.get('moospiral') !== '0' && CO.spiral !== false) {
     const eyeMats = []; model.traverse((o) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m && /eye/i.test(m.name) && !eyeMats.includes(m)) eyeMats.push(m); }); });
     if (eyeMats.length) {
       const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N; const g = cv.getContext('2d'), img = g.createImageData(N, N);
-      const pink = (q.get('moospiralcolor') || 'ff1f8f').replace('#', ''), pr = parseInt(pink.slice(0, 2), 16), pg = parseInt(pink.slice(2, 4), 16), pb = parseInt(pink.slice(4, 6), 16);
+      const pink = (CO.spiralColor || q.get('moospiralcolor') || 'ff1f8f').replace('#', ''), pr = parseInt(pink.slice(0, 2), 16), pg = parseInt(pink.slice(2, 4), 16), pb = parseInt(pink.slice(4, 6), 16);
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
         const u = (x + 0.5) / N - 0.5, v = (y + 0.5) / N - 0.5, r = Math.hypot(u, v) * 2, th = Math.atan2(v, u);
         const f = th / (Math.PI * 2) * 2 + r * 3.2;                       // two arms, ~3 turns across the iris
@@ -153,7 +162,7 @@ function install(cow, { gltf, vrmMod }) {
       g.putImageData(img, 0, 0);
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.center.set(0.5, 0.5); tex.anisotropy = 4;
       for (const m of eyeMats) { m.map = tex; m.emissiveMap = tex; m.vertexColors = false; m.color.set(0xffffff); m.emissive.set(0xffffff); m.emissiveIntensity = 0.9; m.roughness = 0.3; m.needsUpdate = true; }
-      spiral = { tex, rate: +(q.get('moospiralspeed') || 0.4) };
+      spiral = { tex, rate: +(CO.spiralSpeed || q.get('moospiralspeed') || 0.4) };
     }
   }
   // materials for the flash cue
@@ -168,43 +177,78 @@ function install(cow, { gltf, vrmMod }) {
   }
   cow.builtin.visible = false; cow.builtinTwin.visible = false; cow.group.add(holder);
   const tmpQ = new THREE.Quaternion(), E = new THREE.Euler();
+  const TL = { init: false, hf: new THREE.Quaternion(), D: new THREE.Quaternion(), f: new Map(), tmp: new THREE.Quaternion(), w: new THREE.Quaternion(), ax: new THREE.Vector3() }, TP = {};
+  const skinCtl = makeSkins(model, mats, cow), sparkle = makeSparkle(holder);
   const hq = new THREE.Quaternion(), hq2 = new THREE.Quaternion(), pq = new THREE.Quaternion(), pq2 = new THREE.Quaternion(), tq = new THREE.Quaternion();
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
   cow.ext = {
-    clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null, walkScale: walkA ? +walkA.timeScale.toFixed(2) : null, wave: waveA ? +waveA.getEffectiveWeight().toFixed(2) : null, crawl: +cw.toFixed(2), crawlPhase: cphase, crawlScale: crawl.loop ? +crawl.loop.timeScale.toFixed(2) : null }),
-    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawl.loop, spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm,
+    clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null, walkScale: walkA ? +walkA.timeScale.toFixed(2) : null, wave: waveA ? +waveA.getEffectiveWeight().toFixed(2) : null, crawl: crawlF ? +crawlF.w.toFixed(2) : 0, crawlPhase: crawlF && crawlF.phase, nap: +nw.toFixed(2), crawlScale: crawlF ? +crawlF.acts.loop.timeScale.toFixed(2) : null, sniff: +snw.toFixed(2), sit: sitF ? +sitF.w.toFixed(2) : 0, sitPhase: sitF && sitF.phase, gesture: gest ? gest.getClip().name : null, gw: +gw.toFixed(2) }),
+    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawlF, canNap: !!napA, canSit: !!sitF, canSniff: !!sniffA, gestures: gests.map((a) => a.getClip().name), spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm,
+    skin: () => skinCtl.id, setSkin: (def, quiet) => { if (!quiet) { sparkle.burst(); cow.state.flash = Math.max(cow.state.flash || 0, 1); } return skinCtl.set(def); },
     update(dt, S, cam, t) {
       const w = S.walk, idle = 1 - w;
       if (mixer) {
         // one-shot Wave clip: restarts when S.wave is set (cow.waveNow), fades the base clips out underneath it
         if (waveA) { if (S.wave > waveWas + 0.05) { waveA.reset(); waveA.play(); } waveWas = S.wave; }
-        const ww = waveA && waveA.isRunning() && !cphase ? Math.min(1, S.waveW * 1.2) : 0; if (waveA) waveA.setEffectiveWeight(ww);
-        // crawl state machine
-        if (crawl.loop) {
-          const want = !!S.crawl;
-          const enter = (ph) => { cphase = ph; cT = 0; const a2 = ph && crawl[ph]; if (a2) { a2.reset(); a2.play(); } if (ph) crawl.loop.play(); };
-          const done = (key) => !crawl[key] || cT >= crawl[key].getClip().duration - 0.02;
-          if (!cphase) { if (want) enter(crawl.down ? 'down' : 'loop'); }
-          else if (cphase === 'down') { if (done('down')) enter(want ? 'loop' : (crawl.up ? 'up' : null)); }
-          else if (cphase === 'loop') { if (!want) enter(crawl.up ? 'up' : null); }
-          else if (cphase === 'up') { if (done('up')) enter(null); }
-          cT += dt;
-          const kk = 1 - Math.exp(-dt * 12); for (const key of ['down', 'loop', 'up']) cwts[key] += ((cphase === key ? 1 : 0) - cwts[key]) * kk;
-          cw += ((cphase ? 1 : 0) - cw) * (1 - Math.exp(-dt * (cphase ? 14 : 6)));
-          if (cphase === 'loop') crawl.loop.timeScale = S.speed > 0.03 ? Math.min(2.2, Math.max(0.5, S.speed / (CSTRIDE * k * (cow.scale || 1) / crawl.loop.getClip().duration))) : 0.35;
-          const tot = cwts.down + cwts.loop + cwts.up || 1;
-          for (const key of ['down', 'loop', 'up']) if (crawl[key]) crawl[key].setEffectiveWeight(cw * cwts[key] / tot);
-          S.crawlPhase = cphase; S.crawlLow = cw > 0.5;
+        const famOn = (crawlF && crawlF.phase) || (sitF && sitF.phase);
+        const ww = waveA && waveA.isRunning() && !famOn ? Math.min(1, S.waveW * 1.2) : 0; if (waveA) waveA.setEffectiveWeight(ww);
+        const runFam = (f, want) => {
+          const enter = (ph) => { f.phase = ph; f.T = 0; const a2 = ph && f.acts[ph]; if (a2) { a2.reset(); a2.play(); } if (ph) f.acts.loop.play(); };
+          const done = (key) => !f.acts[key] || f.T >= f.acts[key].getClip().duration - 0.02;
+          if (!f.phase) { if (want) enter(f.acts.down ? 'down' : 'loop'); }
+          else if (f.phase === 'down') { if (done('down')) enter(want ? 'loop' : (f.acts.up ? 'up' : null)); }
+          else if (f.phase === 'loop') { if (!want) enter(f.acts.up ? 'up' : null); }
+          else if (f.phase === 'up') { if (done('up')) enter(null); }
+          f.T += dt; const kk = 1 - Math.exp(-dt * 7);   // v38d: softer cross-fades between the down / loop / up clips
+          for (const key of ['down', 'loop', 'up']) f.wts[key] += ((f.phase === key ? 1 : 0) - f.wts[key]) * kk;
+          f.w += ((f.phase ? 1 : 0) - f.w) * (1 - Math.exp(-dt * (f.phase ? 9 : 5)));
+          const tot = f.wts.down + f.wts.loop + f.wts.up || 1;
+          for (const key of ['down', 'up']) if (f.acts[key]) f.acts[key].setEffectiveWeight(f.w * f.wts[key] / tot);
+          return f.w * f.wts.loop / tot; };
+        let fw = 0;
+        if (crawlF) { const lw = runFam(crawlF, !!S.crawl && !(sitF && sitF.phase)); snw += ((S.sniff && crawlF.phase ? 1 : 0) - snw) * (1 - Math.exp(-dt * 3));
+          crawlF.acts.loop.setEffectiveWeight(lw * (1 - (sniffA ? snw : 0)));
+          const ts = (stride, a) => S.speed > 0.03 ? Math.min(2.0, Math.max(0.3, S.speed / (stride * k * (cow.scale || 1) / a.getClip().duration))) : 0.3;
+          if (crawlF.phase === 'loop') crawlF.acts.loop.timeScale = ts(CSTRIDE, crawlF.acts.loop);
+          if (sniffA) { if (crawlF.phase && !sniffA.isRunning()) sniffA.play(); sniffA.setEffectiveWeight(lw * snw); sniffA.timeScale = Math.max(0.55, ts(SSTRIDE, sniffA)); }
+          S.crawlPhase = crawlF.phase; S.crawlLow = crawlF.w > 0.5; fw += crawlF.w; }
+        if (sitF) { const lw = runFam(sitF, !!S.sit && !(crawlF && crawlF.phase)); sitF.acts.loop.setEffectiveWeight(lw); S.sitPhase = sitF.phase; S.sitLow = sitF.w > 0.5; fw += sitF.w; }
+        fw = Math.min(1, fw); S.famW = fw;
+        if (napA) { nw += ((S.nap && !famOn ? 1 : 0) - nw) * (1 - Math.exp(-dt * 1.6)); napA.setEffectiveWeight(nw * (1 - fw)); } S.napW = nw;
+        // v38c: idle variants (stretch, hair tuck, hand on hip, weight shift + shoulder roll, yawn) - random, never twice in a row
+        const still = w < 0.05 && fw < 0.05 && ww < 0.05 && nw < 0.05 && !S.noGesture;
+        if (gests.length) {
+          if (!gest && (still || S.gesture)) { gestT -= dt;
+            if (gestT <= 0 || S.gesture) { const pool = gests.filter((a) => a !== gestLast && (!S.gesture || S.gesture === 'random' || a.getClip().name === S.gesture));
+              gest = (pool.length ? pool : gests)[Math.floor(Math.random() * (pool.length || gests.length))]; gest.reset(); gest.play(); gestLast = gest; S.gesture = null; gestT = 7 + Math.random() * 9; } }
+          let gt = 0;
+          if (gest) { const d0 = gest.getClip().duration, tt = gest.time; gt = still ? Math.max(0, Math.min(1, tt / 0.35, (d0 - tt) / 0.45)) : 0;
+            if (!gest.isRunning() || tt >= d0 - 0.01 || (!still && gw < 0.02)) { gest.stop(); gest.setEffectiveWeight(0); gest = null; gt = 0; } }
+          gw += (gt - gw) * (1 - Math.exp(-dt * 10)); if (gest) gest.setEffectiveWeight((1 - w) * (1 - ww) * (1 - fw) * (1 - nw) * gw);
         }
-        if (walkA) { walkA.setEffectiveWeight(w * (1 - ww) * (1 - cw)); idleA.setEffectiveWeight((1 - w) * (1 - ww) * (1 - cw));
+        if (walkA) { walkA.setEffectiveWeight(w * (1 - ww) * (1 - fw) * (1 - nw)); idleA.setEffectiveWeight((1 - w) * (1 - ww) * (1 - fw) * (1 - nw) * (1 - gw));
           walkA.timeScale = S.speed > 0.05 ? Math.min(1.9, Math.max(0.45, S.speed / (STRIDE * k * (cow.scale || 1) / walkA.getClip().duration))) : 0.6; }
         mixer.update(dt);
+        // v38d tails: every tail flows on its own. The roots follow the hips' rotation through a low-pass (no step jiggle), each bone
+        // eases toward its clip pose with a lag that grows down the chain (follow-through, over-damped: no overshoot), then a slow
+        // wave is layered on with its own frequency (0.35-0.6 Hz), phase, amplitude and direction per tail.
+        if (tails.length && nb.hips && TAILFX) {
+          nb.hips.getWorldQuaternion(hq); if (!TL.init) { TL.init = true; TL.hf.copy(hq); }
+          TL.hf.slerp(hq, 1 - Math.exp(-dt / 0.25)); TL.D.copy(TL.hf).multiply(hq2.copy(hq).invert());
+          const fw2 = S.famW || 0, amp = (1 - 0.3 * w) * (1 - 0.35 * fw2) * (1 - 0.6 * nw) * (S.tailAmp === undefined ? 1 : S.tailAmp);
+          for (const [b, j, kk] of tails) { let F = TL.f.get(b); const tq2 = TL.tmp.copy(b.quaternion);
+            if (j === 1 && b.parent) { b.parent.getWorldQuaternion(pq); tq2.premultiply(pq2.copy(pq).invert().multiply(TL.D).multiply(pq)); }
+            if (!F) { F = tq2.clone(); TL.f.set(b, F); } else F.slerp(tq2, 1 - Math.exp(-dt / (0.14 + 0.06 * j)));
+            const P0 = TP[kk] || (TP[kk] = { f: 0.35 + 0.25 * ((kk * 0.618) % 1), ph: kk * 2.399, a: 0.035 + 0.025 * ((kk * 0.381) % 1), d: kk * 1.7 });
+            const ang = amp * P0.a * (0.5 + 0.3 * j) * Math.sin(2 * Math.PI * P0.f * t - j * 0.6 + P0.ph);
+            b.quaternion.copy(F).multiply(TL.w.setFromAxisAngle(TL.ax.set(Math.cos(P0.d), 0, Math.sin(P0.d)), ang)); }
+        }
         // tail flick (bones named *tail*): a quick ripple layered on top of the clips
         if (S.flick > 0.01 && tails.length) for (const [b, j] of tails) { const a = S.flick * 0.22 * Math.sin(t * 16 - j * 0.9); b.rotateX(a); b.rotateZ(a * 0.6); }
       }
       if (mixer && walkA) {
         // clip-driven (Idle + Walk): layer the head/neck look-at-the-viewer on top of the animation, in world space so any bone axes work
-        holder.getWorldQuaternion(hq); const wq = tmpQ.setFromEuler(E.set(S.lookP * (1 - 0.7 * cw), S.look * (1 - 0.4 * cw), S.tilt * 0.6, 'YXZ'));
+        const cw = crawlF ? crawlF.w : 0; holder.getWorldQuaternion(hq); const wq = tmpQ.setFromEuler(E.set(S.lookP * (1 - 0.7 * cw) * (1 - nw), S.look * (1 - 0.4 * cw) * (1 - nw), S.tilt * 0.6 * (1 - nw), 'YXZ'));
         wq.premultiply(hq).multiply(hq2.copy(hq).invert());
         for (const [k2, f] of [['neck', 0.4], ['head', 0.5]]) { const b = nb[k2]; if (!b || !b.parent) continue;
           b.parent.getWorldQuaternion(pq); const part = tq.identity().slerp(wq, f);
@@ -229,9 +273,48 @@ function install(cow, { gltf, vrmMod }) {
       const f = S.flash; for (const m of mats) { if (f > 0.01) { m.emissive.copy(m.userData.e0).lerp(PINK, Math.min(1, f * 0.6)); m.emissiveIntensity = Math.max(m.userData.ei0, f + (m.emissiveMap ? 0.4 : 0)); }
         else if (m.emissiveMap && PULSE) { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0 * (0.8 + 0.3 * (0.5 + 0.5 * Math.sin(t * 2.2))); }
         else if (m.emissiveIntensity !== m.userData.ei0) { m.emissive.copy(m.userData.e0); m.emissiveIntensity = m.userData.ei0; } }
-      if (spiral) spiral.tex.rotation = -(t * spiral.rate * Math.PI * 2) % (Math.PI * 2);
+      if (spiral) { spiral.tex.rotation = -(t * spiral.rate * Math.PI * 2) % (Math.PI * 2);   // v38c: the irises follow her gaze (eyes lead the head)
+        spiral.tex.offset.set(-0.13 * ((S.eyeY || 0) + 0.3 * S.look), 0.13 * ((S.eyeP || 0) + 0.3 * S.lookP)); }
+      if (sparkle) sparkle.update(dt);
       if (twin) { for (let i = 0; i < srcNodes.length; i++) { const a = srcNodes[i], b = dstNodes[i]; if (!b) break; b.position.copy(a.position); b.quaternion.copy(a.quaternion); b.scale.copy(a.scale);
         if (a.morphTargetInfluences && b.morphTargetInfluences) b.morphTargetInfluences.splice(0, a.morphTargetInfluences.length, ...a.morphTargetInfluences); } }
     },
   };
+}
+
+// v38f: skins = material/texture sets on the same rigged model (UVs shared). def = null / builtin -> the model's own look (Circuit Doll);
+// def = { id, base, emissive, orm } texture URLs (glTF UV convention: flipY false). Textures are cached per URL.
+const TEXC = new Map();
+function loadTex(url, srgb) {
+  if (!url) return Promise.resolve(null);
+  if (TEXC.has(url)) return TEXC.get(url);
+  const p = new Promise((res) => new THREE.TextureLoader().load(url, (tx) => { tx.flipY = false; if (srgb) tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 4; res(tx); }, undefined, () => res(null)));
+  TEXC.set(url, p); return p;
+}
+function makeSkins(model, mats) {
+  const body = mats.filter((m) => !/eye/i.test(m.name || ''));
+  const orig = body.map((m) => ({ m, map: m.map, vc: m.vertexColors, color: m.color.clone(), em: m.emissiveMap, e: m.emissive.clone(), ei: m.emissiveIntensity, rm: m.roughnessMap, mm: m.metalnessMap, r: m.roughness, mt: m.metalness }));
+  const ctl = { id: null, async set(def) {
+    if (!def || def.builtin) { for (const o of orig) { const m = o.m; m.map = o.map; m.vertexColors = o.vc; m.color.copy(o.color); m.emissiveMap = o.em; m.emissive.copy(o.e); m.emissiveIntensity = o.ei; m.roughnessMap = o.rm; m.metalnessMap = o.mm; m.roughness = o.r; m.metalness = o.mt; m.userData.e0 = o.e.clone(); m.userData.ei0 = o.ei; m.needsUpdate = true; }
+      ctl.id = def ? def.id : null; return true; }
+    const [b, e, o] = await Promise.all([loadTex(def.base, true), loadTex(def.emissive, true), loadTex(def.orm, false)]);
+    if (!b) return false;
+    for (const m of body) { m.map = b; m.vertexColors = false; m.color.set(0xffffff); m.emissiveMap = e; m.emissive.set(e ? 0xffffff : 0x000000); m.emissiveIntensity = e ? 1 : 0;
+      m.roughnessMap = o; m.metalnessMap = o; m.roughness = o ? 1 : 0.5; m.metalness = o ? 1 : 0; m.userData.e0 = m.emissive.clone(); m.userData.ei0 = m.emissiveIntensity; m.needsUpdate = true; }
+    ctl.id = def.id; return true; } };
+  return ctl;
+}
+// a little sparkle burst when her skin changes
+function makeSparkle(holder) {
+  const N = 90, pos = new Float32Array(N * 3), vel = new Float32Array(N * 3), g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cg = cv.getContext('2d'), gr = cg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); cg.fillStyle = gr; cg.fillRect(0, 0, 64, 64);
+  cg.fillStyle = 'rgba(255,255,255,0.9)'; cg.fillRect(30, 4, 4, 56); cg.fillRect(4, 30, 56, 4);   // a little four-point star
+  const m = new THREE.PointsMaterial({ color: 0xffd6ec, size: 0.07, map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.visible = false; holder.add(pts); let life = 0;
+  return { burst() { for (let i = 0; i < N; i++) { const a = Math.random() * Math.PI * 2, r = 0.25 + Math.random() * 0.35, y = Math.random() * 1.8;
+      pos.set([Math.sin(a) * r, y, Math.cos(a) * r], i * 3); vel.set([Math.sin(a) * 0.15, 0.3 + Math.random() * 0.5, Math.cos(a) * 0.15], i * 3); }
+      g.attributes.position.needsUpdate = true; life = 1.3; pts.visible = true; },
+    update(dt) { if (life <= 0) return; life -= dt; for (let i = 0; i < N * 3; i++) pos[i] += vel[i] * dt; g.attributes.position.needsUpdate = true;
+      m.opacity = Math.max(0, Math.min(1, life / 0.6)); m.color.setHSL(0.9 + 0.05 * Math.sin(life * 9), 1, 0.8); if (life <= 0) pts.visible = false; } };
 }

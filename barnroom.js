@@ -3,7 +3,7 @@
 // glass milk-bottle pods and a swirling milk-and-cream spiral vortex where the main screen's tunnel would be.
 // Built on top of buildChamber (walls / floor / doorways / mirror / monitor bay) through its deluxe hooks (head, wallGLSL, ceilGLSL,
 // floorGLSL, focalFn, extra), exactly like the pink room. Nothing here depends on how many doorways the room has (it has three).
-import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=38';
+import { THREE, U, f3, R, H, TY, TR, TZ, LOW, mtx, instanced, glowSprite, canvasTex } from './shared.js?v=38b';
 
 const FS = 1.25, FY = 2.25, RM = TR * FS;     // portal scale / centre height / mouth radius (must match chamber.js deluxe)
 const PI = Math.PI;
@@ -203,7 +203,7 @@ function extra({ K, world, root, fx, out, haze }) {
   const CENTERS = Array.from({ length: NST }, (_, k) => A0 + HALF + k * 2 * HALF);
   const rnd = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   const PODXY = [[3.1, -2.1], [3.9, -0.4], [4.3, 1.3]];
-  const lampPos = [];
+  const lampPos = []; const STALL_REC = [];   // v38b: per-stall instance indices so a home stall can get a real gate
   for (const s of [-1, 1]) {
     const P = (a, r) => [s * Math.sin(a) * r, Math.cos(a) * r];
     const posts = Array.from({ length: NST + 1 }, (_, k) => A0 + k * 2 * HALF);
@@ -222,6 +222,7 @@ function extra({ K, world, root, fx, out, haze }) {
     for (let si = 0; si < NST; si++) {
       const ac = CENTERS[si];
       const [mx, mz] = P(ac, RP * Math.cos(HALF)), yawT = s * ac + PI / 2, yawK = s * ac, len = 2 * RP * Math.sin(HALF) - 0.14;
+      const rec = { s, si, ac, yawK, len, mid: [mx, mz], wood: [woodM.length], pipe: [pipeM.length, pipeM.length + 1, pipeM.length + 2], brass: [brassBoxM.length], hay: [], bale: [] }; STALL_REC.push(rec);
       woodM.push(mtx(mx, 0.36, mz, yawK, 0, len, 0.72, 0.07));                       // kick board
       woodM.push(mtx(mx, 2.38, mz, yawK, 0, len + 0.14, 0.1, 0.1));                  // top beam: the posts read as one continuous run
       for (const y of [1.0, 1.45, 1.9]) pipeM.push(mtx(mx, y, mz, yawT, PI / 2, 0.034, len, 0.034));   // brass pipe rails
@@ -231,29 +232,30 @@ function extra({ K, world, root, fx, out, haze }) {
       hayM.push(mtx(tx, 0.95, tz, yawK + 0.1 * (si % 2 ? 1 : -1), 0, 1.05, 0.26, 0.26));
       // hay on the stall floor: one to three bales per stall, a little different each time (symmetrical clearances, varied hay)
       const k = rnd(ac * 7 + s * 3 + 1), [hx, hz] = P(ac + (k - 0.5) * 0.05, 6.0);
-      hayM.push(mtx(hx, 0.22, hz, s * ac + (k - 0.5) * 0.25, 0, 1.0, 0.44, 0.56));
-      if (k > 0.35) { const [h2x, h2z] = P(ac - 0.02, 6.08); hayM.push(mtx(h2x, 0.66, h2z, s * ac + 0.5 * k, 0, 0.75, 0.4, 0.5)); }
-      if (k < 0.7) { const [h3x, h3z] = P(ac + 0.07 * (k > 0.5 ? 1 : -1), 5.55); hayM.push(mtx(h3x, 0.17, h3z, s * ac + 1.2 * k, 0, 0.5, 0.34, 0.38)); }
+      rec.hay.push(hayM.length); hayM.push(mtx(hx, 0.22, hz, s * ac + (k - 0.5) * 0.25, 0, 1.0, 0.44, 0.56));
+      if (k > 0.35) { const [h2x, h2z] = P(ac - 0.02, 6.08); rec.hay.push(hayM.length); hayM.push(mtx(h2x, 0.66, h2z, s * ac + 0.5 * k, 0, 0.75, 0.4, 0.5)); }
+      if (k < 0.7) { const [h3x, h3z] = P(ac + 0.07 * (k > 0.5 ? 1 : -1), 5.55); rec.hay.push(hayM.length); hayM.push(mtx(h3x, 0.17, h3z, s * ac + 1.2 * k, 0, 0.5, 0.34, 0.38)); }
       // loose bale on the walkway in front of every other stall, kept clear of the pods and the doors (the same on both sides)
       {
         const [fx2, fz2] = P(ac, 4.85);
         if (PODXY.every(([px, pz]) => Math.hypot(Math.abs(fx2) - px, fz2 - pz) > 1.2)) {
-          hayM.push(mtx(fx2, 0.2, fz2, yawK + PI / 2 + 0.15 * (si - 2), 0, 0.9, 0.4, 0.5));
-          if (si === 5) hayM.push(mtx(fx2, 0.58, fz2, yawK + PI / 2 - 0.25, 0, 0.7, 0.36, 0.45));
+          rec.bale.push(hayM.length); hayM.push(mtx(fx2, 0.2, fz2, yawK + PI / 2 + 0.15 * (si - 2), 0, 0.9, 0.4, 0.5));
+          if (si === 5) { rec.bale.push(hayM.length); hayM.push(mtx(fx2, 0.58, fz2, yawK + PI / 2 - 0.25, 0, 0.7, 0.36, 0.45)); }
         }
       }
     }
   }
   const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
-  instanced(box, WOOD(0.37), woodM, world);
-  instanced(box, BRASS(), brassBoxM.concat(armM), world);
-  instanced(cyl, BRASS(), pipeM, world);
-  instanced(box, mat(`${BARN_GLSL} void main(){ vec3 N = normalize(vN);
+  const woodMesh = instanced(box, WOOD(0.37), woodM, world);
+  const brassMesh = instanced(box, BRASS(), brassBoxM.concat(armM), world);
+  const pipeMesh = instanced(cyl, BRASS(), pipeM, world);
+  const hayMesh = instanced(box, mat(`${BARN_GLSL} void main(){ vec3 N = normalize(vN);
     float st = vn3b(vec3(vL.x * 7.0, vL.y * 90.0 + vH * 20.0, vL.z * 40.0)); float st2 = vn3b(vec3(vL.x * 22.0, vL.y * 30.0, vL.z * 120.0 + vH * 9.0));
     vec3 c = mix(vec3(0.62, 0.42, 0.14), vec3(0.98, 0.78, 0.36), st * 0.6 + st2 * 0.4);
     float twine = (1.0 - smoothstep(0.02, 0.05, abs(abs(vL.x) - 0.24))) * 0.55; c = mix(c, vec3(0.25, 0.12, 0.05), twine);
     c *= 0.62 + 0.45 * max(dot(N, normalize(vec3(0.25, 1.0, 0.35))), 0.0) + 0.08 * N.z;
     gl_FragColor = vec4(fogit(c, vW), 1.0); }`), hayM, world);
+  BARN_STALLS.build({ THREE, world, STALL_REC, RP, HALF, woodMesh, brassMesh, pipeMesh, hayMesh, woodM, brassBoxM, pipeM, hayM, box, cyl, WOOD, BRASS, canvasTex });
 
   // lanterns: caged glowing amber lamps with brass caps, a soft sprite glow and a warm pool on the floor
   {
@@ -361,3 +363,96 @@ export function barnRoomCfg(doors) {
   return { name: 'room4', pal: 'barn', focal: 'tunnel', screen: false, deluxe: true, podIdx: [], doors, head: HEAD_MAT,
     wallGLSL, ceilGLSL, floorGLSL, focalFn, extra };
 }
+
+// ---------- v38b: home stalls (12, mirrored 6 + 6). Exposed to main.js as BARN_STALLS (room-local coordinates) ----------
+// Stall i (0..11, numbered 1..12 on the plaques): interior box, walkway approach point, a hinged gate that replaces the fixed
+// front (kick board + rails) when someone lives there, a pink nameplate on the top beam, a numbered plaque on every stall
+// (point / pinch / click it to select the stall), a soft floor glow, and a small glowing wardrobe mirror for skins.
+export const BARN_STALLS = { list: [], build: null, ready: false };
+BARN_STALLS.build = function ({ THREE, world, STALL_REC, RP, HALF, woodMesh, brassMesh, pipeMesh, hayMesh, woodM, brassBoxM, pipeM, hayM, box, cyl, WOOD, BRASS, canvasTex }) {
+  const Z = new THREE.Matrix4().makeScale(0, 0, 0);
+  const setI = (mesh, idx, m) => { mesh.setMatrixAt(idx, m); mesh.instanceMatrix.needsUpdate = true; };
+  // order: right side (s = 1) stalls 1..6 from the door end, then left side 7..12
+  const recs = [...STALL_REC.filter((r) => r.s === 1), ...STALL_REC.filter((r) => r.s === -1)];
+  const rf = RP * Math.cos(HALF);
+  const P = (s, a, r) => [s * Math.sin(a) * r, Math.cos(a) * r];
+  const label = (w, h) => { const ct = canvasTex(w, h); const m = new THREE.MeshBasicMaterial({ map: ct.t, transparent: true, toneMapped: false, depthWrite: false }); return { ct, m }; };
+  recs.forEach((r, i) => {
+    const s = r.s, ac = r.ac, out = Math.atan2(-P(s, ac, 1)[0], -P(s, ac, 1)[1]);   // yaw facing the barn centre
+    const st = { i, s, ac, local: { C: P(s, ac, 5.8), F: P(s, ac, 4.3), front: P(s, ac, 5.45), mid: r.mid }, yawLocal: out, rec: r, occupant: null, gateA: 0, gateT: 0 };
+    // plaque (number) on the top beam, always there; nameplate beside it when occupied
+    const g = new THREE.Group(); const [bx, bz] = P(s, ac, rf - 0.075); g.position.set(bx, 2.38, bz); g.rotation.y = out; world.add(g);
+    const pl = label(256, 160); const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.125), pl.m); plaque.position.set(-0.42, 0, 0); g.add(plaque);
+    plaque.userData.btn = { id: 'x-stall-' + i, hover: 0, press: 0, rest: 0, pokeArmed: true }; st.plaque = plaque; st.pl = pl;
+    const np = label(512, 128); const name = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.125), np.m); name.position.set(0.1, 0, 0); g.add(name); name.visible = false; st.name = name; st.np = np;
+    name.userData.btn = { id: 'x-stall-' + i, hover: 0, press: 0, rest: 0, pokeArmed: true };
+    // floor glow
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(0.62, 40), new THREE.MeshBasicMaterial({ color: 0xff4fa8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    glow.rotation.x = -Math.PI / 2; const [gx, gz] = st.local.C; glow.position.set(gx, 0.015, gz); world.add(glow); st.glow = glow;
+    // wardrobe mirror (skins) on the latch-side post, facing the walkway; only shown when someone lives here
+    const [mxp, mzp] = P(s, ac + HALF, RP - 0.095); const wm = new THREE.Group(); wm.position.set(mxp, 1.655, mzp); wm.rotation.y = out; world.add(wm); wm.visible = false;   // on the latch-side post, between the upper rails
+    const wl = label(256, 320); const mir = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.325), wl.m); wm.add(mir);
+    const hit = (id, x) => { const h = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.32), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); h.position.set(x, 0, 0.004); h.userData.btn = { id, hover: 0, press: 0, rest: 0, pokeArmed: true }; wm.add(h); return h; };
+    st.mirror = wm; st.wl = wl; st.skinHits = [hit('x-skin-' + i + '-prev', -0.065), hit('x-skin-' + i + '-next', 0.065)];
+    BARN_STALLS.list.push(st);
+  });
+  // gates: built lazily for occupied stalls (a leaf with kick board, brass cap, three rails, an end stile and a latch)
+  const woodMat = WOOD(0.37), brassMat = BRASS();
+  function gateFor(st) {
+    if (st.gate) return st.gate;
+    const r = st.rec, len = r.len, s = r.s, ac = r.ac;
+    const hingeA = ac - HALF * 0.98, [hx, hz] = P(s, hingeA, rf);
+    const pivot = new THREE.Group(); pivot.position.set(hx, 0, hz); world.add(pivot);
+    const [ex, ez] = P(s, ac + HALF * 0.98, rf); const base = Math.atan2(-(ez - hz), ex - hx); pivot.rotation.y = base; // local +x runs along the front
+    const leaf = new THREE.Group(); pivot.add(leaf);
+    const W = Math.hypot(ex - hx, ez - hz) - 0.02, M = new THREE.Matrix4();
+    const add = (geo, mt, m) => { const im = new THREE.InstancedMesh(geo, mt, 1); im.setMatrixAt(0, m); im.frustumCulled = false; leaf.add(im); };
+    add(box, woodMat, M.clone().compose(new THREE.Vector3(W / 2, 0.36, 0), new THREE.Quaternion(), new THREE.Vector3(W, 0.72, 0.07)));
+    add(box, brassMat, M.clone().compose(new THREE.Vector3(W / 2, 0.74, 0), new THREE.Quaternion(), new THREE.Vector3(W, 0.04, 0.09)));
+    for (const y of [1.0, 1.45, 1.9]) add(cyl, brassMat, M.clone().compose(new THREE.Vector3(W / 2, y, 0), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), new THREE.Vector3(0.034, W, 0.034)));
+    add(box, woodMat, M.clone().compose(new THREE.Vector3(W - 0.035, 1.0, 0), new THREE.Quaternion(), new THREE.Vector3(0.07, 2.0, 0.08)));    // end stile
+    add(box, woodMat, M.clone().compose(new THREE.Vector3(0.035, 1.0, 0), new THREE.Quaternion(), new THREE.Vector3(0.07, 2.0, 0.08)));       // hinge stile
+    add(box, brassMat, M.clone().compose(new THREE.Vector3(W - 0.02, 1.2, 0.05), new THREE.Quaternion(), new THREE.Vector3(0.1, 0.05, 0.03)));  // latch
+    for (const y of [0.35, 1.65]) add(cyl, brassMat, M.clone().compose(new THREE.Vector3(0, y, 0), new THREE.Quaternion(), new THREE.Vector3(0.03, 0.14, 0.03)));   // hinges
+    // which way is "out" (toward the walkway): pick the swing sign that brings the free end closer to the barn centre
+    pivot.updateMatrixWorld(true); const test = (sg) => { leaf.rotation.y = sg * 1.2; leaf.updateMatrixWorld(true); const v = new THREE.Vector3(W, 0, 0).applyMatrix4(leaf.matrix).applyMatrix4(pivot.matrix); return Math.hypot(v.x, v.z); };
+    st.gateSign = test(1) < test(-1) ? 1 : -1; leaf.rotation.y = 0;
+    st.gate = { pivot, leaf }; return st.gate;
+  }
+  // occupant: null | { name } -> fixed front hidden + gate shown, nameplate, floor glow, hay cleared for her, wardrobe mirror
+  BARN_STALLS.setOccupant = (i, occ) => {
+    const st = BARN_STALLS.list[i]; if (!st) return; st.occupant = occ; const r = st.rec, on = !!occ;
+    for (const k of r.wood) setI(woodMesh, k, on ? Z : woodM[k]);
+    for (const k of r.pipe) setI(pipeMesh, k, on ? Z : pipeM[k]);
+    for (const k of r.brass) setI(brassMesh, k, on ? Z : brassBoxM[k]);
+    for (const k of [...r.hay, ...r.bale]) setI(hayMesh, k, on ? Z : hayM[k]);
+    if (on) gateFor(st); if (st.gate) st.gate.pivot.visible = on;
+    st.name.visible = on; st.mirror.visible = on;
+    if (on) { const { c, g } = st.np.ct; g.clearRect(0, 0, c.width, c.height); g.fillStyle = 'rgba(40,6,24,0.78)'; g.beginPath(); g.roundRect(6, 10, c.width - 12, c.height - 20, 28); g.fill();
+      g.strokeStyle = '#ff6fb8'; g.lineWidth = 5; g.stroke(); g.fillStyle = '#ffd6ec'; g.font = '700 62px system-ui, Segoe UI, Roboto, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = '#ff3fa0'; g.shadowBlur = 16; g.fillText(occ.name, c.width / 2, c.height / 2 + 2); g.shadowBlur = 0; st.np.ct.t.needsUpdate = true; }
+    BARN_STALLS.drawPlaque(i);
+  };
+  BARN_STALLS.drawPlaque = (i) => { const st = BARN_STALLS.list[i], { c, g } = st.pl.ct, sel = BARN_STALLS.selected === i;
+    g.clearRect(0, 0, c.width, c.height); g.fillStyle = sel ? 'rgba(120,20,70,0.92)' : 'rgba(60,34,12,0.86)'; g.beginPath(); g.roundRect(8, 8, c.width - 16, c.height - 16, 26); g.fill();
+    g.strokeStyle = sel ? '#ff8fca' : '#d9a54a'; g.lineWidth = sel ? 9 : 6; g.stroke(); g.fillStyle = sel ? '#fff0f8' : '#ffe3a6'; g.font = '800 92px system-ui, Segoe UI, Roboto, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), c.width / 2, c.height / 2 + 4); st.pl.ct.t.needsUpdate = true; };
+  BARN_STALLS.select = (i) => { const old = BARN_STALLS.selected; BARN_STALLS.selected = i; if (old !== undefined && old !== null && BARN_STALLS.list[old]) BARN_STALLS.drawPlaque(old); if (BARN_STALLS.list[i]) BARN_STALLS.drawPlaque(i); };
+  BARN_STALLS.setSkinLabel = (i, skinName, n) => { const st = BARN_STALLS.list[i]; if (!st) return; const { c, g } = st.wl.ct; g.clearRect(0, 0, c.width, c.height);
+    const grd = g.createLinearGradient(0, 0, 0, c.height); grd.addColorStop(0, 'rgba(255,210,236,0.95)'); grd.addColorStop(1, 'rgba(150,60,120,0.9)');
+    g.fillStyle = 'rgba(30,8,24,0.85)'; g.beginPath(); g.ellipse(c.width / 2, c.height / 2, c.width / 2 - 6, c.height / 2 - 6, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#e8b04a'; g.lineWidth = 9; g.stroke(); g.fillStyle = grd; g.globalAlpha = 0.25; g.beginPath(); g.ellipse(c.width / 2, c.height / 2, c.width / 2 - 26, c.height / 2 - 30, 0, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffe3a6'; g.font = '700 26px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('WARDROBE', c.width / 2, 70);
+    g.fillStyle = '#fff0f8'; g.font = '700 30px system-ui, Segoe UI, Roboto, sans-serif'; const words = String(skinName).split(' '); words.forEach((w, k) => g.fillText(w, c.width / 2, 140 + k * 36 - (words.length - 1) * 18));
+    g.fillStyle = '#ff8fca'; g.font = '800 54px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText('◀', 52, 250); g.fillText('▶', c.width - 52, 250);
+    g.fillStyle = '#ffd6ec'; g.font = '600 20px system-ui, Segoe UI, Roboto, sans-serif'; g.fillText(n > 1 ? `${n} skins` : '1 skin', c.width / 2, 252); st.wl.ct.t.needsUpdate = true; };
+  BARN_STALLS.targets = () => BARN_STALLS.list.flatMap((st) => [st.plaque, st.name, ...st.skinHits]);
+  // per frame: gate swing (eased), floor glow, wardrobe shimmer
+  BARN_STALLS.update = (dt, t) => { for (const st of BARN_STALLS.list) {
+    if (st.gate) { st.gateA += ((st.gateT ? 1 : 0) - st.gateA) * (1 - Math.exp(-dt * 3)); const e = st.gateA * st.gateA * (3 - 2 * st.gateA); st.gate.leaf.rotation.y = st.gateSign * e * 1.75; }
+    const sel = BARN_STALLS.selected === st.i, want = st.occupant ? 0.16 + 0.05 * Math.sin(t * 1.6 + st.i) + (sel ? 0.08 : 0) : sel ? 0.1 : 0;
+    st.glow.material.opacity += (want - st.glow.material.opacity) * Math.min(1, dt * 4); st.glow.visible = st.glow.material.opacity > 0.005;
+    if (st.mirror.visible) st.mirror.children[0].material.opacity = 0.9 + 0.1 * Math.sin(t * 2.2 + st.i); } };
+  recs.forEach((_, i) => BARN_STALLS.drawPlaque(i));
+  BARN_STALLS.ready = true;
+};
