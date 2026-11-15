@@ -241,6 +241,12 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
   - **Sit: ON:** she sits (SitDown, then a SitIdle loop) and stays seated, with no auto-stand. **Sit: OFF:** SitUp, then normal companion behaviour.
   - **Sniff: ON:** she keeps sniffing around until it is turned OFF.
   - Pressing Crawl or Crawl: ON, switching to the other toggle, or sending her to a stall turns the active toggle OFF first.
+- **Tails retuned (Ahri-style):** a bushy, upward-curving crescent behind her that floats instead of fanning out into 9 spikes or drooping.
+  - **Idle:** tips fan about 50° (was about 130°) and stay up (lowest tip about 1.4 m; it was 0.25 m). One slow sway (3.8 s cycle) moves the whole cluster, with the centre tails leading by up to 0.25 s. The base stays nearly still, the motion grows toward the tips, and the wave travels from base to tip.
+  - **Moving:** momentum (speed or turning) swings the cluster back and narrows it to about 25–28° at her walk. When she stops, it eases back into the curl over about 2–3 s.
+  - **Damping:** every bone uses an over-damped follow-through (no spring, no overshoot, no jelly). The happy tail flick is now a slow swish through the same damping.
+  - **Crawl, sit and nap** keep their own tail poses; only the sway and damping are added.
+  - **Tuning:** the constants are in the `TAIL` block in `moomodel.js`. Any of them can be overridden from the URL as `?tail_<name>=` (for example `?tail_spread_idle=50`). `?mootailfx=0` shows the clip-only tails.
 
 **Crawl / sit / sniff controls.**
 - **Crawl** button (6–10 s), **C** key (Shift+C = hold), and a **Crawl: ON** toggle that keeps her crawling.

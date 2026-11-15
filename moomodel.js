@@ -11,6 +11,27 @@ const extOf = (n) => ((/\.([a-z0-9]+)(?:[?#].*)?$/i.exec(n || '') || [])[1] || '
 const MIRROR_TRI_LIMIT = 70000;   // above this the mirror twin is hidden while the model is in use (Quest budget)
 const HEIGHT = 1.68;
 
+// v38c: per-tail data for the runtime tail shaping (cluster centre / back in hips space, clip spread, chains, local sway axes)
+function tailShape(tails, hips, model) {
+  model.updateMatrixWorld(true);
+  const hqi = hips.getWorldQuaternion(new THREE.Quaternion()).invert(), up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(model.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+  const upH = up.clone().applyQuaternion(hqi), backH = fwd.clone().negate().applyQuaternion(hqi);
+  const byK = new Map(); for (const t of tails) { if (!byK.has(t[2])) byK.set(t[2], []); byK.get(t[2]).push(t); }
+  const chains = [], bones = new Map(), mean = new THREE.Vector3(); let nseg = 1;
+  for (const [, arr] of byK) { arr.sort((a, b) => a[1] - b[1]); nseg = Math.max(nseg, arr.length);
+    const r = arr[0][0].getWorldPosition(new THREE.Vector3()), tip = arr[arr.length - 1][0].localToWorld(new THREE.Vector3(0, 0.1, 0));
+    const d = tip.sub(r).normalize().applyQuaternion(hqi); chains.push({ bones: arr.map((x) => x[0]), dir: d, lead: 0 }); mean.add(d);
+    for (const [b] of arr) { const bqi = b.getWorldQuaternion(new THREE.Quaternion()).invert(), seg = new THREE.Vector3(0, 1, 0).applyQuaternion(b.getWorldQuaternion(new THREE.Quaternion()));
+      let cax = new THREE.Vector3().crossVectors(seg, up); if (cax.lengthSq() < 1e-6) cax.set(1, 0, 0); cax.normalize();
+      bones.set(b, { curlAx: cax.applyQuaternion(bqi).normalize(), swayAx: up.clone().applyQuaternion(bqi).normalize() }); } }
+  mean.normalize(); if (mean.dot(upH) < 0.2) mean.addScaledVector(upH, 0.4).normalize();   // the crescent opens upward
+  let maxA = 0; for (const c of chains) for (const c2 of chains) maxA = Math.max(maxA, c.dir.angleTo(c2.dir));
+  const side = new THREE.Vector3().crossVectors(upH, mean).normalize(); let mx = 1e-3; for (const c of chains) mx = Math.max(mx, Math.abs(c.dir.dot(side)));
+  return { chains, bones, mean, back: backH.clone().addScaledVector(upH, 0.35).normalize(), nseg, clipSpread: maxA * 180 / Math.PI, side,
+    v: { c: new THREE.Vector3(), up: new THREE.Vector3(), d: new THREE.Vector3(), t: new THREE.Vector3(), ax: new THREE.Vector3() },
+    q: { P: new THREE.Quaternion(), W: new THREE.Quaternion(), a: new THREE.Quaternion(), b: new THREE.Quaternion() }, setLead(TAIL) { for (const c of chains) c.lead = TAIL.TAIL_LEAD * (1 - Math.abs(c.dir.dot(side)) / mx); } };
+}
+
 function driveId(s) { const m = /(?:\/d\/|id=|folders\/)([\w-]{20,})/.exec(s || '') || /^([\w-]{25,})$/.exec(s || ''); return m ? m[1] : ''; }
 
 async function fetchBuf(urls) {
@@ -177,7 +198,31 @@ function install(cow, { gltf, vrmMod }) {
   }
   cow.builtin.visible = false; cow.builtinTwin.visible = false; cow.group.add(holder);
   const tmpQ = new THREE.Quaternion(), E = new THREE.Euler();
-  const TL = { init: false, hf: new THREE.Quaternion(), D: new THREE.Quaternion(), f: new Map(), tmp: new THREE.Quaternion(), w: new THREE.Quaternion(), ax: new THREE.Vector3() }, TP = {};
+  // ---- v38c tail tuning (Ahri-style: a bushy upward crescent that floats, sways as one cluster, flattens back with momentum) ----
+  const TAIL = {
+    SPREAD_IDLE: 55,      // deg, total fan of the tail tips when standing (the clips fan ~130 deg; every segment is pulled toward the cluster centre)
+    SPREAD_MOVE: 34,      // deg, total fan of the tips at full momentum (walking / turning)
+    FAN_CAL: 2.0,         // calibration: per-segment pulls compound down the chain, so the per-segment scale uses spread * FAN_CAL
+    CURL_SEG: 2.5,        // deg added per segment down the chain (cumulative upward curl) - the tails float up against gravity
+    CURL_MOVE: 0.45,      // fraction of the curl kept at full momentum (tails stream back flatter)
+    MAX_ELEV: 65,         // deg, the curl never lifts a segment steeper than this (keeps the crescent open, not a vertical bundle)
+    MIN_ELEV: 5,          // deg, no tail segment points below this elevation while standing / walking (no drooping to the floor)
+    FLATTEN: 0.55,        // 0..1 how far the cluster swings toward straight back at full momentum
+    MOM_SPEED: 0.8,       // m/s of travel that counts as full momentum (her walk is ~0.85)
+    MOM_TURN: 1.2,        // rad/s of turning that counts as full momentum
+    MOM_RISE: 0.45, MOM_FALL: 1.1,   // s, momentum low-pass (slow release = tips carry forward softly and settle back on stops)
+    PERIOD: 3.8,          // s, ambient sway cycle (one slow sine for the whole cluster)
+    SWAY: 9,              // deg, sway scale (tip bone; summed down the chain the tips swing ~ +-11 deg, the base stays near rigid)
+    SWAY_EXP: 1.6,        // amplitude growth base -> tip (j/n)^exp
+    LAG: 0.09,            // s of phase lag per bone down the chain (wave travels base -> tip)
+    TAIL_LEAD: 0.25,      // s, the centre tails lead the outer ones by up to this
+    LIFT: 3,              // deg of slow up/down bob layered with the sway (quarter-cycle offset)
+    TAU0: 0.16, TAU_SEG: 0.07,       // s, over-damped follow-through per bone (first-order: no spring, no overshoot)
+    FLICK: 7, FLICK_HZ: 1.1,         // deg per bone / Hz of the happy tail swish (hop, tilt, being looked at) - goes through the same damping
+  };
+  for (const k of Object.keys(TAIL)) { const v = q.get('tail_' + k.toLowerCase()); if (v !== null && v !== '' && !isNaN(+v)) TAIL[k] = +v; }   // ?tail_spread_idle=50 etc.
+  const TL = { init: false, hf: new THREE.Quaternion(), D: new THREE.Quaternion(), f: new Map(), tmp: new THREE.Quaternion(), w: new THREE.Quaternion(), ax: new THREE.Vector3(),
+    shape: null, mom: 0, prevHq: new THREE.Quaternion(), stats: { spread: 0, minY: 0 } }, TP = {};
   const skinCtl = makeSkins(model, mats, cow), sparkle = makeSparkle(holder);
   const hq = new THREE.Quaternion(), hq2 = new THREE.Quaternion(), pq = new THREE.Quaternion(), pq2 = new THREE.Quaternion(), tq = new THREE.Quaternion();
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
@@ -229,22 +274,48 @@ function install(cow, { gltf, vrmMod }) {
         if (walkA) { walkA.setEffectiveWeight(w * (1 - ww) * (1 - fw) * (1 - nw)); idleA.setEffectiveWeight((1 - w) * (1 - ww) * (1 - fw) * (1 - nw) * (1 - gw));
           walkA.timeScale = S.speed > 0.05 ? Math.min(1.9, Math.max(0.45, S.speed / (STRIDE * k * (cow.scale || 1) / walkA.getClip().duration))) : 0.6; }
         mixer.update(dt);
-        // v38d tails: every tail flows on its own. The roots follow the hips' rotation through a low-pass (no step jiggle), each bone
-        // eases toward its clip pose with a lag that grows down the chain (follow-through, over-damped: no overshoot), then a slow
-        // wave is layered on with its own frequency (0.35-0.6 Hz), phase, amplitude and direction per tail.
+        // v38c tails (TAIL constants above). Per tail, bone by bone from the root: the clip direction of each segment is pulled toward the
+        // cluster centre (its spread scaled to SPREAD_IDLE -> SPREAD_MOVE: a clumped crescent, not 9 spikes), lifted by an upward curl
+        // that grows down the chain (they float, never droop), swung back with momentum, then one slow cluster sway is layered on
+        // (centre tails lead, base->tip lag, amplitude growing to the tips) and every bone goes through an over-damped follow-through
+        // filter (first order: no spring, no overshoot, no jelly). Crawl / sit / nap keep their clip tails (sway + damping only).
         if (tails.length && nb.hips && TAILFX) {
-          nb.hips.getWorldQuaternion(hq); if (!TL.init) { TL.init = true; TL.hf.copy(hq); }
+          nb.hips.updateWorldMatrix(true, false); nb.hips.getWorldQuaternion(hq); if (!TL.init) { TL.init = true; TL.hf.copy(hq); TL.prevHq.copy(hq); }
           TL.hf.slerp(hq, 1 - Math.exp(-dt / 0.25)); TL.D.copy(TL.hf).multiply(hq2.copy(hq).invert());
-          const fw2 = S.famW || 0, amp = (1 - 0.3 * w) * (1 - 0.35 * fw2) * (1 - 0.6 * nw) * (S.tailAmp === undefined ? 1 : S.tailAmp);
-          for (const [b, j, kk] of tails) { let F = TL.f.get(b); const tq2 = TL.tmp.copy(b.quaternion);
-            if (j === 1 && b.parent) { b.parent.getWorldQuaternion(pq); tq2.premultiply(pq2.copy(pq).invert().multiply(TL.D).multiply(pq)); }
-            if (!F) { F = tq2.clone(); TL.f.set(b, F); } else F.slerp(tq2, 1 - Math.exp(-dt / (0.14 + 0.06 * j)));
-            const P0 = TP[kk] || (TP[kk] = { f: 0.35 + 0.25 * ((kk * 0.618) % 1), ph: kk * 2.399, a: 0.035 + 0.025 * ((kk * 0.381) % 1), d: kk * 1.7 });
-            const ang = amp * P0.a * (0.5 + 0.3 * j) * Math.sin(2 * Math.PI * P0.f * t - j * 0.6 + P0.ph);
-            b.quaternion.copy(F).multiply(TL.w.setFromAxisAngle(TL.ax.set(Math.cos(P0.d), 0, Math.sin(P0.d)), ang)); }
+          if (!TL.shape) { TL.shape = tailShape(tails, nb.hips, model); TL.shape.setLead(TAIL); cow.ext && (cow.ext.tailInfo = () => ({ clipSpread: TL.shape.clipSpread, mom: TL.mom })); }
+          const SH = TL.shape, V = SH.v, Qv = SH.q, fw2 = S.famW || 0, sw = (1 - fw2) * (1 - nw);
+          const turn = dt > 0 ? 2 * Math.acos(Math.min(1, Math.abs(TL.prevHq.dot(hq)))) / dt : 0; TL.prevHq.copy(hq);
+          const mt = Math.min(1, Math.max((S.speed || 0) / TAIL.MOM_SPEED, turn / TAIL.MOM_TURN));
+          TL.mom += (mt - TL.mom) * (1 - Math.exp(-dt / (mt > TL.mom ? TAIL.MOM_RISE : TAIL.MOM_FALL)));
+          const mom = TL.mom * sw, spread = TAIL.SPREAD_IDLE + (TAIL.SPREAD_MOVE - TAIL.SPREAD_IDLE) * mom, ks = Math.min(1, spread * TAIL.FAN_CAL / Math.max(1, SH.clipSpread));
+          const curl = TAIL.CURL_SEG * (1 - (1 - TAIL.CURL_MOVE) * mom) * Math.PI / 180, minEl = TAIL.MIN_ELEV * Math.PI / 180;
+          const amp = (1 - 0.35 * nw) * (S.tailAmp === undefined ? 1 : S.tailAmp), om = 2 * Math.PI / TAIL.PERIOD;
+          // cluster centre in world space (hips space -> world), swung back by momentum
+          const cW = V.c.copy(SH.mean).lerp(SH.back, TAIL.FLATTEN * mom).normalize().applyQuaternion(hq), up = V.up.set(0, 1, 0);
+          nb.hips.parent ? nb.hips.parent.getWorldQuaternion(pq) : pq.identity();
+          for (const ch of SH.chains) { const Pq = Qv.P.copy(hq);
+            for (let jj = 0; jj < ch.bones.length; jj++) { const b = ch.bones[jj], j = jj + 1, L = TL.tmp.copy(b.quaternion);
+              if (j === 1) L.premultiply(pq2.copy(Pq).invert().multiply(TL.D).multiply(Pq));   // root lags the hips' rotation (low-pass)
+              if (sw > 0.001) {
+                const Wq = Qv.W.copy(Pq).multiply(L), d = V.d.set(0, 1, 0).applyQuaternion(Wq);
+                // clump: the deviation from the cluster centre scaled by ks
+                Qv.a.setFromUnitVectors(cW, d); Qv.b.identity().slerp(Qv.a, ks); const tg = V.t.copy(cW).applyQuaternion(Qv.b);
+                // upward curl growing down the chain + no drooping below MIN_ELEV
+                const ax = V.ax.crossVectors(tg, up); if (ax.lengthSq() > 1e-8) { ax.normalize(); const el = Math.asin(Math.max(-1, Math.min(1, tg.y)));
+                  const lift = Math.min(curl * (j - 1) + Math.max(0, minEl - el), TAIL.MAX_ELEV * Math.PI / 180 - el); if (lift > 0) tg.applyAxisAngle(ax, lift); }
+                Qv.a.setFromUnitVectors(d, tg); Qv.b.identity().slerp(Qv.a, sw);
+                L.copy(pq2.copy(Pq).invert().multiply(Qv.b).multiply(Wq));
+              }
+              // cluster sway: one sine, centre tails lead a little, phase lag down the chain, amplitude growing to the tips
+              const ph = om * (t + ch.lead - TAIL.LAG * (j - 1)), g = Math.pow(j / SH.nseg, TAIL.SWAY_EXP) * amp * (0.6 + 0.4 * sw) / Math.max(1, SH.nseg * 0.4);
+              const R = SH.bones.get(b); L.multiply(TL.w.setFromAxisAngle(R.swayAx, g * TAIL.SWAY * Math.PI / 180 * Math.sin(ph)));
+              L.multiply(TL.w.setFromAxisAngle(R.curlAx, g * TAIL.LIFT * Math.PI / 180 * Math.sin(ph - Math.PI / 2)));
+              if (S.flick > 0.01) L.multiply(TL.w.setFromAxisAngle(R.swayAx, S.flick * TAIL.FLICK * Math.PI / 180 * (j / SH.nseg) * Math.sin(2 * Math.PI * TAIL.FLICK_HZ * t - j * 0.5 + ch.lead * 4)));
+              let F = TL.f.get(b); if (!F) { F = L.clone(); TL.f.set(b, F); } else F.slerp(L, 1 - Math.exp(-dt / (TAIL.TAU0 + TAIL.TAU_SEG * j)));
+              b.quaternion.copy(F); Pq.multiply(F); } }
         }
-        // tail flick (bones named *tail*): a quick ripple layered on top of the clips
-        if (S.flick > 0.01 && tails.length) for (const [b, j] of tails) { const a = S.flick * 0.22 * Math.sin(t * 16 - j * 0.9); b.rotateX(a); b.rotateZ(a * 0.6); }
+        // tail flick (bones named *tail*): a quick ripple layered on top of the clips (only with ?mootailfx=0; v38c folds a slow swish into the damped tails)
+        if (S.flick > 0.01 && tails.length && !TAILFX) for (const [b, j] of tails) { const a = S.flick * 0.22 * Math.sin(t * 16 - j * 0.9); b.rotateX(a); b.rotateZ(a * 0.6); }
       }
       if (mixer && walkA) {
         // clip-driven (Idle + Walk): layer the head/neck look-at-the-viewer on top of the animation, in world space so any bone axes work
