@@ -317,3 +317,8 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - Static friends (no recipe yet) keep the v38e path (facing fix + `apx.js` wings/ears/tail).
 
 Cache-bust `?v=39a`.
+
+### v39b — Makima back to her static figure, Power wears Crimson Devil
+- Makima's rigged figure looked broken in the room, so she is back on her assembled static figure until her rig passes multi-angle checks (her painted Control Devil skin needs the rigged mesh's UVs, so she wears her Original look for now).
+- Power: "Crimson Devil" colour skin (deep red hair incl. bangs and front strands, dark jacket and shirt, red tie, black sneakers, red horns with a soft glow) on her unchanged static sculpt; it is her default and switchable from her stall's wardrobe sign.
+- Friend models with painted skins are served with UVs (same geometry); painted skins are only listed when the served model carries the matching UVs.
