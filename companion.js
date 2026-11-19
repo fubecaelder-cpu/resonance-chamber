@@ -157,6 +157,23 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
   }
   // ---- curious exploring: points of interest per room ({x, y, z, stand, dwell:[a,b], kind, get?}), viewing spot validated once per visit
   const PS = 1.6;   // personal space (m)
+  // v38e unstuck: if she makes no real progress toward her goal for ~1 s (wedged between pillars / pods / stall posts / monitors, at a
+  // doorway corner, or pushed back by the player's personal space), avoidance is switched off for that move: she walks straight through
+  // the obstacle (and the player) along the zone route, then normal avoidance resumes once she arrives or after a few seconds.
+  function ghostTick(dt, hold, gx, gz, speed) {
+    const gd = Math.hypot(gx - S.x, gz - S.z);
+    if (S.gpG && Math.hypot(gx - S.gpG[0], gz - S.gpG[1]) > 0.6) { S.gpD = undefined; S.gpT = 0; }
+    S.gpG = [gx, gz];
+    if (hold || gd < 0.3) { S.ghost = 0; S.gpD = undefined; S.gpT = 0; return false; }
+    if (S.ghost > 0) { S.ghost -= dt;
+      if (S.ghost <= 0 && obstacles.some((o) => Math.hypot(S.x - o.x, S.z - o.z) < o.r + 0.1)) S.ghost = 0.25;   // never resume avoidance while still inside something
+      if (S.ghost <= 0) { S.gpD = undefined; S.gpT = 0; } return true; }
+    S.gpT = (S.gpT || 0) + dt;
+    if (S.gpD === undefined) { S.gpD = gd; S.gpT = 0; return false; }
+    if (S.gpT >= 1.0) { const prog = S.gpD - gd; S.gpD = gd; S.gpT = 0;
+      if (prog < Math.min(0.2, 0.4 * speed)) { S.ghost = clamp(gd / 0.4, 2, 6); S.ghostN = (S.ghostN || 0) + 1; S.info = 'phasing through'; return true; } }
+    return false;
+  }
   function standFor(P, hx, hz, zp) {
     const c = RC[+zp[1] - 1], bx = c[0] - P.x, bz = c[1] - P.z, bd = Math.hypot(bx, bz) || 1, b0 = Math.atan2(bx / bd, bz / bd);
     const tries = P.kind === 'pod' ? [Math.atan2(S.x - P.x, S.z - P.z), b0, b0 + 1.2, b0 - 1.2, b0 + 2.2, b0 - 2.2] : [b0 + rnd(-0.35, 0.35), b0, b0 + 0.6, b0 - 0.6];
@@ -282,7 +299,7 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
       }
       // personal space: too close, or the player is walking straight at her -> sidestep to a free spot
       const closing = S.pv > 0.4 && ((S.pvx * dx + S.pvz * dz) / Math.max(d * Math.hypot(S.pvx, S.pvz), 1e-3)) > 0.6;
-      if (d < PS || (d < PS + 0.6 && closing)) {
+      if (!(S.ghost > 0) && (d < PS || (d < PS + 0.6 && closing))) {   // v38e: while phasing she walks through the player instead
         S.escT -= dt;
         if (!S.esc || S.escT <= 0) {
           const away = Math.atan2(dx, dz); S.esc = null;
@@ -316,15 +333,16 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     // keep the goal somewhere she can actually stand (in the player's zone when following)
     if (!hold) { [gx, gz] = pushOut(...clampWalk(gx, gz, zp === zm || S.act ? null : zp)); [gx, gz] = clampWalk(gx, gz); if (!reachable(gx, gz)) { const c = snapCell(gx, gz); if (c >= 0) { gx = cx(c); gz = cz(c); } } }
     // ---- steering
-    let wx = gx, wz = gz; if (!hold) [wx, wz] = navigate(S.x, S.z, gx, gz, dt);
+    const ghost = ghostTick(dt, hold, gx, gz, speed); S.phasing = ghost;
+    let wx = gx, wz = gz; if (!hold) [wx, wz] = ghost ? route(S.x, S.z, gx, gz) : navigate(S.x, S.z, gx, gz, dt);
     let ex = wx - S.x, ez = wz - S.z; const ed = Math.hypot(ex, ez);
     let tvx = 0, tvz = 0;
     if (!hold && ed > 0.12) { const v = speed * Math.min(1, ed / 0.8); tvx = ex / ed * v; tvz = ez / ed * v; }
-    for (const o of obstacles) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz), R0 = o.r + 0.7;
+    if (!ghost) for (const o of obstacles) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz), R0 = o.r + 0.7;
       if (od < R0 && od > 1e-3 && (S.act && S.act.pod === o ? Math.hypot(gx - o.x, gz - o.z) > o.r + 0.6 : true) && !(S.task && S.task.sniff)) { const k = (R0 - od) / R0 * 1.4; tvx += ox / od * k; tvz += oz / od * k; } }
-    if (d < PS + 0.1 && !hold) { const k = (PS + 0.1 - d) / (PS + 0.1) * 2.0; tvx += dx / Math.max(d, 0.1) * k; tvz += dz / Math.max(d, 0.1) * k; }
-    for (const o of peers()) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz); if (od < 1.6 && od > 1e-3) { const k = (1.6 - od) / 1.6 * 1.2; tvx += ox / od * k; tvz += oz / od * k; } }   // v38g: friends keep apart
-    locomote(dt, tvx, tvz, speed, hold, faceYaw(face, hx, hz), (x, z) => { const p = pushOut(...clampWalk(x, z)); return clampWalk(p[0], p[1]); });
+    if (d < PS + 0.1 && !hold && !ghost) { const k = (PS + 0.1 - d) / (PS + 0.1) * 2.0; tvx += dx / Math.max(d, 0.1) * k; tvz += dz / Math.max(d, 0.1) * k; }
+    if (!ghost) for (const o of peers()) { const ox = S.x - o.x, oz = S.z - o.z, od = Math.hypot(ox, oz); if (od < 1.6 && od > 1e-3) { const k = (1.6 - od) / 1.6 * 1.2; tvx += ox / od * k; tvz += oz / od * k; } }   // v38g: friends keep apart
+    locomote(dt, tvx, tvz, speed, hold, faceYaw(face, hx, hz), ghost ? ((x, z) => clampWalk(x, z)) : ((x, z) => { const p = pushOut(...clampWalk(x, z)); return clampWalk(p[0], p[1]); }));
     return finish(now, dt, hold, scoot, d);
   }
   function applyPose(w) { cow.state.crawl = w.crawl ? 1 : 0; cow.state.sniff = w.sniff ? 1 : 0; cow.state.sit = w.sit ? 1 : 0; cow.state.nap = w.nap ? 1 : 0; }
@@ -420,7 +438,9 @@ export function createCompanion({ cow, RC, CORRS, corrLocal, zoneOf, CEN, VEIL_R
     if (cow.state.crawlPhase === 'loop') speed = Math.min(speed, want.sniff ? 0.16 : 0.4);
     S.gate = H.phase === 'enter' || H.phase === 'exit' || (H.phase === 'goto' && Math.hypot(S.x - F.x, S.z - F.z) < 1.8) ? 1 : 0;
     let tvx = 0, tvz = 0;
-    if (!hold) { let wx = gx, wz = gz; if (H.phase === 'goto') [wx, wz] = navigate(S.x, S.z, gx, gz, dt); const ex = wx - S.x, ez = wz - S.z, ed = Math.hypot(ex, ez);
+    const ghost = H.phase === 'goto' ? ghostTick(dt, hold, gx, gz, speed) : false; S.phasing = ghost;   // v38e: inside the stall the stall bounds still apply
+    if (ghost) clampFn = (x, z) => clampWalk(x, z);
+    if (!hold) { let wx = gx, wz = gz; if (H.phase === 'goto') [wx, wz] = ghost ? route(S.x, S.z, gx, gz) : navigate(S.x, S.z, gx, gz, dt); const ex = wx - S.x, ez = wz - S.z, ed = Math.hypot(ex, ez);
       if (ed > 0.08) { const v = speed * Math.min(1, ed / 0.5); tvx = ex / ed * v; tvz = ez / ed * v; } }
     locomote(dt, tvx, tvz, speed, hold, faceYaw(face, hx, hz) ?? (H.phase === 'in' && hold && !lookAt && Math.random() < 0.002 ? S.yaw + rnd(-1, 1) : (H.faceY ?? null)), clampFn);
     return finish(now, dt, hold, false, dP);

@@ -1,9 +1,10 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=38d';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=38d';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38d';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38d';
+import { THREE, clipMirror } from './shared.js?v=38e';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=38e';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38e';
+import { applyApx } from './apx.js?v=38e';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38e';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -82,7 +83,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38d'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38e'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -108,10 +109,16 @@ export function attachMooModel(cow, onStatus = () => {}, explicit = null) {   //
   return status;
 }
 
-function install(cow, { gltf, vrmMod }) {
+function install(cow, { gltf, vrmMod, c: src = {} }) {
+  const q0 = new URLSearchParams(location.search);
   const vrm = gltf.userData && gltf.userData.vrm;
   let model = vrm ? vrm.scene : gltf.scene;
   if (vrm && vrmMod) { vrmMod.VRMUtils.removeUnnecessaryVertices(model); vrmMod.VRMUtils.combineSkeletons ? vrmMod.VRMUtils.combineSkeletons(model) : 0; if (vrm.meta && vrm.meta.metaVersion === '0') vrmMod.VRMUtils.rotateVRM0(vrm); }
+  // v38e: static (un-rigged) figures: facing fix (settings.json "yaw", degrees) and extra anatomy (wings / ears / tails) via apx.js
+  let skinned = false; model.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
+  const yaw0 = (+src.yaw || 0) * Math.PI / 180; let apx = null;
+  if (!skinned && src.apx && src.apx.length && q0.get('mooapx') !== '0') { try { apx = applyApx(model, src.apx, { yaw: yaw0, debug: q0.get('mooapx') === 'debug' }); } catch (e) { console.warn('[moomodel] apx', e); } }
+  if (!apx && yaw0) model.rotation.y += yaw0;
   let tris = 0; model.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
   // fit: ~1.68 m tall, feet on the floor, centred on the pivot
   model.updateMatrixWorld(true);
@@ -135,6 +142,9 @@ function install(cow, { gltf, vrmMod }) {
   const nb = vrm && vrm.humanoid ? { hips: vrm.humanoid.getNormalizedBoneNode('hips'), spine: vrm.humanoid.getNormalizedBoneNode('spine'), neck: vrm.humanoid.getNormalizedBoneNode('neck'),
     head: vrm.humanoid.getNormalizedBoneNode('head'), lUp: vrm.humanoid.getNormalizedBoneNode('leftUpperArm'), rUp: vrm.humanoid.getNormalizedBoneNode('rightUpperArm') } : named;
   const rest = {}; for (const [k2, b] of Object.entries(nb)) if (b) rest[k2] = b.quaternion.clone();
+  // v38e: extra-anatomy bones (ears, wings) on rigged models: over-damped secondary motion layered on the clips, like the tails
+  const xBones = []; model.traverse((o) => { if (o.isBone && /(ear|wing)/i.test(o.name) && !/tail|hand|arm|fore/i.test(o.name)) xBones.push({ b: o, wing: /wing/i.test(o.name), side: /left|_l$|\.l$/i.test(o.name) ? 1 : -1, f: [0, 0] }); });
+  const XB = { mom: 0, q: new THREE.Quaternion(), q2: new THREE.Quaternion(), pq: new THREE.Quaternion(), hq: new THREE.Quaternion(), ax: new THREE.Vector3(), ay: new THREE.Vector3(), yaw: null };
   const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name), m2 = /tail\D*(\d+)\D+(\d+)/i.exec(o.name); tails.push([o, m ? +m[1] : 1, m2 ? +m2[1] : 1]); } });
   let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0, napA = null, nw = 0;
   let crawlF = null, sitF = null, sniffA = null, snw = 0; const gests = []; let gest = null, gw = 0, gestLast = null, gestT = 6 + Math.random() * 6;
@@ -232,7 +242,7 @@ function install(cow, { gltf, vrmMod }) {
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
   cow.ext = {
     clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null, walkScale: walkA ? +walkA.timeScale.toFixed(2) : null, wave: waveA ? +waveA.getEffectiveWeight().toFixed(2) : null, crawl: crawlF ? +crawlF.w.toFixed(2) : 0, crawlPhase: crawlF && crawlF.phase, nap: +nw.toFixed(2), crawlScale: crawlF ? +crawlF.acts.loop.timeScale.toFixed(2) : null, sniff: +snw.toFixed(2), sit: sitF ? +sitF.w.toFixed(2) : 0, sitPhase: sitF && sitF.phase, gesture: gest ? gest.getClip().name : null, gw: +gw.toFixed(2) }),
-    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawlF, canNap: !!napA, canSit: !!sitF, canSniff: !!sniffA, gestures: gests.map((a) => a.getClip().name), spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm,
+    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawlF, canNap: !!napA, canSit: !!sitF, canSniff: !!sniffA, gestures: gests.map((a) => a.getClip().name), spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm, apx: apx ? apx.regions : [], apxMom: () => (apx ? +apx.U.uApMom.value.toFixed(3) : null), xBones: xBones.map((e) => e.b.name), xMom: () => +XB.mom.toFixed(3),
     skin: () => skinCtl.id, setSkin: (def, quiet) => { if (!quiet) { sparkle.burst(); cow.state.flash = Math.max(cow.state.flash || 0, 1); } return skinCtl.set(def); },
     update(dt, S, cam, t) {
       const w = S.walk, idle = 1 - w;
@@ -344,6 +354,18 @@ function install(cow, { gltf, vrmMod }) {
           b.parent.getWorldQuaternion(pq); const part = tq.identity().slerp(wq, f);
           b.quaternion.premultiply(pq2.copy(pq).invert().multiply(part).multiply(pq)); }
       }
+      if (xBones.length) {   // ears tilt back with momentum and sway a little, tips lag; first-order filter, no overshoot
+        holder.getWorldQuaternion(XB.hq); const fwd = XB.ax.set(0, 0, 1).applyQuaternion(XB.hq), yw = Math.atan2(fwd.x, fwd.z);
+        let turn = 0; if (XB.yaw !== null && dt > 0) { let d = yw - XB.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); turn = Math.abs(d) / dt; } XB.yaw = yw;
+        const mt = Math.min(1, Math.max((S.speed || 0) / 1.2, turn / 2.5)); XB.mom += (mt - XB.mom) * (1 - Math.exp(-dt / (mt > XB.mom ? 0.5 : 1.1)));
+        const right = XB.ax.set(1, 0, 0).applyQuaternion(XB.hq), fw = XB.ay.set(0, 0, 1).applyQuaternion(XB.hq);
+        xBones.forEach((e, i) => { const A = e.wing ? 1 : 0.35, k1 = 1 - Math.exp(-dt / 0.3);
+          const back = A * (0.12 * XB.mom + 0.035 * Math.sin(t * 1.1 + i * 0.7)), side = A * e.side * 0.03 * Math.sin(t * 0.7 + i * 1.9);
+          e.f[0] += (back - e.f[0]) * k1; e.f[1] += (side - e.f[1]) * k1; if (!e.b.parent) return;
+          XB.q.setFromAxisAngle(right, -e.f[0]).multiply(XB.q2.setFromAxisAngle(fw, e.f[1])); e.b.parent.getWorldQuaternion(XB.pq);
+          e.b.quaternion.premultiply(XB.q2.copy(XB.pq).invert().multiply(XB.q).multiply(XB.pq)); });
+      }
+      if (apx) { holder.getWorldQuaternion(XB.hq); const fwd = XB.ax.set(0, 0, 1).applyQuaternion(XB.hq); apx.update(dt, t, S.speed || 0, Math.atan2(fwd.x, fwd.z)); }
       if (!mixer || !walkA) {
         // procedural: breathing sway, head turned toward the viewer, gentle tilt, a little bob while gliding
         const sw = Math.sin(S.phase);

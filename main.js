@@ -2,23 +2,24 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38d';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38e';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=38d';
-import { pinkRoomCfg } from './pinkroom.js?v=38d';
-import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38d';
-import { buildOpRoom } from './oproom.js?v=38d';
-import { buildCorridor } from './corridor.js?v=38d';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=38d';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=38d';
-import { createScreens } from './screens.js?v=38d';
-import { createPods } from './pods.js?v=38d';
-import { createMoo } from './moo.js?v=38d';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38d';
-import { createMissMoo } from './misscow.js?v=38d';
-import { attachMooModel } from './moomodel.js?v=38d';
-import { createCompanion } from './companion.js?v=38d';
-import { DRIVE_DEFAULTS } from './config.js?v=38d';
+import { buildChamber } from './chamber.js?v=38e';
+import { pinkRoomCfg } from './pinkroom.js?v=38e';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38e';
+import { buildOpRoom } from './oproom.js?v=38e';
+import { buildCorridor } from './corridor.js?v=38e';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=38e';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=38e';
+import { createScreens } from './screens.js?v=38e';
+import { createPods } from './pods.js?v=38e';
+import { createMoo } from './moo.js?v=38e';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38e';
+import { createMissMoo } from './misscow.js?v=38e';
+import { attachMooModel } from './moomodel.js?v=38e';
+import { APX_DEFAULTS } from './apx.js?v=38e';
+import { createCompanion } from './companion.js?v=38e';
+import { DRIVE_DEFAULTS } from './config.js?v=38e';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -110,6 +111,8 @@ const pods = createPods({ media, onChange: () => { if (panelsReady) panelSys.red
 // ---------- v24: Moo Track (spatial audio + cues), Miss Moo, tunnel props ----------
 const CFI = CDEF.findIndex((c) => c.k === 'cF'), CF = CDEF[CFI];
 const cfAt = (z, x = 0) => [CF.S[0] + CF.D[0] * z + CF.D[1] * x, CF.S[1] + CF.D[1] * z - CF.D[0] * x];
+const FRIEND_SCALE = { 'd-mon': 0.847 };
+const FRIEND_YAW = { angel: 180, 'miss-bunny': 180, 'd-mon': 180 };   // v38e: sculpts that face away (-Z) are turned to face forward (settings.json "yaw" overrides)   // code fallback if Drive settings.json has no scale (1.21 × 0.7)
 const cow = createMissMoo(); scene.add(cow.group, cow.mirror);
 const mooModel = attachMooModel(cow, (st) => console.log('[moomodel]', st.state, st.name, st.error || ''));   // v28: user model from Drive / GCS replaces the built-in figure
 const cowRun = { s: 0, walkLen: 1, path: [], yaw: 0, speed: 0, started: false };
@@ -702,8 +705,8 @@ function applySkins() { for (const c of CAST) { const X = c.cow.ext; if (!X || !
   c.skinBusy = true; X.setSkin(want, c.skinQuiet !== false).then((ok) => { c.skinBusy = false; c.skinQuiet = true; if (!ok) { castMsg = `${want.name}: textures failed to load`; c.skin = c.skins[0].id; castRedraw(); } }); } }
 // friends: model/roster.json (Drive subfolders of "Miss Moo Model"); ?moofriend=1 adds a placeholder friend (built-in figure) for testing
 function addFriend(e, placeholder = false) {
-  const fc = createMissMoo({ scale: e.scale || undefined }); scene.add(fc.group, fc.mirror); fc.mirror.visible = false; fc.group.visible = false;
-  const fm = placeholder || !e.model ? null : attachMooModel(fc, (st) => console.log('[moomodel:' + e.id + ']', st.state, st.name, st.error || ''), { name: e.file || e.name, ext: e.ext || 'glb', urls: [e.model + (e.md5 ? '?h=' + encodeURIComponent(e.md5) : '')] });
+  const fc = createMissMoo({ scale: e.scale || FRIEND_SCALE[e.id] || undefined }); scene.add(fc.group, fc.mirror); fc.mirror.visible = false; fc.group.visible = false;
+  const fm = placeholder || !e.model ? null : attachMooModel(fc, (st) => console.log('[moomodel:' + e.id + ']', st.state, st.name, st.error || ''), { name: e.file || e.name, ext: e.ext || 'glb', urls: [e.model + (e.md5 ? '?h=' + encodeURIComponent(e.md5) : '')], yaw: e.yaw ?? FRIEND_YAW[e.id] ?? 0, apx: e.appendages || APX_DEFAULTS[e.id] || null });
   const comp = createCompanion({ cow: fc, ...castCommon, peers: peersOf(e.id), id: e.id });
   const sp = STALLS[0]; fc.place(sp.C.x, sp.C.z, sp.yaw);
   const c = castMember(e.id, e.name, fc, fm, comp, { friend: true, placeholder, modelName: e.file, builtinSkin: { id: 'original', name: 'Original', builtin: true } });
