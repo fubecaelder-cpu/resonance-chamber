@@ -4,7 +4,7 @@
 // so hair hangs whatever the head does), with absolute drag (trails and billows when she walks or turns) and relative damping
 // chosen above critical (settles softly, no jelly). Segment lengths are kept exactly; points are pushed out of the body
 // capsules (radii from the rig's extras) and kept above the floor. Bones are then swung onto the points, root to tip.
-import { THREE } from './shared.js?v=39e';
+import { THREE } from './shared.js?v=39f';
 export const FLEX_KINDS = {
   //       stiffness  gravity  rel.damp abs.drag  ambient deg  ambient Hz  momentum sweep deg
   hair:  { K: 3,  G: 9.8, CR: 0,  CA: 4.2, AMB: 5,  HZ: 0.22, SWEEP: 18, FLAP: 0, WIND: 0.25, LEASH: 0, DEC: 0 },
