@@ -2,24 +2,24 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=38e';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=39a';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=38e';
-import { pinkRoomCfg } from './pinkroom.js?v=38e';
-import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=38e';
-import { buildOpRoom } from './oproom.js?v=38e';
-import { buildCorridor } from './corridor.js?v=38e';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=38e';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=38e';
-import { createScreens } from './screens.js?v=38e';
-import { createPods } from './pods.js?v=38e';
-import { createMoo } from './moo.js?v=38e';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=38e';
-import { createMissMoo } from './misscow.js?v=38e';
-import { attachMooModel } from './moomodel.js?v=38e';
-import { APX_DEFAULTS } from './apx.js?v=38e';
-import { createCompanion } from './companion.js?v=38e';
-import { DRIVE_DEFAULTS } from './config.js?v=38e';
+import { buildChamber } from './chamber.js?v=39a';
+import { pinkRoomCfg } from './pinkroom.js?v=39a';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=39a';
+import { buildOpRoom } from './oproom.js?v=39a';
+import { buildCorridor } from './corridor.js?v=39a';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=39a';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=39a';
+import { createScreens } from './screens.js?v=39a';
+import { createPods } from './pods.js?v=39a';
+import { createMoo } from './moo.js?v=39a';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=39a';
+import { createMissMoo } from './misscow.js?v=39a';
+import { attachMooModel } from './moomodel.js?v=39a';
+import { APX_DEFAULTS } from './apx.js?v=39a';
+import { createCompanion } from './companion.js?v=39a';
+import { DRIVE_DEFAULTS } from './config.js?v=39a';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 
@@ -692,7 +692,8 @@ async function loadSkins(c, url) {
     c.skinsFor = j.model || null; c.skins = (j.skins || []).filter((s) => s.builtin || s.base); if (!c.skins.length || !c.skins[0].builtin) c.skins.unshift(c.builtinSkin || BUILTIN_SKIN);
     const want = (c.isAri ? Q.get('ariskin') || Q.get('mooskin') : null) || LSX.get('ariSkin:' + c.id, null);
     const f = want && c.skins.find((s) => s.id === want.toLowerCase() || s.name.toLowerCase() === want.toLowerCase().replace(/[-_+]/g, ' '));
-    c.skin = f ? f.id : c.skins[0].id; castOccupancy(); castRedraw();
+    const painted = c.skins.filter((s) => !s.builtin);   // v39: a friend with exactly one painted skin wears it by default
+    c.skin = f ? f.id : (c.friend && painted.length === 1 && skinFits(c) ? painted[0].id : c.skins[0].id); castOccupancy(); castRedraw();
   } catch (e) { console.warn('[cast] skins', c.id, e.message); } }
 const MOO_GCS = DRIVE_DEFAULTS.gcs;
 loadSkins(ari, Q.get('mooskins') || `${MOO_GCS}/model/ari/skins.json`);

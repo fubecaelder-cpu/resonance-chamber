@@ -306,3 +306,14 @@ Miss Moo (`misscow.js`, same API plus `flash(power)`) now follows the user's ref
 - **Esdeath:** her STL is Y-up, so the default Z-up turn left her lying on her back. Her Drive `settings.json` (`"up": "y", "base": "remove"`) stands her upright, and the round display base is cut away (bottom 5.5% of her height).
 
 **Build:** build scripts are kept off the site: `work/rig/rest.py`, `stage3.py`, `crawl.py`, `nap.py`, `gestures.py`, `tassel_rig.py`, `tassel.py`, `padfit.py`, `stage4.py` (`work/rig/pipe.sh`), `legm.py`. Cache-bust `?v=38e` (fifth v38 deploy).
+
+## v39 — the Drive friends move like Ari
+
+- **Rigged friends:** Esdeath, Makima and Angel now have Ari's skeleton and her full clip set (walk, idle variants, look-around, crawl, sit, sniff, nap, stretch, hair touch …). The sync fits the skeleton to each sculpt from a per-character recipe (`work/rig/chars/<slug>/landmarks.json`, kept off the site), skins it, un-poses it to Ari's rest pose and copies her clips with leg-length-scaled travel and floor contact. The rig is redone automatically when the Drive model or its recipe changes; if a Drive model no longer matches its recipe, the sync uploads it static and says so.
+- **Flex chains (`flex.js`):** hair, cape-like hair sheets, wings and chains are bone chains driven every frame: pulled toward their shape, gravity (world down), wind ripple with phase offsets between chains, drag that makes them trail and billow when the character walks or turns, over-critical damping (settles softly, no jelly), body capsules and floor so they don't sink into her. `?mooflex=0` turns them off; `?flex_<kind>_<param>=` tunes them (kinds `hair`, `cape`, `wing`, `chain`).
+  - Esdeath: her long hair curtains (the "cape") are 2 × 4 chains. Makima: the chain loop from her belt to her right hand is two hanging strands. Angel: each wing has 5 feather chains × 5 bones with a slow flap/fold ripple.
+- **Props:** Esdeath's katana rides on her back (held forward it cut through her and the floor in most clips). Angel's staff stays in her right hand. Makima's chain loop that hung from her outstretched arm is removed (it can't follow the moving arm).
+- **Wardrobe skins:** Esdeath "Frost Empress", Makima "Control Devil", Angel "Seraph Pearl" (painted from the concepts). A friend with exactly one painted skin wears it by default; the stall sign still switches back to Original.
+- Static friends (no recipe yet) keep the v38e path (facing fix + `apx.js` wings/ears/tail).
+
+Cache-bust `?v=39a`.

@@ -1,10 +1,11 @@
 // v30: clip-driven models (Idle/Walk) also turn their head toward the viewer. v29: STL/OBJ/PLY uploads (converted to .glb by sync_gcs.py), newest-by-upload-time. v28: optional user-supplied 3D model for Miss Moo (.glb / .gltf with embedded data / .vrm).
 // Source order: ?moomodel= override -> GCS model/manifest.json (made by sync_gcs.py) -> newest model in the Drive "Miss Moo Model" folder -> built-in figure.
-import { THREE, clipMirror } from './shared.js?v=38e';
-import { GLTFLoader } from './lib/GLTFLoader.js?v=38e';
-import * as SkeletonUtils from './lib/SkeletonUtils.js?v=38e';
-import { applyApx } from './apx.js?v=38e';
-import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=38e';
+import { THREE, clipMirror } from './shared.js?v=39a';
+import { GLTFLoader } from './lib/GLTFLoader.js?v=39a';
+import * as SkeletonUtils from './lib/SkeletonUtils.js?v=39a';
+import { applyApx } from './apx.js?v=39a';
+import { createFlex } from './flex.js?v=39a';
+import { DRIVE_DEFAULTS, MOO_DEFAULTS } from './config.js?v=39a';
 
 const EXT_RANK = { glb: 0, vrm: 1, gltf: 2 };
 const CONVERTED = ['fbx', 'stl', 'obj', 'ply', '3mf', 'dae', 'off'];   // only ever loaded via the GCS .glb that sync_gcs.py converts
@@ -83,7 +84,7 @@ async function findSources() {
 
 async function parse(buf, ext, url) {
   const loader = new GLTFLoader(); let vrmMod = null;
-  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=38e'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
+  if (ext === 'vrm') { vrmMod = await import('./lib/three-vrm.module.min.js?v=39a'); loader.register((p) => new vrmMod.VRMLoaderPlugin(p)); }
   const base = url && !/^blob:/.test(url) ? url.replace(/[^/]*$/, '') : '';
   const gltf = await new Promise((res, rej) => loader.parse(buf, base, res, rej));
   return { gltf, vrmMod };
@@ -118,7 +119,10 @@ function install(cow, { gltf, vrmMod, c: src = {} }) {
   let skinned = false; model.traverse((o) => { if (o.isSkinnedMesh) skinned = true; });
   const yaw0 = (+src.yaw || 0) * Math.PI / 180; let apx = null;
   if (!skinned && src.apx && src.apx.length && q0.get('mooapx') !== '0') { try { apx = applyApx(model, src.apx, { yaw: yaw0, debug: q0.get('mooapx') === 'debug' }); } catch (e) { console.warn('[moomodel] apx', e); } }
-  if (!apx && yaw0) model.rotation.y += yaw0;
+  if (!apx && !skinned && yaw0) model.rotation.y += yaw0;   // v39: rigged friends are built facing forward on Ari's skeleton
+  // v39: rigged friends' hair / cape-like sheets / wings / chains (Flex_* bones): damped gravity + wind + momentum (flex.js)
+  let flex = null; if (skinned && q0.get('mooflex') !== '0') { try { flex = createFlex(model); if (!flex.chains.length) flex = null; } catch (e) { console.warn('[moomodel] flex', e); } }
+  const FX = { v: new THREE.Vector3() };
   let tris = 0; model.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
   // fit: ~1.68 m tall, feet on the floor, centred on the pivot
   model.updateMatrixWorld(true);
@@ -143,7 +147,7 @@ function install(cow, { gltf, vrmMod, c: src = {} }) {
     head: vrm.humanoid.getNormalizedBoneNode('head'), lUp: vrm.humanoid.getNormalizedBoneNode('leftUpperArm'), rUp: vrm.humanoid.getNormalizedBoneNode('rightUpperArm') } : named;
   const rest = {}; for (const [k2, b] of Object.entries(nb)) if (b) rest[k2] = b.quaternion.clone();
   // v38e: extra-anatomy bones (ears, wings) on rigged models: over-damped secondary motion layered on the clips, like the tails
-  const xBones = []; model.traverse((o) => { if (o.isBone && /(ear|wing)/i.test(o.name) && !/tail|hand|arm|fore/i.test(o.name)) xBones.push({ b: o, wing: /wing/i.test(o.name), side: /left|_l$|\.l$/i.test(o.name) ? 1 : -1, f: [0, 0] }); });
+  const xBones = []; model.traverse((o) => { if (o.isBone && /(ear|wing)/i.test(o.name) && !/tail|hand|arm|fore|^Flex_/i.test(o.name)) xBones.push({ b: o, wing: /wing/i.test(o.name), side: /left|_l$|\.l$/i.test(o.name) ? 1 : -1, f: [0, 0] }); });
   const XB = { mom: 0, q: new THREE.Quaternion(), q2: new THREE.Quaternion(), pq: new THREE.Quaternion(), hq: new THREE.Quaternion(), ax: new THREE.Vector3(), ay: new THREE.Vector3(), yaw: null };
   const tails = []; const animated = new Set((gltf.animations || []).flatMap((c) => c.tracks.map((tr) => tr.name.split('.')[0]))); model.traverse((o) => { if (o.isBone && /tail/i.test(o.name) && animated.has(o.name)) { const m = /(\d+)\D*$/.exec(o.name), m2 = /tail\D*(\d+)\D+(\d+)/i.exec(o.name); tails.push([o, m ? +m[1] : 1, m2 ? +m2[1] : 1]); } });
   let mixer = null, idleA = null, walkA = null, waveA = null, waveWas = 0, napA = null, nw = 0;
@@ -242,7 +246,7 @@ function install(cow, { gltf, vrmMod, c: src = {} }) {
   const add = (k2, x, y, z) => { const b = nb[k2]; if (!b || !rest[k2]) return; b.quaternion.copy(rest[k2]).multiply(tmpQ.setFromEuler(E.set(x, y, z))); };
   cow.ext = {
     clips: clips.map((c) => c.name), weights: () => ({ idle: idleA ? +idleA.getEffectiveWeight().toFixed(2) : null, walk: walkA ? +walkA.getEffectiveWeight().toFixed(2) : null, walkT: walkA ? +walkA.time.toFixed(2) : null, walkScale: walkA ? +walkA.timeScale.toFixed(2) : null, wave: waveA ? +waveA.getEffectiveWeight().toFixed(2) : null, crawl: crawlF ? +crawlF.w.toFixed(2) : 0, crawlPhase: crawlF && crawlF.phase, nap: +nw.toFixed(2), crawlScale: crawlF ? +crawlF.acts.loop.timeScale.toFixed(2) : null, sniff: +snw.toFixed(2), sit: sitF ? +sitF.w.toFixed(2) : 0, sitPhase: sitF && sitF.phase, gesture: gest ? gest.getClip().name : null, gw: +gw.toFixed(2) }),
-    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawlF, canNap: !!napA, canSit: !!sitF, canSniff: !!sniffA, gestures: gests.map((a) => a.getClip().name), spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm, apx: apx ? apx.regions : [], apxMom: () => (apx ? +apx.U.uApMom.value.toFixed(3) : null), xBones: xBones.map((e) => e.b.name), xMom: () => +XB.mom.toFixed(3),
+    tris, mirrored: !!twin, hasClips: !!mixer, canCrawl: !!crawlF, canNap: !!napA, canSit: !!sitF, canSniff: !!sniffA, gestures: gests.map((a) => a.getClip().name), spiral: !!spiral, rigged: Object.keys(rest).length > 0, vrm: !!vrm, apx: apx ? apx.regions : [], flex: flex ? flex.info() : null, apxMom: () => (apx ? +apx.U.uApMom.value.toFixed(3) : null), xBones: xBones.map((e) => e.b.name), xMom: () => +XB.mom.toFixed(3),
     skin: () => skinCtl.id, setSkin: (def, quiet) => { if (!quiet) { sparkle.burst(); cow.state.flash = Math.max(cow.state.flash || 0, 1); } return skinCtl.set(def); },
     update(dt, S, cam, t) {
       const w = S.walk, idle = 1 - w;
@@ -365,6 +369,7 @@ function install(cow, { gltf, vrmMod, c: src = {} }) {
           XB.q.setFromAxisAngle(right, -e.f[0]).multiply(XB.q2.setFromAxisAngle(fw, e.f[1])); e.b.parent.getWorldQuaternion(XB.pq);
           e.b.quaternion.premultiply(XB.q2.copy(XB.pq).invert().multiply(XB.q).multiply(XB.pq)); });
       }
+      if (flex) { (cow.group || holder).getWorldPosition(FX.v); flex.update(dt, t, { floorY: FX.v.y }); }
       if (apx) { holder.getWorldQuaternion(XB.hq); const fwd = XB.ax.set(0, 0, 1).applyQuaternion(XB.hq); apx.update(dt, t, S.speed || 0, Math.atan2(fwd.x, fwd.z)); }
       if (!mixer || !walkA) {
         // procedural: breathing sway, head turned toward the viewer, gentle tilt, a little bob while gliding
