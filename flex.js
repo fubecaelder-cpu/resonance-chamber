@@ -4,11 +4,11 @@
 // so hair hangs whatever the head does), with absolute drag (trails and billows when she walks or turns) and relative damping
 // chosen above critical (settles softly, no jelly). Segment lengths are kept exactly; points are pushed out of the body
 // capsules (radii from the rig's extras) and kept above the floor. Bones are then swung onto the points, root to tip.
-import { THREE } from './shared.js?v=39c';
+import { THREE } from './shared.js?v=39d';
 export const FLEX_KINDS = {
   //       stiffness  gravity  rel.damp abs.drag  ambient deg  ambient Hz  momentum sweep deg
-  hair:  { K: 3,  G: 9.8, CR: 0,  CA: 4.2, AMB: 5,  HZ: 0.22, SWEEP: 18, FLAP: 0, WIND: 0.25, LEASH: 0 },
-  cape:  { K: 30, G: 6.0, CR: 5,  CA: 4.8, AMB: 3,  HZ: 0.3,  SWEEP: 4,  FLAP: 0, WIND: 0.15, LEASH: 0.2 },   // v39c: hair sheets stay close to the body (leash 0.2 rad per segment from the animated pose)
+  hair:  { K: 3,  G: 9.8, CR: 0,  CA: 4.2, AMB: 5,  HZ: 0.22, SWEEP: 18, FLAP: 0, WIND: 0.25, LEASH: 0, DEC: 0 },
+  cape:  { K: 90, G: 4.0, CR: 10, CA: 1.0, AMB: 1.5, HZ: 0.3, SWEEP: 0,  FLAP: 0, WIND: 0.05, LEASH: 0.07, DEC: 0 },   // v39d: long hair sheets hang calm (sharp-turn sweep 14 -> 5 deg): stiff, little drag, leash 0.07 rad; DEC = optional decoupling from the parent bone (0 = off)
   wing:  { K: 60, G: 0,   CR: 15, CA: 2.0, AMB: 12, HZ: 0.33, SWEEP: 30, FLAP: 16, WIND: 0, TUCK: 10 },
   chain: { K: 0,  G: 9.8, CR: 0,  CA: 6.5, AMB: 0,  HZ: 0,    SWEEP: 0,  FLAP: 0, WIND: 0, LEASH: 0 },
 };
@@ -34,6 +34,9 @@ export function createFlex(model, opts = {}) {
       return { b, child, q0: b.quaternion.clone(), axis: child.position.clone().normalize(), ax: new THREE.Vector3(1, 0, 0).applyQuaternion(rq), ay: new THREE.Vector3(0, 1, 0).applyQuaternion(rq), az: new THREE.Vector3(0, 0, 1).applyQuaternion(rq) }; });
     chains.push({ key, kind, P, segs, k: m.k || 0, nk: m.n || 1, side: m.side || 1, p: null, v: null, T: null, Tp: null, ph: (m.k || 0) * 0.9 + (m.side > 0 ? 0 : 1.7) });
   }
+  let hipsB = null; for (const [nm, b] of Object.entries(bones)) if (!hipsB && /Spine2$/.test(nm)) hipsB = b; if (!hipsB) for (const [nm, b] of Object.entries(bones)) if (!hipsB && /Hips$/.test(nm)) hipsB = b;
+  const restQ = (b) => { const q0 = Q(); b.getWorldQuaternion(q0); return q0; }; const hips0 = hipsB ? restQ(hipsB) : null;
+  for (const c of chains) { const par = c.segs[0].b.parent; c.par = par; c.par0 = par ? restQ(par) : null; }
   const pairs = []; for (const a of chains) for (const b of chains) if (a !== b && a.key.replace(/_\d+$/, '') === b.key.replace(/_\d+$/, '') && b.k === a.k + 1) pairs.push([a, b]);
   const coll = []; for (const [nm, r] of Object.entries(meta.colliders || {})) if (bones[nm]) coll.push({ a: bones[nm], b: COLL[nm] ? bones[COLL[nm]] : null, r });
   const st = { mom: 0, last: null, yaw: null, turn: 0, gust: 0, enabled: !(q.get && q.get('mooflex') === '0') };
@@ -52,6 +55,9 @@ export function createFlex(model, opts = {}) {
       } });
     c.segs[0].b.updateMatrixWorld(true);
     const T = c.segs.map((s) => V().setFromMatrixPosition(s.b.matrixWorld)); T.push(V().setFromMatrixPosition(c.segs[n - 1].child.matrixWorld));
+    if (P.DEC && hipsB && c.par && c.par0) {   // v39d: rotate the target shape about its root by part of (hips motion - parent motion): long hair follows the body, not every head bob
+      const qp = restQ(c.par).multiply(c.par0.clone().invert()), qb = restQ(hipsB).multiply(hips0.clone().invert());
+      const qd = Q().slerp(qb.multiply(qp.invert()), Math.min(1, P.DEC)); for (let j = 1; j < T.length; j++) T[j].sub(T[0]).applyQuaternion(qd).add(T[0]); }
     c.len = T.slice(1).map((p, j) => p.distanceTo(T[j])); return T;
   }
   function collide(p, sc, floorY) {

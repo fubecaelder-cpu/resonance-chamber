@@ -330,3 +330,10 @@ Cache-bust `?v=39a`.
 - The welded contacts in the sculpts are cut apart where different limbs meet, so sitting and crawling no longer stretch skin between them.
 
 Cache-bust `?v=39c`.
+
+### v39d — Angel's true colours, Makima's tie and face, calmer Esdeath hair
+- Angel: her face is skin-toned again and her hair is auburn front and back (the long back hair between the wings and the loose strands on her right no longer read as armour or feathers). Her staff is ivory with a gold head, and the gold trim follows the armour edges without loose specks. Her hip armour and right forearm no longer follow the wings, and the hair between her wing roots follows her back, so crawling no longer stretches it.
+- Makima: a clean black tie (knot under the collar, tapered blade, pointed tip) on her white shirt, and her face, ears and neck are skin-toned with golden ringed eyes; her hair and fringe are fully red.
+- Esdeath: her hair sheets are stiffer and stay closer to her body while she walks and turns, and tiny loose flecks follow the nearest surface instead of a far-away bone.
+
+Cache-bust `?v=39d`.

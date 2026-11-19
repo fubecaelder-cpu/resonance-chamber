@@ -3,7 +3,7 @@
 // one slow ambient sway whose phase lags from base to tip, a momentum response (speed / turning) that goes through an
 // over-damped first-order filter (no spring, no overshoot, no jelly), amplitude growing from 0 at the hinge to full at the tip.
 // Regions are given in a normalised frame: x right, y up from the feet, z forward, unit = figure height.
-import { THREE } from './shared.js?v=39c';
+import { THREE } from './shared.js?v=39d';
 
 const S2 = Math.SQRT1_2;
 // per character defaults (Drive settings.json "appendages": [...] overrides); side +1 = her left (+x), -1 = her right
