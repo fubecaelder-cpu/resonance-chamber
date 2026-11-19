@@ -344,3 +344,9 @@ Cache-bust `?v=39d`.
 - Makima: no more red "teeth" where her neck meets the collar, and a cleaner hairline behind her ears.
 
 Cache-bust `?v=39e`.
+
+### v39f — softer hairlines and feather tips
+- Angel: the feather tips peeking out under her long back hair are pearl again (no brown tint on them or along her spine).
+- Makima: the hairline behind her ears now fades softly from red hair to skin instead of showing blotchy pale patches.
+
+Cache-bust `?v=39f`.
