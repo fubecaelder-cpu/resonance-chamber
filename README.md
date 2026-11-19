@@ -337,3 +337,10 @@ Cache-bust `?v=39c`.
 - Esdeath: her hair sheets are stiffer and stay closer to her body while she walks and turns, and tiny loose flecks follow the nearest surface instead of a far-away bone.
 
 Cache-bust `?v=39d`.
+
+### v39e — cleaner skins, Angel's raised arms
+- All painted skins: tiny triangles no longer show dark dashes (every texel a triangle can sample now carries its own colour), visible as cleaner armour, feathers and shirts up close.
+- Angel: the loose strands on both sides are auburn all the way down (no more pearl or pink strands), the hair no longer spills onto her inner feathers, shoulders or lower back, and her armpits fold smoothly when she raises her arms overhead.
+- Makima: no more red "teeth" where her neck meets the collar, and a cleaner hairline behind her ears.
+
+Cache-bust `?v=39e`.

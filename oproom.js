@@ -1,9 +1,9 @@
 // Room 3: stark monochrome op-art chamber. Purely abstract: spirals, moiré, warped checkers, concentric rings.
 // Comfort: no flashing. Every pattern moves slowly (< ~1 Hz at any point), and the beat is a smooth 0.25 Hz luminance swell.
 import { THREE, U, OPT, BEAT, f3, R, H, TY, TR, TZ, D0, DW, VEIL_R,
-  makeKit, instanced, mtx, glowSprite, archCurve, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil, DH, DOORNEON } from './shared.js?v=39d';
-import { makeParticles } from './chamber.js?v=39d';
-import { PAL } from './shared.js?v=39d';
+  makeKit, instanced, mtx, glowSprite, archCurve, doorDiscardGLSL, floorDoorDiscardGLSL, makeVeil, DH, DOORNEON } from './shared.js?v=39e';
+import { makeParticles } from './chamber.js?v=39e';
+import { PAL } from './shared.js?v=39e';
 
 const placeAt = (m, p) => { m.position.copy(p); return m; };
 export function buildOpRoom(cfg) {
