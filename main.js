@@ -2,24 +2,24 @@
 // Little Moo Barn), every room joined to every other (4 side corridors + 2 diagonals that cross at the centre),
 // with in-world control panels (animation speed, brightness, and v6 media: your own video on the room monitors).
 // URL options: ?quality=low  ?scale=1.4  ?mirror=0  ?video=0|blend|full  ?fov=0.6  ?particles=900  ?spatial=0  ?room=1|2|3|4  ?barn=<drive folder>
-import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=39a';
+import { THREE, Q, OPT, U, BEAT, R, TY, TZ, START_Z, VEIL_R, MON_GEO, env } from './shared.js?v=39c';
 import { VRButton } from './lib/VRButton.js';
-import { buildChamber } from './chamber.js?v=39a';
-import { pinkRoomCfg } from './pinkroom.js?v=39a';
-import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=39a';
-import { buildOpRoom } from './oproom.js?v=39a';
-import { buildCorridor } from './corridor.js?v=39a';
-import { createPanels, settings, THETA_VOLS } from './panels.js?v=39a';
-import { createMedia, buildMonitor, roomMedia } from './media.js?v=39a';
-import { createScreens } from './screens.js?v=39a';
-import { createPods } from './pods.js?v=39a';
-import { createMoo } from './moo.js?v=39a';
-import { buildMooTunnel, MOO_U } from './mootunnel.js?v=39a';
-import { createMissMoo } from './misscow.js?v=39a';
-import { attachMooModel } from './moomodel.js?v=39a';
-import { APX_DEFAULTS } from './apx.js?v=39a';
-import { createCompanion } from './companion.js?v=39a';
-import { DRIVE_DEFAULTS } from './config.js?v=39a';
+import { buildChamber } from './chamber.js?v=39c';
+import { pinkRoomCfg } from './pinkroom.js?v=39c';
+import { barnRoomCfg, BARN_STALLS } from './barnroom.js?v=39c';
+import { buildOpRoom } from './oproom.js?v=39c';
+import { buildCorridor } from './corridor.js?v=39c';
+import { createPanels, settings, THETA_VOLS } from './panels.js?v=39c';
+import { createMedia, buildMonitor, roomMedia } from './media.js?v=39c';
+import { createScreens } from './screens.js?v=39c';
+import { createPods } from './pods.js?v=39c';
+import { createMoo } from './moo.js?v=39c';
+import { buildMooTunnel, MOO_U } from './mootunnel.js?v=39c';
+import { createMissMoo } from './misscow.js?v=39c';
+import { attachMooModel } from './moomodel.js?v=39c';
+import { APX_DEFAULTS } from './apx.js?v=39c';
+import { createCompanion } from './companion.js?v=39c';
+import { DRIVE_DEFAULTS } from './config.js?v=39c';
 
 const ASSET_VIDEO = 'assets/tunnel_loop.mp4', ASSET_AUDIO = 'assets/ambient_loop.mp3';
 

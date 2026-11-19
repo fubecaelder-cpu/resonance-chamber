@@ -322,3 +322,11 @@ Cache-bust `?v=39a`.
 - Makima's rigged figure looked broken in the room, so she is back on her assembled static figure until her rig passes multi-angle checks (her painted Control Devil skin needs the rigged mesh's UVs, so she wears her Original look for now).
 - Power: "Crimson Devil" colour skin (deep red hair incl. bangs and front strands, dark jacket and shirt, red tie, black sneakers, red horns with a soft glow) on her unchanged static sculpt; it is her default and switchable from her stall's wardrobe sign.
 - Friend models with painted skins are served with UVs (same geometry); painted skins are only listed when the served model carries the matching UVs.
+
+### v39c — Makima rigged per part, cleaner Esdeath and Angel
+- Makima is rigged again, now per part: each sculpt part (head, shirt, pants, each shoe, each arm and hand, chain) only follows the bones it belongs to, with soft blending just at the seams. Her braid is a flex strand anchored at the head, the hanging chains are rigid links swinging as pendulums, and the loose chain loop and the links held behind her back are removed because they can't follow the new poses. She wears her painted Control Devil skin (white shirt, dark pants and belt, red hair).
+- Esdeath: her hair sheets are leashed close to her body (calmer sweep and amplitude). Her sword is carried a bit smaller at a steeper diagonal so it clears the floor when she sits or kneels. Small loose hair flecks follow the nearest surface, and the hair colour no longer spills onto her knee.
+- Angel: her staff stays rigid in her right hand, upright and held near its foot, so it no longer cuts through the floor when she crawls or sits. Her right forearm and gauntlet follow her arm (not her wing), the staff wrapping no longer flaps with the wing, and the robe strip behind her knee follows her leg.
+- The welded contacts in the sculpts are cut apart where different limbs meet, so sitting and crawling no longer stretch skin between them.
+
+Cache-bust `?v=39c`.

@@ -4,13 +4,13 @@
 // so hair hangs whatever the head does), with absolute drag (trails and billows when she walks or turns) and relative damping
 // chosen above critical (settles softly, no jelly). Segment lengths are kept exactly; points are pushed out of the body
 // capsules (radii from the rig's extras) and kept above the floor. Bones are then swung onto the points, root to tip.
-import { THREE } from './shared.js?v=39a';
+import { THREE } from './shared.js?v=39c';
 export const FLEX_KINDS = {
   //       stiffness  gravity  rel.damp abs.drag  ambient deg  ambient Hz  momentum sweep deg
-  hair:  { K: 3,  G: 9.8, CR: 0,  CA: 4.2, AMB: 5,  HZ: 0.22, SWEEP: 18, FLAP: 0, WIND: 0.25 },
-  cape:  { K: 14, G: 5.0, CR: 3,  CA: 3.6, AMB: 9,  HZ: 0.3,  SWEEP: 30, FLAP: 0, WIND: 0.6 },
+  hair:  { K: 3,  G: 9.8, CR: 0,  CA: 4.2, AMB: 5,  HZ: 0.22, SWEEP: 18, FLAP: 0, WIND: 0.25, LEASH: 0 },
+  cape:  { K: 30, G: 6.0, CR: 5,  CA: 4.8, AMB: 3,  HZ: 0.3,  SWEEP: 4,  FLAP: 0, WIND: 0.15, LEASH: 0.2 },   // v39c: hair sheets stay close to the body (leash 0.2 rad per segment from the animated pose)
   wing:  { K: 60, G: 0,   CR: 15, CA: 2.0, AMB: 12, HZ: 0.33, SWEEP: 30, FLAP: 16, WIND: 0, TUCK: 10 },
-  chain: { K: 0,  G: 9.8, CR: 0,  CA: 6.5, AMB: 0,  HZ: 0,    SWEEP: 0,  FLAP: 0, WIND: 0 },
+  chain: { K: 0,  G: 9.8, CR: 0,  CA: 6.5, AMB: 0,  HZ: 0,    SWEEP: 0,  FLAP: 0, WIND: 0, LEASH: 0 },
 };
 const COLL = { Hips: 'Spine', Spine: 'Spine1', Spine1: 'Spine2', Spine2: 'Neck', Neck: 'Head', Head: null, LeftUpLeg: 'LeftLeg', RightUpLeg: 'RightLeg', LeftLeg: 'LeftFoot', RightLeg: 'RightFoot', LeftArm: 'LeftForeArm', RightArm: 'RightForeArm', LeftForeArm: 'LeftHand', RightForeArm: 'RightHand' };
 const V = () => new THREE.Vector3(), Q = () => new THREE.Quaternion();
@@ -93,6 +93,8 @@ export function createFlex(model, opts = {}) {
           if (d > 1e-9 && (d < lo || d > hi)) { const want = d < lo ? lo : hi, corr = t1.subVectors(B.p[j], A.p[j]).multiplyScalar((d - want) / d * 0.5); A.p[j].add(corr); B.p[j].sub(corr); } } }
       for (const c of chains) { const n = c.segs.length;
         for (let j = 1; j <= n; j++) { const p = c.p[j], L = c.len[j - 1]; let d = p.distanceTo(c.p[j - 1]); if (d > 1e-9) p.sub(c.p[j - 1]).multiplyScalar(L / d).add(c.p[j - 1]);
+          if (c.P.LEASH) { const td = t1.subVectors(c.T[j], c.T[j - 1]).normalize(), sd = t2.subVectors(p, c.p[j - 1]).normalize(), ang = td.angleTo(sd);   // v39c: max swing away from the animated pose
+            if (ang > c.P.LEASH) { const q0 = Q().setFromUnitVectors(td, sd), qa = Q().slerp(q0, c.P.LEASH / ang); p.copy(td.applyQuaternion(qa).multiplyScalar(L).add(c.p[j - 1])); } }
           if (c.kind !== 'wing') collide(p, sc, floorY); d = p.distanceTo(c.p[j - 1]); if (d > 1e-9) p.sub(c.p[j - 1]).multiplyScalar(L / d).add(c.p[j - 1]);
           c.v[j].subVectors(p, c.prev[j]).divideScalar(h); } }
     }
